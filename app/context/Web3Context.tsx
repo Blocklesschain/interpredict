@@ -8,16 +8,20 @@ interface Web3ContextType {
   txStatus: string
   isConnecting: boolean
   connectWallet: () => Promise<boolean>
+  disconnectWallet: () => void
   placeBet: (marketId: number, outcomeIndex: number, stakeAmount: string) => Promise<void>
+  createMarketProposal: (description: string) => Promise<void>
+  joinDECCommittee: () => Promise<void>
 }
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
 
-const CONTRACT_ADDRESS = "0x244130F9BcaC8642d4213742D837eFD1C2d7B12b"
-const CONTRACT_ABI = [
+export const CONTRACT_ADDRESS = "0x244130F9BcaC8642d4213742D837eFD1C2d7B12b"
+export const CONTRACT_ABI = [
   "function oracleAddress() view returns (address)",
   "function marketCount() view returns (uint256)",
   "function betOnOutcome(uint256 marketId, uint256 outcomeIndex) payable",
+  "function createMarket(string description, string[] outcomes, uint256 votingEndTime, uint256 marketEndTime, uint256 initialAmmLiquidity) payable",
   "function claimPayout(uint256 marketId)"
 ]
 
@@ -28,24 +32,22 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
   // Auto-detect wallet changes or persistence safely with TypeScript
   useEffect(() => {
-    const customWindow = typeof window !== 'undefined' ? (window as any) : null;
+    const customWindow = typeof window !== 'undefined' ? (window as any) : null
 
     if (customWindow && customWindow.ethereum) {
       const handleAccountsChanged = (accounts: string[]) => {
-        setWalletAddress(accounts[0] || "");
-      };
+        setWalletAddress(accounts[0] || "")
+      }
 
-      // Listen for wallet account switches
-      customWindow.ethereum.on('accountsChanged', handleAccountsChanged);
+      customWindow.ethereum.on('accountsChanged', handleAccountsChanged)
 
-      // Clean up the listener safely when the component unmounts
       return () => {
         if (customWindow.ethereum && customWindow.ethereum.removeListener) {
-          customWindow.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+          customWindow.ethereum.removeListener('accountsChanged', handleAccountsChanged)
         }
-      };
+      }
     }
-  }, []);
+  }, [])
 
   const connectWallet = async (): Promise<boolean> => {
     if (typeof window === 'undefined' || !(window as any).ethereum) {
@@ -63,6 +65,11 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       setIsConnecting(false)
       return false
     }
+  }
+
+  const disconnectWallet = () => {
+    setWalletAddress("")
+    setTxStatus("")
   }
 
   const placeBet = async (marketId: number, outcomeIndex: number, stakeAmount: string) => {
@@ -88,8 +95,30 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Placeholder actions for core protocol mechanisms to be wired to extensions later
+  const createMarketProposal = async (description: string) => {
+    console.log("Proposing market description sequence:", description)
+    setTxStatus("Processing proposal deposit payload...")
+  }
+
+  const joinDECCommittee = async () => {
+    console.log("Registering validator key into curation pool registry")
+    setTxStatus("Processing DEC validation staking token lock...")
+  }
+
   return (
-    <Web3Context.Provider value={{ walletAddress, txStatus, isConnecting, connectWallet, placeBet }}>
+    <Web3Context.Provider
+      value={{
+        walletAddress,
+        txStatus,
+        isConnecting,
+        connectWallet,
+        disconnectWallet,
+        placeBet,
+        createMarketProposal,
+        joinDECCommittee
+      }}
+    >
       {children}
     </Web3Context.Provider>
   )

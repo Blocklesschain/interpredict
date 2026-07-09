@@ -173,14 +173,20 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* --- FOOTER --- */}
+      {/* --- FOOTER WITH LOGOS --- */}
       <footer className="border-t border-border bg-secondary/30 py-10 text-xs text-muted-foreground px-4">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-6">
           <p>© 2026 InterPredict Protocol. Engineered for absolute on-chain accuracy.</p>
-          <div className="flex gap-6 font-medium">
-            <a href="https://twitter.com/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Twitter Updates</a>
-            <a href="https://t.me/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Telegram</a>
-            <a href="https://interlinklabs.ai" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Interlink Hub</a>
+          <div className="flex items-center gap-6">
+            <a href="https://twitter.com/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-medium" title="Twitter Updates">
+              <svg className="size-4 fill-current" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+              <span>Twitter</span>
+            </a>
+            <a href="https://t.me/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-medium" title="Telegram">
+              <svg className="size-4 fill-current" viewBox="0 0 24 24"><path d="M11.944 0C5.344 0 0 5.344 0 11.944c0 5.622 3.88 10.331 9.096 11.645-.111-.3-.217-.745-.044-1.252l1.328-5.631s-.339-.678-.339-1.683c0-1.577.914-2.756 2.053-2.756.968 0 1.436.727 1.436 1.599 0 .973-.62 2.429-.939 3.778-.267 1.129.567 2.05 1.68 2.05 2.016 0 3.565-2.126 3.565-5.195 0-2.716-1.952-4.616-4.739-4.616-3.228 0-5.122 2.421-5.122 4.923 0 .975.375 2.02.844 2.59.093.112.106.21.078.322l-.33 1.346c-.054.22-.178.267-.412.158-1.542-.718-2.506-2.972-2.506-4.783 0-3.896 2.833-7.476 8.163-7.476 4.286 0 7.618 3.054 7.618 7.137 0 4.258-2.684 7.684-6.41 7.684-1.252 0-2.43-.65-2.832-1.423l-.77 2.936c-.279 1.066-1.033 2.404-1.54 3.235C10.155 23.86 11.036 24 11.944 24 18.556 24 24 18.556 24 11.944 24 5.344 18.556 0 11.944 0z" /></svg>
+              <span>Telegram</span>
+            </a>
+            <a href="https://interlinklabs.ai" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors font-medium">Interlink Hub</a>
           </div>
         </div>
       </footer>

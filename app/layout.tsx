@@ -28,10 +28,10 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light dark',
+  colorScheme: 'dark light',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#faf9ff' },
     { media: '(prefers-color-scheme: dark)', color: '#0d0022' },
+    { media: '(prefers-color-scheme: light)', color: '#faf9ff' },
   ],
 }
 
@@ -47,17 +47,20 @@ export default function RootLayout({
       className={`${spaceGrotesk.variable} ${inter.variable} ${geistMono.variable} bg-background`}
     >
       <head>
+        {/* Natively forces dark mode class directly into the HTML root channel instantly on boot */}
         <Script id="theme-init" strategy="beforeInteractive">{`
           try {
-            var t = localStorage.getItem('theme');
-            if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            var t = localStorage.getItem('theme') || localStorage.getItem('interpredict-theme');
+            if (t === 'dark' || !t) {
               document.documentElement.classList.add('dark');
+              localStorage.setItem('theme', 'dark');
+            } else if (t === 'light') {
+              document.documentElement.classList.remove('dark');
             }
           } catch(e) {}
         `}</Script>
       </head>
       <body className="font-sans antialiased">
-        {/* 🌟 Wrapped the application tree inside the Web3 Provider context */}
         <Web3Provider>
           {children}
         </Web3Provider>

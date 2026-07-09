@@ -2,20 +2,33 @@
 
 import { useState } from 'react'
 import { useWeb3 } from '../context/Web3Context'
-import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, ArrowRight } from 'lucide-react'
+import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import Link from 'next/link'
 
 type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History'
 
+interface HistoryRecord {
+  id: number
+  description: string
+  selection: string
+  wager: string
+  isActive: boolean
+}
+
 export default function DAppPortal() {
-  const { walletAddress, connectWallet, txStatus, placeBet } = useWeb3()
+  const { walletAddress, connectWallet, disconnectWallet, txStatus, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain } = useWeb3()
   const [activeTab, setActiveTab] = useState<TabType>('MarketPlace')
   const [stakeAmount, setStakeAmount] = useState<string>('0.1')
   const [marketDesc, setMarketDesc] = useState('')
   const [outcomes, setOutcomes] = useState(['YES', 'NO'])
   const [hasJoinedDEC, setHasJoinedDEC] = useState<boolean>(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false)
+
+  // Local state tracking historical interactions submitted during session testing
+  const [historyLogs, setHistoryLogs] = useState<HistoryRecord[]>([
+    { id: 0, description: "Will Interlink network testnet gateway process over 10M transactions this week?", selection: "YES", wager: "0.10 tITL", isActive: true }
+  ])
 
   const getVisibleTabs = (): TabType[] => {
     if (!walletAddress) return ['MarketPlace', 'Pending Markets']
@@ -28,16 +41,43 @@ export default function DAppPortal() {
     return tabs
   }
 
-  const visibleTabs = getVisibleTabs()
-
   const handleTabSelect = (tab: TabType) => {
     setActiveTab(tab)
     setMobileMenuOpen(false)
   }
 
+  const visibleTabs = getVisibleTabs()
+
+  const handleCreateMarketSubmit = async () => {
+    if (!marketDesc) return
+    const success = await createMarketOnChain(marketDesc)
+    if (success) setMarketDesc('')
+  }
+
+  const handleJoinCommitteeSubmit = async () => {
+    const success = await joinDecOnChain()
+    if (success) {
+      setHasJoinedDEC(true)
+      setActiveTab('Market Proposals')
+    }
+  }
+
+  const executeTradeAction = async (marketId: number, outcomeIndex: number) => {
+    await placeBetOnChain(marketId, outcomeIndex, stakeAmount)
+    // Add real item interaction logs right into history stack module
+    const record: HistoryRecord = {
+      id: marketId,
+      description: "Will Interlink network testnet gateway process over 10M transactions this week?",
+      selection: outcomeIndex === 0 ? "YES" : "NO",
+      wager: `${parseFloat(stakeAmount).toFixed(2)} tITL`,
+      isActive: true
+    }
+    setHistoryLogs([record, ...historyLogs])
+  }
+
   return (
-    <div className="min-h-screen bg-[#060117] text-slate-100 font-sans antialiased selection:bg-purple-500/30 overflow-x-hidden">
-      {/* Upper Status Panel */}
+    <div className="min-h-screen bg-[#060117] text-slate-100 font-sans antialiased overflow-x-hidden pb-12">
+      {/* Header identity wrapper */}
       <header className="fixed top-0 inset-x-0 h-20 bg-[#0d0022]/90 backdrop-blur-md border-b border-purple-950/40 z-40 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto h-full flex justify-between items-center">
 
@@ -49,26 +89,39 @@ export default function DAppPortal() {
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-4">
-            <Link href="/" className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors">
+            <Link href="/" className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors mr-2">
               <Home className="size-3.5" />
               <span className="hidden sm:inline">Home</span>
             </Link>
 
-            <button
-              onClick={connectWallet}
-              className="flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-700 text-xs sm:text-sm font-semibold rounded-full border border-purple-500/20 shadow-lg transition-all active:scale-[0.98]"
-            >
-              <Wallet className="size-3.5 sm:size-4" />
-              {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "Connect Wallet"}
-            </button>
+            {walletAddress ? (
+              <div className="flex items-center bg-purple-950/30 border border-purple-900/40 rounded-full pr-1.5 pl-4 py-1.5 gap-3">
+                <span className="font-mono text-xs text-purple-300">{`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}</span>
+                <button
+                  onClick={disconnectWallet}
+                  className="p-2 bg-purple-900/40 hover:bg-rose-950/40 rounded-full text-slate-400 hover:text-rose-400 transition-colors"
+                  title="Disconnect Wallet"
+                >
+                  <LogOut className="size-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={connectWallet}
+                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-700 text-xs sm:text-sm font-semibold rounded-full border border-purple-500/20 shadow-lg"
+              >
+                <Wallet className="size-3.5" />
+                <span>Connect Wallet</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
 
-      {/* Main Responsive Frame Layout */}
-      <div className="max-w-7xl mx-auto pt-28 pb-12 px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
+      {/* Workspace Frame Wrapper Grid Layout */}
+      <div className="max-w-7xl mx-auto pt-28 px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
 
-        {/* Mobile menu picker list */}
+        {/* Mobile menu panel dropdown container block */}
         <div className="lg:hidden w-full relative z-30">
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -76,13 +129,14 @@ export default function DAppPortal() {
           >
             <div className="flex items-center gap-2">
               <Menu className="size-4 text-primary" />
-              <span>Menu: {activeTab}</span>
+              {/* Clean Active Item Title - Fixed Prefix */}
+              <span>{activeTab}</span>
             </div>
-            {mobileMenuOpen ? <X className="size-4" /> : <ArrowRight className="size-4 rotate-90" />}
+            {mobileMenuOpen ? <X className="size-4" /> : <PlusCircle className="size-4 rotate-45" />}
           </button>
 
           {mobileMenuOpen && (
-            <div className="absolute top-full inset-x-0 mt-2 bg-[#0d0022] border border-purple-950/80 rounded-xl p-2 shadow-2xl space-y-1">
+            <div className="absolute top-full inset-x-0 mt-2 bg-[#0d0022] border border-purple-950/80 rounded-xl p-2 shadow-2xl space-y-1 z-50">
               {visibleTabs.map((tab) => (
                 <button
                   key={tab}
@@ -97,7 +151,7 @@ export default function DAppPortal() {
           )}
         </div>
 
-        {/* Desktop Sidebar Navigation */}
+        {/* Desktop Sidebar Navigation Panels */}
         <aside className="hidden lg:flex flex-col gap-1.5 lg:col-span-1">
           {visibleTabs.map((tab) => {
             const Icon = { 'MarketPlace': Layers, 'Market Proposals': Hourglass, 'Pending Markets': Hourglass, 'Make Market': PlusCircle, 'Join DEC': Shield, 'History': History }[tab]
@@ -115,7 +169,7 @@ export default function DAppPortal() {
           })}
         </aside>
 
-        {/* Dynamic Display Panel Viewport */}
+        {/* Dynamic Display Panel Engine */}
         <section className="lg:col-span-3 bg-secondary/10 border border-secondary/20 rounded-2xl p-5 sm:p-6 min-h-[500px] flex flex-col justify-between shadow-inner w-full overflow-hidden">
           <div className="w-full">
             <div className="mb-6 border-b border-purple-950/40 pb-5">
@@ -139,8 +193,8 @@ export default function DAppPortal() {
                     <input type="number" value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} className="w-full bg-black/20 border border-purple-900/40 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => placeBet(0, 0, stakeAmount)} className="py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs rounded-lg shadow-md">Predict YES</button>
-                    <button onClick={() => placeBet(0, 1, stakeAmount)} className="py-2.5 bg-gradient-to-r from-rose-600 to-red-600 text-white font-bold text-xs rounded-lg shadow-md">Predict NO</button>
+                    <button onClick={() => executeTradeAction(0, 0)} className="py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs rounded-lg shadow-md hover:scale-[1.01] transition-transform">Predict YES</button>
+                    <button onClick={() => executeTradeAction(0, 1)} className="py-2.5 bg-gradient-to-r from-rose-600 to-red-600 text-white font-bold text-xs rounded-lg shadow-md hover:scale-[1.01] transition-transform">Predict NO</button>
                   </div>
                 </div>
               </div>
@@ -176,8 +230,8 @@ export default function DAppPortal() {
                 </div>
                 <p className="text-sm font-semibold mb-4 text-slate-200">Will the upcoming Smart Money Concepts indicator update introduce automated mitigation mapping?</p>
                 <div className="grid grid-cols-2 gap-3">
-                  <button className="py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg">Vote FOR</button>
-                  <button className="py-2.5 bg-rose-600 text-white text-xs font-bold rounded-lg">Vote AGAINST</button>
+                  <button onClick={() => castVoteOnChain(14, true)} className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm">Vote FOR (Graduate)</button>
+                  <button onClick={() => castVoteOnChain(14, false)} className="py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm">Vote AGAINST (Reject)</button>
                 </div>
               </div>
             )}
@@ -199,8 +253,8 @@ export default function DAppPortal() {
                     <input type="text" disabled value={outcomes[1]} className="w-full bg-slate-900/40 border border-purple-900/20 rounded-xl px-3 py-2 text-sm text-slate-500 font-mono" />
                   </div>
                 </div>
-                <button className="w-full py-3 bg-gradient-to-r from-primary to-purple-600 text-white text-xs font-bold rounded-xl shadow-md">
-                  {walletAddress?.toLowerCase() === "0x6e832252ea4c78068ee109d953724d2762431992" ? "Deploy Straight to Marketplace" : "Broadcast Proposal to DEC (1.0 tITL Fee)"}
+                <button onClick={handleCreateMarketSubmit} className="w-full py-3 bg-gradient-to-r from-primary to-purple-600 text-white text-xs font-bold rounded-xl shadow-md hover:opacity-95 transition-opacity">
+                  {walletAddress?.toLowerCase() === "0x6e832252ea4c78068ee109d953724d2762431992" ? "Deploy Straight to Marketplace (Team Bypass)" : "Broadcast Proposal to DEC (1.0 tITL Fee)"}
                 </button>
               </div>
             )}
@@ -211,18 +265,41 @@ export default function DAppPortal() {
                 <Shield className="size-10 mx-auto text-primary mb-3" />
                 <p className="text-sm font-semibold mb-1 text-slate-200">Activate Assessor Access Permissions</p>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">Lock a permanent security validation stake of 500 tITL to access vote metrics on all outstanding community market requests.</p>
-                <button onClick={() => { setHasJoinedDEC(true); setActiveTab('Market Proposals'); }} className="px-6 py-2.5 bg-primary text-white font-bold text-xs rounded-xl shadow-md">Lock Stake & Join DEC Committee</button>
+                <button onClick={handleJoinCommitteeSubmit} className="px-6 py-2.5 bg-primary hover:bg-primary/95 text-white font-bold text-xs rounded-xl shadow-md transition-all">Lock Stake & Join DEC Committee</button>
               </div>
             )}
 
-            {/* TAB: HISTORY */}
+            {/* TAB: HISTORY - CATEGORIZED SPLIT TRACKING ENGINE */}
             {activeTab === 'History' && (
-              <div className="border border-purple-900/20 rounded-xl overflow-x-auto text-xs w-full">
-                <div className="min-w-[400px]">
-                  <div className="grid grid-cols-4 bg-purple-950/30 px-4 py-3.5 font-semibold text-slate-400 border-b border-purple-900/20">
-                    <div>Market ID</div><div>Prediction</div><div>Bond Stake</div><div className="text-right">Ledger Status</div>
+              <div className="space-y-6 w-full">
+                {/* --- ACTIVE USER PARTICIPATING POOLS --- */}
+                <div>
+                  <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 font-mono">● Active Participating Markets</h4>
+                  <div className="border border-purple-900/20 rounded-xl overflow-x-auto text-xs bg-purple-950/10">
+                    <div className="min-w-[500px]">
+                      <div className="grid grid-cols-4 bg-purple-950/40 px-4 py-3 font-semibold text-slate-400 border-b border-purple-900/20">
+                        <div>Market ID</div><div>Objective Description</div><div>Your Selection</div><div className="text-right">Wager Bond</div>
+                      </div>
+                      {historyLogs.filter(m => m.isActive).map(log => (
+                        <div key={log.id} className="grid grid-cols-4 px-4 py-3 border-b border-purple-900/10 text-slate-300 font-mono items-center">
+                          <div>Pool #{log.id}</div><div className="truncate pr-4 font-sans">{log.description}</div><div className="text-emerald-400 font-bold">{log.selection}</div><div className="text-right text-slate-400">{log.wager}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="p-5 text-center text-slate-500 font-mono">No historical records found.</div>
+                </div>
+
+                {/* --- ENDED HISTORICAL SETTLED POOLS --- */}
+                <div>
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 font-mono">○ Ended & Settled Markets</h4>
+                  <div className="border border-purple-900/20 rounded-xl overflow-x-auto text-xs bg-black/10">
+                    <div className="min-w-[500px]">
+                      <div className="grid grid-cols-4 bg-purple-950/20 px-4 py-3 font-semibold text-slate-500 border-b border-purple-900/20">
+                        <div>Market ID</div><div>Objective Description</div><div>Outcome Result</div><div className="text-right">Ledger Status</div>
+                      </div>
+                      <div className="p-4 text-center text-slate-600 font-mono">No ended or resolved trade indices logged under this node block channel.</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -233,27 +310,12 @@ export default function DAppPortal() {
         </section>
       </div>
 
-      {/* --- WORKSPACE FOOTER - SOCIAL LINKS ONLY --- */}
       <footer className="max-w-7xl mx-auto border-t border-purple-900/10 mt-16 py-6 px-4 sm:px-6 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 gap-6">
-        <div className="text-center md:text-left">
-          <p>© 2026 InterPredict Protocol. All rights reserved.</p>
-        </div>
-
-        <div className="flex items-center gap-5 shrink-0 bg-background/40 px-5 py-3 rounded-full border border-purple-900/20 shadow-inner">
-          <a href="https://twitter.com/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-semibold text-slate-300" title="Twitter Updates">
-            <svg className="size-4 fill-current" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
-            <span>Twitter</span>
-          </a>
-          <span className="w-px h-3.5 bg-purple-900/30" />
-          <a href="https://t.me/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-semibold text-slate-300" title="Telegram Messenger">
-            <svg className="size-4 fill-current" viewBox="0 0 24 24"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.18 1.897-.961 6.505-1.359 8.641-.168.9-.501 1.201-.82 1.23-.703.064-1.237-.465-1.917-.912-1.065-.7-1.666-1.134-2.698-1.814-1.194-.786-.42-1.218.26-1.926.178-.184 3.279-3.008 3.339-3.264.008-.033.014-.154-.059-.219-.073-.064-.18-.042-.258-.025-.111.024-1.884 1.196-5.319 3.518-.503.346-.959.516-1.367.507-.45-.01-1.317-.254-1.961-.464-.79-.258-1.418-.394-1.363-.833.028-.23.347-.465.955-.705 3.733-1.623 6.222-2.694 7.467-3.213 3.543-1.479 4.28-1.736 4.761-1.745.106-.002.344.025.497.15.13.105.166.248.178.349.012.106.027.34-.01.597z" /></svg>
-            <span>Telegram</span>
-          </a>
-          <span className="w-px h-3.5 bg-purple-900/30" />
-          <a href="https://interlinklabs.ai" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-2 font-semibold text-slate-300">
-            <img src="/images/interlink.png" alt="Interlink Logo" className="size-4 object-contain rounded-sm" />
-            <span>Interlink</span>
-          </a>
+        <div><p>© 2026 InterPredict Protocol. All rights reserved.</p></div>
+        <div className="flex items-center gap-5 bg-background/40 px-5 py-3 rounded-full border border-purple-900/20 shadow-inner">
+          <a href="https://twitter.com/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-semibold text-slate-300"><svg className="size-4 fill-current" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg><span>Twitter</span></a>
+          <span className="w-px h-3.5 bg-purple-900/30" /><a href="https://t.me/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-semibold text-slate-300"><svg className="size-4 fill-current" viewBox="0 0 24 24"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.18 1.897-.961 6.505-1.359 8.641-.168.9-.501 1.201-.82 1.23-.703.064-1.237-.465-1.917-.912-1.065-.7-1.666-1.134-2.698-1.814-1.194-.786-.42-1.218.26-1.926.178-.184 3.279-3.008 3.339-3.264.008-.033.014-.154-.059-.219-.073-.064-.18-.042-.258-.025-.111.024-1.884 1.196-5.319 3.518-.503.346-.959.516-1.367.507-.45-.01-1.317-.254-1.961-.464-.79-.258-1.418-.394-1.363-.833.028-.23.347-.465.955-.705 3.733-1.623 6.222-2.694 7.467-3.213 3.543-1.479 4.28-1.736 4.761-1.745.106-.002.344.025.497.15.13.105.166.248.178.349.012.106.027.34-.01.597z" /></svg><span>Telegram</span></a>
+          <span className="w-px h-3.5 bg-purple-900/30" /><a href="https://interlinklabs.ai" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-2 font-semibold text-slate-300"><img src="/images/interlink.png" alt="Interlink Logo" className="size-4 object-contain rounded-sm" /><span>Interlink</span></a>
         </div>
       </footer>
     </div>

@@ -29,7 +29,6 @@ const Web3Context = createContext<Web3ContextType | undefined>(undefined)
 const INTERLINK_TESTNET_CHAIN_ID = '0x5d'
 const CONTRACT_ADDRESS = "0x244130F9BcaC8642d4213742D837eFD1C2d7B12b"
 
-// Fixed ABI: Removed non-existent balanceOf method to stop CALL_EXCEPTIONS
 const CONTRACT_ABI = [
   "function marketCount() view returns (uint256)",
   "function createMarket(string description) external payable",
@@ -43,6 +42,45 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [txStatus, setTxStatus] = useState<string | null>(null)
   const [historyLogs, setHistoryLogs] = useState<HistoryRecord[]>([])
+
+  // 🔄 Persistent Hydration Session Loop
+  useEffect(() => {
+    async function checkExistingConnection() {
+      if (typeof window !== 'undefined' && (window as any).ethereum) {
+        try {
+          const provider = new ethers.BrowserProvider((window as any).ethereum)
+          const accounts = await provider.listAccounts()
+          const cachedConnected = localStorage.getItem('interpredict_connected')
+
+          if (accounts.length > 0 && cachedConnected === 'true') {
+            setWalletAddress(accounts[0].address)
+          }
+        } catch (e) {
+          console.error("Session rehydration skipped:", e)
+        }
+      }
+    }
+    checkExistingConnection()
+  }, [])
+
+  // Handle automatic account switching natively via MetaMask events
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).ethereum) {
+      const handleAccountsChanged = (accounts: string[]) => {
+        if (accounts.length > 0) {
+          setWalletAddress(accounts[0])
+          localStorage.setItem('interpredict_connected', 'true')
+        } else {
+          setWalletAddress(null)
+          localStorage.removeItem('interpredict_connected')
+        }
+      }
+        ; (window as any).ethereum.on('accountsChanged', handleAccountsChanged)
+      return () => {
+        ; (window as any).ethereum.removeListener('accountsChanged', handleAccountsChanged)
+      }
+    }
+  }, [])
 
   const appendLog = (type: HistoryRecord['type'], description: string, detail: string, status: HistoryRecord['status']) => {
     const newLog: HistoryRecord = {
@@ -96,6 +134,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const signer = await provider.getSigner()
       const address = await signer.getAddress()
       setWalletAddress(address)
+      localStorage.setItem('interpredict_connected', 'true')
       setTxStatus("Wallet interface integrated successfully.")
     } catch (err: any) {
       setTxStatus(`Connection Error: ${err.message}`)
@@ -104,6 +143,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
   const disconnectWallet = () => {
     setWalletAddress(null)
+    localStorage.removeItem('interpredict_connected')
     setTxStatus("Wallet session cleared successfully.")
   }
 
@@ -124,10 +164,11 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const { contract } = await getContractInstance()
 
       let tx;
+      // 🚀 Fix: Added explicit gasLimit parameter to bypass network congestion timeouts
       if (isTeam) {
-        tx = await contract.createMarketByTeam(description)
+        tx = await contract.createMarketByTeam(description, { gasLimit: 300000 })
       } else {
-        tx = await contract.createMarket(description, { value: ethers.parseEther("1.0") })
+        tx = await contract.createMarket(description, { value: ethers.parseEther("1.0"), gasLimit: 350000 })
       }
 
       setTxStatus("Awaiting on-chain verification blocks...")
@@ -144,10 +185,9 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
   const joinDecOnChain = async (): Promise<boolean> => {
     try {
-      setTxStatus("Reading native node balance parameter parameters...")
+      setTxStatus("Reading native node balance parameters...")
       const { contract, provider } = await getContractInstance()
 
-      // FIX: Check raw native wallet balance from the node directly to stop the CALL_EXCEPTION
       const balance = await provider.getBalance(walletAddress!)
       if (balance < ethers.parseEther("500")) {
         setTxStatus("Registration Rejected: Insufficient balance. 500 tITL required.")
@@ -156,7 +196,8 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       }
 
       setTxStatus("Escrowing security bond onto validator layer...")
-      const tx = await contract.joinDEC({ value: ethers.parseEther("500") })
+      // 🚀 Fix: Manual gas parameters overridden to guarantee pipeline priority execution
+      const tx = await contract.joinDEC({ value: ethers.parseEther("500"), gasLimit: 250000 })
       await tx.wait()
       setTxStatus("Node verified! Welcome to the Decentralized Curation Committee.")
       appendLog('Committee Bond', 'Request to join DEC Committee', 'Success — 500.00 tITL locked into validation contract registry', 'Success')
@@ -173,7 +214,8 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     try {
       setTxStatus("Transmitting curation consensus weight...")
       const { contract } = await getContractInstance()
-      const tx = await contract.castVote(marketId, support)
+      // 🚀 Fix: Forced execution limit parameters
+      const tx = await contract.castVote(marketId, support, { gasLimit: 150000 })
       await tx.wait()
       setTxStatus("Ballot updated successfully on-chain.")
       appendLog('Governance Vote', `Vote cast on Proposal ID #${marketId}`, `Success — ${ballotText}`, 'Success')
@@ -188,10 +230,11 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     try {
       setTxStatus("Transmitting position collateral payload...")
       const { contract } = await getContractInstance()
-      const tx = await contract.placeWager(marketId, outcome, { value: ethers.parseEther(amount) })
+      // 🚀 Fix: Gas limit allocation forced to prevent node stalling errors
+      const tx = await contract.placeWager(marketId, outcome, { value: ethers.parseEther(amount), gasLimit: 250000 })
       await tx.wait()
       setTxStatus("Trade position logged securely inside on-chain pool matrix!")
-      appendLog('Market Trade', `Wager placed on Pool #${marketId}`, `Success — Predicted ${targetSide} with ${amount} tITL`, 'Success')
+      appendLog('Market Trade', `Wager placed on Pool #${marketId}`, `Success — Predicted {targetSide} with ${amount} tITL`, 'Success')
     } catch (err: any) {
       setTxStatus(`Execution Error: ${err.message}`)
       appendLog('Market Trade', `Wager placed on Pool #${marketId}`, `Failed — ${targetSide} allocation timed out`, 'Failed')

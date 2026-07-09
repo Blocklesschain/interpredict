@@ -49,6 +49,15 @@ export default function DAppPortal() {
     }
   }
 
+  // 🛡️ Wallet Connection Security Guard & Trade Routing Engine
+  const executeTradeAction = async (marketId: number, outcomeIndex: number) => {
+    if (!walletAddress) {
+      await connectWallet()
+      return
+    }
+    await placeBetOnChain(marketId, outcomeIndex, stakeAmount)
+  }
+
   return (
     <div className="min-h-screen bg-[#060117] text-slate-100 font-sans antialiased overflow-x-hidden pb-12">
       {/* Upper Status Panel */}
@@ -166,8 +175,8 @@ export default function DAppPortal() {
                     <input type="number" value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} className="w-full bg-black/20 border border-purple-900/40 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => placeBetOnChain(0, 0, stakeAmount)} className="py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs rounded-lg shadow-md hover:scale-[1.01] transition-transform">Predict YES</button>
-                    <button onClick={() => placeBetOnChain(0, 1, stakeAmount)} className="py-2.5 bg-gradient-to-r from-rose-600 to-red-600 text-white font-bold text-xs rounded-lg shadow-md hover:scale-[1.01] transition-transform">Predict NO</button>
+                    <button onClick={() => executeTradeAction(0, 0)} className="py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs rounded-lg shadow-md hover:scale-[1.01] transition-transform">Predict YES</button>
+                    <button onClick={() => executeTradeAction(0, 1)} className="py-2.5 bg-gradient-to-r from-rose-600 to-red-600 text-white font-bold text-xs rounded-lg shadow-md hover:scale-[1.01] transition-transform">Predict NO</button>
                   </div>
                 </div>
               </div>

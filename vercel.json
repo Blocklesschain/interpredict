@@ -8,7 +8,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live; connect-src 'self' https://testnet-rpc.interlinklabs.ai https://rpc-testnet.interlink.network https://*.interlinklabs.ai metamask:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none';"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live; connect-src 'self' https://testnet-rpc.interlinklabs.ai https://rpc-testnet.interlink.network https://*.interlinklabs.ai metamask:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; frame-src 'none'; object-src 'none'; base-uri 'self'; font-src 'self' data:; frame-ancestors 'none';"
         },
         {
           "key": "X-Frame-Options",

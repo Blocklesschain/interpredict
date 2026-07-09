@@ -156,8 +156,9 @@ export default function DAppPortal() {
           <div className="w-full">
             <div className="mb-6 border-b border-purple-950/40 pb-5">
               <h2 className="text-lg sm:text-xl font-bold font-heading">InterPredict dApp</h2>
-              <p className="text-purple-400 text-[10px] sm:text-xs font-semibold tracking-wide mt-1 uppercase">
-                Create The Market | Predict The Future | Earn from the Outcome
+              {/* 🌟 Fixed: Removed uppercase tracking class so that tagline uses premiumTitle Case format */}
+              <p className="text-purple-400 text-[10px] sm:text-xs font-semibold tracking-wide mt-1">
+                Create the Market | Predict the Future | Earn from the Outcome
               </p>
             </div>
 
@@ -296,7 +297,7 @@ export default function DAppPortal() {
         </section>
       </div>
 
-      {/* --- WORKSPACE FOOTER - SOCIAL LINKS ONLY --- */}
+      {/* --- WORKSPACE FOOTER --- */}
       <footer className="max-w-7xl mx-auto border-t border-purple-900/10 mt-16 py-6 px-4 sm:px-6 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 gap-6">
         <div className="text-center md:text-left">
           <p>© 2026 InterPredict Protocol. All rights reserved.</p>

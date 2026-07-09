@@ -60,13 +60,13 @@ export default function HomePage() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(98,0,238,0.06),transparent_50%)]" />
         <div className="max-w-5xl mx-auto text-center relative z-10">
 
-          {/* Beautiful Moderate Dynamic Multi-Color Text Heading Block */}
+          {/* Refined, Understated Metallic Satin Gradients with Moderate Font Sizes */}
           <h1 className="text-3xl sm:text-5xl md:text-5xl font-heading font-extrabold tracking-tight leading-[1.2] mb-6 max-w-4xl mx-auto">
-            <span className="bg-gradient-to-r from-red-500 via-orange-400 to-amber-500 bg-clip-text text-transparent [text-shadow:0_0_30px_rgba(239,68,68,0.1)]">
+            <span className="bg-gradient-to-r from-[#d946ef] via-[#ef4444] to-[#f59e0b] bg-clip-text text-transparent">
               InterPredict
             </span>{" "}
-            <span className="text-slate-400 font-light">—</span>{" "}
-            <span className="bg-gradient-to-r from-amber-400 via-yellow-300 to-yellow-500 bg-clip-text text-transparent [text-shadow:0_0_30px_rgba(234,179,8,0.15)]">
+            <span className="text-slate-600 font-light">—</span>{" "}
+            <span className="bg-gradient-to-r from-[#f59e0b] via-[#fef08a] to-[#eab308] bg-clip-text text-transparent">
               Community Prediction Marketplace on Interlink
             </span>
           </h1>
@@ -182,33 +182,41 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* --- FOOTER COMPONENT --- */}
+      {/* --- FOOTER COMPONENT WITH DESIGNER LINK CARDS & BRANDED ICON LOGOS --- */}
       <footer className="border-t border-border bg-secondary/30 py-12 text-xs text-muted-foreground px-4">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
 
-          <div className="flex flex-col gap-2.5 text-center md:text-left">
-            <p>© 2026 InterPredict Protocol. All rights reserved.</p>
-            <div className="flex flex-wrap justify-center md:justify-start gap-x-4 gap-y-1.5 text-slate-500 font-medium">
-              <Link href="/whitepaper" className="hover:text-primary transition-colors">Whitepaper</Link>
-              <Link href="/documentation" className="hover:text-primary transition-colors">Documentation</Link>
-              <Link href="https://forum.interpredict.io" target="_blank" className="hover:text-primary transition-colors">Governance Forum</Link>
-              <Link href="/terms" className="hover:text-primary transition-colors">Terms of Service</Link>
-              <Link href="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
-              <Link href="/risk" className="hover:text-primary transition-colors">Risk Disclosure</Link>
+          {/* Highly Visible Legal Document Link Grid */}
+          <div className="flex flex-col gap-3 text-center md:text-left">
+            <p className="font-semibold text-slate-400">© 2026 InterPredict Protocol. All rights reserved.</p>
+            <div className="flex flex-wrap justify-center md:justify-start gap-x-5 gap-y-2">
+              <Link href="/whitepaper" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">Whitepaper</Link>
+              <Link href="/documentation" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">Documentation</Link>
+              <Link href="/governance" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">Governance Forum</Link>
+              <Link href="/terms" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">Terms of Service</Link>
+              <Link href="/privacy" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">Privacy Policy</Link>
+              <Link href="/risk" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">Risk Disclosure</Link>
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
-            <a href="https://twitter.com/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-medium" title="Twitter Updates">
+          {/* Social Array including accurate X, Telegram Airplane, and Interlink png asset layouts */}
+          <div className="flex items-center gap-5 shrink-0 bg-background/40 px-5 py-3 rounded-full border border-border shadow-inner">
+            <a href="https://twitter.com/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-semibold text-slate-300" title="Twitter Updates">
               <svg className="size-4 fill-current" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
               <span>Twitter</span>
             </a>
-            <a href="https://t.me/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-medium" title="Telegram Messenger">
+            <span className="w-px h-3.5 bg-border" />
+            <a href="https://t.me/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-semibold text-slate-300" title="Telegram Messenger">
               <svg className="size-4 fill-current" viewBox="0 0 24 24"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.18 1.897-.961 6.505-1.359 8.641-.168.9-.501 1.201-.82 1.23-.703.064-1.237-.465-1.917-.912-1.065-.7-1.666-1.134-2.698-1.814-1.194-.786-.42-1.218.26-1.926.178-.184 3.279-3.008 3.339-3.264.008-.033.014-.154-.059-.219-.073-.064-.18-.042-.258-.025-.111.024-1.884 1.196-5.319 3.518-.503.346-.959.516-1.367.507-.45-.01-1.317-.254-1.961-.464-.79-.258-1.418-.394-1.363-.833.028-.23.347-.465.955-.705 3.733-1.623 6.222-2.694 7.467-3.213 3.543-1.479 4.28-1.736 4.761-1.745.106-.002.344.025.497.15.13.105.166.248.178.349.012.106.027.34-.01.597z" /></svg>
               <span>Telegram</span>
             </a>
-            <a href="https://interlinklabs.ai" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors font-medium">Interlink Hub</a>
+            <span className="w-px h-3.5 bg-border" />
+            <a href="https://interlinklabs.ai" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-2 font-semibold text-slate-300">
+              <img src="/images/interlink.png" alt="Interlink Logo" className="size-4 object-contain rounded-sm" />
+              <span>Interlink</span>
+            </a>
           </div>
+
         </div>
       </footer>
     </div>

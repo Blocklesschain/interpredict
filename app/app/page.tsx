@@ -316,8 +316,8 @@ export default function DAppPortal() {
       <footer className="max-w-7xl mx-auto border-t border-purple-900/10 mt-28 py-6 px-6 flex flex-col sm:flex-row justify-between items-center text-xs text-slate-500 gap-4">
         <p>© 2026 InterPredict Protocol. All rights reserved.</p>
         <div className="flex gap-6 font-medium">
-          <a href="https://twitter.com/CryptoDailyCall" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Twitter Signals</a>
-          <a href="https://github.com/Blocklesschain" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">GitHub Repository</a>
+          <a href="https://twitter.com/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Twitter Updates</a>
+          <a href="https://t.me/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Telegram</a>
           <a href="https://interlinklabs.ai" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Interlink Hub</a>
         </div>
       </footer>

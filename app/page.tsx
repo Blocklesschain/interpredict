@@ -220,8 +220,8 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p>© 2026 InterPredict Protocol. Engineered for absolute on-chain accuracy.</p>
           <div className="flex gap-6 font-medium">
-            <a href="https://twitter.com/CryptoDailyCall" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Twitter Updates</a>
-            <a href="https://github.com/Blocklesschain" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">GitHub Lab</a>
+            <a href="https://twitter.com/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Twitter Updates</a>
+            <a href="https://t.me/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Telegram</a>
             <a href="https://interlinklabs.ai" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Interlink Hub</a>
           </div>
         </div>

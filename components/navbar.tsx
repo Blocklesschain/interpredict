@@ -2,10 +2,12 @@
 
 import { useState } from "react"
 import { Menu, X } from "lucide-react"
+import Link from "next/link"
 import { buttonVariants } from "@/components/ui/button"
 import { Logo } from "@/components/logo"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { cn } from "@/lib/utils"
+import { useWeb3 } from "@/app/context/Web3Context"
 
 const links = [
   { label: "Markets", href: "#markets" },
@@ -21,6 +23,7 @@ const links = [
 
 export function Navbar() {
   const [open, setOpen] = useState(false)
+  const { walletAddress } = useWeb3()
 
   return (
     <header className="fixed inset-x-0 top-0 z-50">
@@ -47,19 +50,18 @@ export function Navbar() {
             ))}
           </div>
 
+          {/* Desktop App Link Trigger */}
           <div className="hidden md:flex md:items-center md:gap-2">
             <ThemeToggle />
-            <a
-              href="https://www.figma.com/make/7hovpwOR4mUk1I2jOOarGt/InterPredict-Mobile-App-Prototype?fullscreen=1&t=4YEshUSfXcsTLyFZ-1&code-node-id=0-9"
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/app"
               className={cn(
                 buttonVariants(),
                 "glow-purple rounded-full bg-primary px-5 font-semibold text-primary-foreground hover:bg-[#4f00c5]",
               )}
             >
-              See Prototype
-            </a>
+              {walletAddress ? "Go to App" : "Launch App"}
+            </Link>
           </div>
 
           <div className="flex items-center gap-1 md:hidden">
@@ -75,6 +77,7 @@ export function Navbar() {
           </div>
         </nav>
 
+        {/* Mobile App Menu Overlay */}
         {open && (
           <div className="nav-glass mt-2 flex flex-col gap-1 rounded-2xl p-3 md:hidden">
             {links.map((link) => (
@@ -89,18 +92,16 @@ export function Navbar() {
                 {link.label}
               </a>
             ))}
-            <a
-              href="https://www.figma.com/make/7hovpwOR4mUk1I2jOOarGt/InterPredict-Mobile-App-Prototype?fullscreen=1&t=4YEshUSfXcsTLyFZ-1&code-node-id=0-9"
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/app"
               onClick={() => setOpen(false)}
               className={cn(
                 buttonVariants(),
                 "glow-purple mt-1 rounded-full bg-primary font-semibold text-primary-foreground hover:bg-[#4f00c5]",
               )}
             >
-              See Prototype
-            </a>
+              {walletAddress ? "Go to App" : "Launch App"}
+            </Link>
           </div>
         )}
       </div>

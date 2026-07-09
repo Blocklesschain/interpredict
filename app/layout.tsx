@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Space_Grotesk, Inter, Geist_Mono } from 'next/font/google'
 import Script from 'next/script'
+import { Web3Provider } from './context/Web3Context'
 import './globals.css'
 
 const spaceGrotesk = Space_Grotesk({
@@ -56,10 +57,12 @@ export default function RootLayout({
         `}</Script>
       </head>
       <body className="font-sans antialiased">
-        {children}
+        {/* 🌟 Wrapped the application tree inside the Web3 Provider context */}
+        <Web3Provider>
+          {children}
+        </Web3Provider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
   )
 }
-

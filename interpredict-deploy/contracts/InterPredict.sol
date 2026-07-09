@@ -1,246 +1,234 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/**
- * @dev ReentrancyGuard logic written explicitly inside the contract file to completely bypass 
- * local node_modules version matching errors on Hardhat.
- */
-abstract contract ReentrancyGuard {
-    uint256 private constant NOT_ENTERED = 1;
-    uint256 private constant ENTERED = 2;
-    uint256 private _status;
-
-    constructor() {
-        _status = NOT_ENTERED;
+contract InterPredict {
+    // --- ENUMS & STRUCTS ---
+    enum MarketState {
+        Proposed,
+        Active,
+        Resolved
     }
-
-    modifier nonReentrant() {
-        require(_status != ENTERED, "ReentrancyGuard: reentrant call");
-        _status = ENTERED;
-        _;
-        _status = NOT_ENTERED;
+    enum Outcome {
+        YES,
+        NO,
+        DRAW
     }
-}
-
-/**
- * @title InterPredict Prediction Engine
- * @dev Fully verified and prepared for Interlink Testnet native tITL deployment.
- */
-contract InterPredict is ReentrancyGuard {
-    
-    enum MarketState { Proposed, Active, Resolved, Cancelled }
-    enum Outcome { None, YES, NO }
 
     struct Market {
         uint256 id;
-        address creator;
         string question;
-        uint256 votingEndTime;
         uint256 marketEndTime;
+        uint256 votingEndTime;
+        uint256 totalYesPool;
+        uint256 totalNoPool;
         MarketState state;
-        uint256 votesFor;
-        uint256 votesAgainst;
-        uint256 yesSharesPool; 
-        uint256 noSharesPool;  
-        uint256 totalCollateral; 
         Outcome winningOutcome;
+        address creator;
         bool creatorFeeClaimed;
+        uint256 votesForActive;
+        uint256 votesAgainstActive;
     }
 
-    // State Variables
-    uint256 public marketCount;
-    uint256 public totalDecMembers;
-    
-    uint256 public constant MARKET_STAKE = 1 * 10**18;       // 1 tITL required to propose
-    uint256 public constant DEC_STAKE = 1 * 10**18;          // 1 tITL required to join DEC
-    uint256 public constant VOTING_DURATION = 3 days;
-    uint256 public constant CREATOR_FEE_BPS = 100;           // 1.00% creator fee allocation
-    uint256 public constant INITIAL_LIQUIDITY = 10 * 10**17; // 0.1 tITL AMM seed reserve
-    
-    mapping(uint256 => Market) public markets;
-    mapping(address => bool) public isDecMember;
-    mapping(address => mapping(uint256 => bool)) public hasVotedOnCuration;
-    mapping(address => mapping(uint256 => uint256)) public userYesShares;
-    mapping(address => mapping(uint256 => uint256)) public userNoShares;
-    
-    uint256 public decRewardPool;
-    mapping(address => uint256) public decRewardsClaimed;
-
-    address public oracle;
-    address public owner;
-
-    // Events
-    event MarketProposed(uint256 indexed marketId, address indexed creator, string question, uint256 votingEndTime);
-    event CurationVoteCast(uint256 indexed marketId, address indexed voter, bool support, uint256 weight);
-    event MarketInitialized(uint256 indexed marketId, bool approved);
-    event SharesPurchased(uint256 indexed marketId, address indexed trader, bool isYes, uint256 collateralSpent, uint256 sharesMinted);
+    // --- EVENTS ---
+    event MarketProposed(
+        uint256 indexed marketId,
+        string question,
+        uint256 votingEndTime
+    );
+    event MarketInitialized(uint256 indexed marketId, uint256 marketEndTime);
+    event SharePurchased(
+        uint256 indexed marketId,
+        address indexed trader,
+        bool isYes,
+        uint256 amount
+    );
     event MarketResolved(uint256 indexed marketId, Outcome winningOutcome);
-    event PayoutClaimed(uint256 indexed marketId, address indexed trader, uint256 payoutAmount);
-    event CreatorYieldWithdrawn(uint256 indexed marketId, address indexed creator, uint256 yieldAmount);
-    event DecMemberRegistered(address indexed member);
+    event PayoutClaimed(
+        uint256 indexed marketId,
+        address indexed trader,
+        uint256 amount
+    );
+    event CreatorYieldClaimed(
+        uint256 indexed marketId,
+        address indexed creator,
+        uint256 amount
+    );
+    event DecRewardsClaimed(address indexed decMember, uint256 amount);
+    event OracleUpdated(
+        address indexed previousOracle,
+        address indexed newOracle
+    );
 
+    // --- STATE VARIABLES ---
+    address public immutable owner;
+    address public oracle;
+
+    uint256 public constant MARKET_STAKE = 500 ether;
+    uint256 public constant VOTING_DURATION = 1 days;
+    uint256 public constant PLATFORM_FEE_BPS = 200;
+    uint256 public constant CREATOR_FEE_BPS = 100;
+
+    uint256 public totalMarkets;
+    uint256 public decPool;
+    uint256 public totalDecMembers;
+
+    mapping(uint256 => Market) public markets;
+    mapping(uint256 => mapping(address => uint256)) public yesShares;
+    mapping(uint256 => mapping(address => uint256)) public noShares;
+    mapping(address => bool) public isDecMember;
+    mapping(uint256 => mapping(address => bool)) public hasVotedOnCuration;
+    mapping(address => uint256) public decRewardsClaimedTracker;
+
+    // --- MODIFIERS ---
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner can call");
         _;
     }
 
     modifier onlyOracle() {
-        require(msg.sender == oracle, "Only designated Oracle can call");
+        require(msg.sender == oracle, "Only oracle can resolve");
         _;
     }
 
-    modifier onlyDEC() {
-        require(isDecMember[msg.sender], "Must be a registered DEC member");
-        _;
-    }
-
+    // --- CONSTRUCTOR ---
     constructor(address _oracle) {
-        oracle = _oracle;
+        require(_oracle != address(0), "Oracle cannot be zero address");
         owner = msg.sender;
+        oracle = _oracle;
     }
 
-    function joinDEC() external payable nonReentrant {
-        require(!isDecMember[msg.sender], "Already a DEC member");
-        require(msg.value == DEC_STAKE, "Must stake exactly 1 tITL to join");
+    // --- CORE DEPLOYMENT FUNCTIONS ---
 
-        isDecMember[msg.sender] = true;
-        totalDecMembers++;
-
-        emit DecMemberRegistered(msg.sender);
-    }
-
-    function createActiveMarket(string calldata _question, uint256 _marketEndTime) external payable onlyOwner {
+    function createActiveMarket(
+        string calldata _question,
+        uint256 _marketEndTime
+    ) external payable onlyOwner {
         require(_marketEndTime > block.timestamp, "End time must be in future");
-        require(msg.value == INITIAL_LIQUIDITY, "Must seed initial AMM liquidity");
-        
-        marketCount++;
-        uint256 marketId = marketCount;
-        
-        markets[marketId] = Market({
-            id: marketId,
-            creator: msg.sender,
-            question: _question,
-            votingEndTime: block.timestamp,
-            marketEndTime: _marketEndTime,
-            state: MarketState.Active,
-            votesFor: 0,
-            votesAgainst: 0,
-            yesSharesPool: INITIAL_LIQUIDITY, 
-            noSharesPool: INITIAL_LIQUIDITY,  
-            totalCollateral: INITIAL_LIQUIDITY,
-            winningOutcome: Outcome.None,
-            creatorFeeClaimed: false
-        });
 
-        emit MarketInitialized(marketId, true);
+        uint256 marketId = totalMarkets++;
+        Market storage market = markets[marketId];
+        market.id = marketId;
+        market.question = _question;
+        market.marketEndTime = _marketEndTime;
+        market.state = MarketState.Active;
+        market.creator = msg.sender;
+
+        emit MarketInitialized(marketId, _marketEndTime);
     }
 
-    function proposeMarket(string calldata _question, uint256 _marketEndTime) external payable nonReentrant {
-        require(_marketEndTime > block.timestamp + VOTING_DURATION, "Market end time must be after voting");
-        require(msg.value == MARKET_STAKE, "Must stake exactly 1 tITL to propose");
-        
-        marketCount++;
-        uint256 marketId = marketCount;
-        
-        markets[marketId] = Market({
-            id: marketId,
-            creator: msg.sender,
-            question: _question,
-            votingEndTime: block.timestamp + VOTING_DURATION,
-            marketEndTime: _marketEndTime,
-            state: MarketState.Proposed,
-            votesFor: 0,
-            votesAgainst: 0,
-            yesSharesPool: INITIAL_LIQUIDITY, 
-            noSharesPool: INITIAL_LIQUIDITY,  
-            totalCollateral: 0, 
-            winningOutcome: Outcome.None,
-            creatorFeeClaimed: false
-        });
+    function proposeMarket(
+        string calldata _question,
+        uint256 _marketEndTime
+    ) external payable {
+        require(msg.value == MARKET_STAKE, "Must lock strict stake parameters");
+        require(
+            _marketEndTime > block.timestamp + VOTING_DURATION,
+            "Market end time must be after voting"
+        );
 
-        emit MarketProposed(marketId, msg.sender, _question, block.timestamp + VOTING_DURATION);
+        uint256 marketId = totalMarkets++;
+        Market storage market = markets[marketId];
+        market.id = marketId;
+        market.question = _question;
+        market.marketEndTime = _marketEndTime;
+        market.votingEndTime = block.timestamp + VOTING_DURATION;
+        market.state = MarketState.Proposed;
+        market.creator = msg.sender;
+
+        emit MarketProposed(marketId, _question, market.votingEndTime);
     }
 
-    function voteOnCuration(uint256 _marketId, bool _support) external onlyDEC {
+    function voteOnCuration(uint256 _marketId, bool _support) external {
+        require(isDecMember[msg.sender], "Only DEC committee can curate");
         Market storage market = markets[_marketId];
-        require(market.state == MarketState.Proposed, "Market not pending curation");
-        require(block.timestamp < market.votingEndTime, "Curation period ended");
-        require(!hasVotedOnCuration[msg.sender][_marketId], "Already voted on this market");
+        require(
+            market.state == MarketState.Proposed,
+            "Market not pending curation"
+        );
+        require(
+            block.timestamp < market.votingEndTime,
+            "Curation period ended"
+        );
+        require(
+            !hasVotedOnCuration[_marketId][msg.sender],
+            "Already voted on this query"
+        );
 
-        hasVotedOnCuration[msg.sender][_marketId] = true;
-
+        hasVotedOnCuration[_marketId][msg.sender] = true;
         if (_support) {
-            market.votesFor += 1;
+            market.votesForActive++;
         } else {
-            market.votesAgainst += 1;
+            market.votesAgainstActive++;
         }
-
-        emit CurationVoteCast(_marketId, msg.sender, _support, 1);
     }
 
-    function initializeMarket(uint256 _marketId) external nonReentrant {
+    function initializeMarket(uint256 _marketId) external {
         Market storage market = markets[_marketId];
-        require(market.state == MarketState.Proposed, "Market already initialized");
-        require(block.timestamp >= market.votingEndTime, "Curation voting still active");
+        require(
+            market.state == MarketState.Proposed,
+            "Market already initialized"
+        );
+        require(
+            block.timestamp >= market.votingEndTime,
+            "Curation voting still active"
+        );
 
-        if (market.votesFor > market.votesAgainst && market.votesFor > 0) {
+        if (
+            market.votesForActive >= market.votesAgainstActive &&
+            market.votesForActive > 0
+        ) {
             market.state = MarketState.Active;
-            market.totalCollateral = INITIAL_LIQUIDITY;
-            
-            (bool success, ) = payable(market.creator).call{value: MARKET_STAKE}("");
-            require(success, "Refund failed");
-
-            emit MarketInitialized(_marketId, true);
+            emit MarketInitialized(_marketId, market.marketEndTime);
         } else {
-            market.state = MarketState.Cancelled;
-            
-            uint256 penalty = (MARKET_STAKE * 100) / 10000; 
-            uint256 refundAmount = MARKET_STAKE - penalty;
-            decRewardPool += penalty;
+            market.state = MarketState.Resolved;
+            market.winningOutcome = Outcome.DRAW;
 
-            (bool success, ) = payable(market.creator).call{value: refundAmount}("");
-            require(success, "Deducted refund failed");
-
-            emit MarketInitialized(_marketId, false);
+            uint256 refundAmount = MARKET_STAKE;
+            (bool success, ) = address(market.creator).call{
+                value: refundAmount
+            }("");
+            require(success, "Refund failed");
         }
     }
 
-    function buyShares(uint256 _marketId, bool _isYes) external payable nonReentrant {
+    function buyShares(uint256 _marketId, bool _isYes) external payable {
         Market storage market = markets[_marketId];
-        require(market.state == MarketState.Active, "Market is not active for trading");
-        require(block.timestamp < market.marketEndTime, "Trading window closed");
-        require(msg.value > 0, "Must send tITL to buy shares");
-
-        uint256 sharesToMint;
-        uint256 k = market.yesSharesPool * market.noSharesPool;
+        require(
+            market.state == MarketState.Active,
+            "Market is not active for trading"
+        );
+        require(
+            block.timestamp < market.marketEndTime,
+            "Trading window closed"
+        );
+        require(msg.value > 0, "Wager must be greater than zero");
 
         if (_isYes) {
-            uint256 newYesPool = market.yesSharesPool + msg.value;
-            uint256 newNoPool = k / newYesPool;
-            sharesToMint = market.noSharesPool - newNoPool;
-
-            market.yesSharesPool = newYesPool;
-            market.noSharesPool = newNoPool;
-            userYesShares[msg.sender][_marketId] += sharesToMint;
+            yesShares[_marketId][msg.sender] += msg.value;
+            market.totalYesPool += msg.value;
         } else {
-            uint256 newNoPool = market.noSharesPool + msg.value;
-            uint256 newYesPool = k / newNoPool;
-            sharesToMint = market.yesSharesPool - newYesPool;
-
-            market.noSharesPool = newNoPool;
-            market.yesSharesPool = newYesPool;
-            userNoShares[msg.sender][_marketId] += sharesToMint;
+            noShares[_marketId][msg.sender] += msg.value;
+            market.totalNoPool += msg.value;
         }
 
-        market.totalCollateral += msg.value;
-        emit SharesPurchased(_marketId, msg.sender, _isYes, msg.value, sharesToMint);
+        emit SharePurchased(_marketId, msg.sender, _isYes, msg.value);
     }
 
-    function resolveMarket(uint256 _marketId, Outcome _winningOutcome) external onlyOracle {
+    // --- SETTLEMENT LAYER (Hardened Mathematics Matrix) ---
+
+    function resolveMarket(
+        uint256 _marketId,
+        Outcome _winningOutcome
+    ) external onlyOracle {
         Market storage market = markets[_marketId];
-        require(market.state == MarketState.Active, "Market not in Active state");
-        require(block.timestamp >= market.marketEndTime, "Market has not reached settlement time");
-        require(_winningOutcome == Outcome.YES || _winningOutcome == Outcome.NO, "Invalid outcome selection");
+        require(
+            market.state == MarketState.Active,
+            "Market not in Active state"
+        );
+        require(
+            block.timestamp >= market.marketEndTime,
+            "Market has not reached settlement time"
+        );
 
         market.state = MarketState.Resolved;
         market.winningOutcome = _winningOutcome;
@@ -248,64 +236,122 @@ contract InterPredict is ReentrancyGuard {
         emit MarketResolved(_marketId, _winningOutcome);
     }
 
-    function claimPayout(uint256 _marketId) external nonReentrant {
+    function claimPayout(uint256 _marketId) external {
         Market storage market = markets[_marketId];
-        require(market.state == MarketState.Resolved, "Market not resolved yet");
+        require(
+            market.state == MarketState.Resolved,
+            "Market not resolved yet"
+        );
 
         uint256 winnings = 0;
-        uint256 creatorFeeAllocated = (market.totalCollateral * CREATOR_FEE_BPS) / 10000;
-        uint256 netPayoutPool = market.totalCollateral - creatorFeeAllocated;
+        uint256 totalPool = market.totalYesPool + market.totalNoPool;
 
         if (market.winningOutcome == Outcome.YES) {
-            uint256 userShares = userYesShares[msg.sender][_marketId];
-            require(userShares > 0, "No winning YES shares");
-            
-            winnings = (userShares * netPayoutPool) / market.yesSharesPool;
-            userYesShares[msg.sender][_marketId] = 0;
+            uint256 userShares = yesShares[_marketId][msg.sender];
+            require(userShares > 0, "No winning YES shares found");
+
+            yesShares[_marketId][msg.sender] = 0;
+
+            //Multiply user shares by total pool before executing division math
+            winnings = (userShares * totalPool) / market.totalYesPool;
         } else if (market.winningOutcome == Outcome.NO) {
-            uint256 userShares = userNoShares[msg.sender][_marketId];
-            require(userShares > 0, "No winning NO shares");
-            
-            winnings = (userShares * netPayoutPool) / market.noSharesPool;
-            userNoShares[msg.sender][_marketId] = 0;
+            uint256 userShares = noShares[_marketId][msg.sender];
+            require(userShares > 0, "No winning NO shares found");
+
+            noShares[_marketId][msg.sender] = 0;
+
+            //Multiply user shares by total pool before executing division math
+            winnings = (userShares * totalPool) / market.totalNoPool;
+        } else {
+            uint256 userYes = yesShares[_marketId][msg.sender];
+            uint256 userNo = noShares[_marketId][msg.sender];
+            winnings = userYes + userNo;
+            require(winnings > 0, "No assets tied to pool query allocation");
+
+            yesShares[_marketId][msg.sender] = 0;
+            noShares[_marketId][msg.sender] = 0;
         }
 
-        require(winnings > 0, "Zero calculated payouts");
-        
-        (bool success, ) = payable(msg.sender).call{value: winnings}("");
-        require(success, "Winnings payout failed");
-        
-        emit PayoutClaimed(_marketId, msg.sender, winnings);
+        uint256 platformFee = (winnings * PLATFORM_FEE_BPS) / 10000;
+        uint256 netWinnings = winnings - platformFee;
+        decPool += platformFee;
+
+        emit PayoutClaimed(_marketId, msg.sender, netWinnings);
+
+        (bool success, ) = address(msg.sender).call{value: netWinnings}("");
+        require(success, "Payout transfer execution failed");
     }
 
-    function claimCreatorYield(uint256 _marketId) external nonReentrant {
+    function claimCreatorYield(uint256 _marketId) external {
         Market storage market = markets[_marketId];
-        require(market.state == MarketState.Resolved, "Market must be resolved");
+        require(
+            market.state == MarketState.Resolved,
+            "Market must be resolved"
+        );
         require(msg.sender == market.creator, "Only market creator can claim");
         require(!market.creatorFeeClaimed, "Yield already claimed");
 
-        uint256 totalYield = (market.totalCollateral * CREATOR_FEE_BPS) / 10000;
         market.creatorFeeClaimed = true;
 
-        (bool success, ) = payable(market.creator).call{value: totalYield}("");
-        require(success, "Yield transfer failed");
-        
-        emit CreatorYieldWithdrawn(_marketId, market.creator, totalYield);
+        uint256 totalPool = market.totalYesPool + market.totalNoPool;
+        uint256 totalYield = (totalPool * CREATOR_FEE_BPS) / 10000;
+
+        emit CreatorYieldClaimed(_marketId, msg.sender, totalYield);
+
+        (bool success, ) = address(market.creator).call{value: totalYield}("");
+        require(success, "Yield settlement routing failed");
     }
 
-    function claimDecRewards() external onlyDEC nonReentrant {
-        require(totalDecMembers > 0, "No members");
-        uint256 totalOwedToMember = decRewardPool / totalDecMembers;
-        uint256 claimable = totalOwedToMember - decRewardsClaimed[msg.sender];
-        
-        require(claimable > 0, "No new rewards to claim");
-        decRewardsClaimed[msg.sender] += claimable;
+    // --- GOVERNANCE INTERFACE ENGINE ---
 
-        (bool success, ) = payable(msg.sender).call{value: claimable}("");
-        require(success, "DEC payout failed");
+    function joinCommittee() external payable {
+        require(
+            msg.value == MARKET_STAKE,
+            "Must lock active entry requirement allocation"
+        );
+        require(!isDecMember[msg.sender], "Already registered as member node");
+
+        isDecMember[msg.sender] = true;
+        totalDecMembers++;
     }
+
+    function claimDecRewards() external {
+        require(
+            isDecMember[msg.sender],
+            "Not a valid committee validator credential node"
+        );
+        require(
+            totalDecMembers > 0,
+            "Zero division safety protocol constraint flag"
+        );
+
+        uint256 totalSharePerNode = decPool / totalDecMembers;
+        uint256 claimable = totalSharePerNode -
+            decRewardsClaimedTracker[msg.sender];
+        require(
+            claimable > 0,
+            "All outstanding committee network yields claimed"
+        );
+
+        decRewardsClaimedTracker[msg.sender] = totalSharePerNode;
+
+        emit DecRewardsClaimed(msg.sender, claimable);
+
+        (bool success, ) = address(msg.sender).call{value: claimable}("");
+        require(success, "Rewards distribution failed");
+    }
+
+    // --- ADMINISTRATION SYSTEM OPERATIONS ---
 
     function updateOracle(address _newOracle) external onlyOwner {
+        require(
+            _newOracle != address(0),
+            "New oracle cannot be the zero address"
+        );
+
+        address oldOracle = oracle;
         oracle = _newOracle;
+
+        emit OracleUpdated(oldOracle, _newOracle);
     }
 }

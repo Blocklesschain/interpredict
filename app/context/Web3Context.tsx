@@ -781,18 +781,22 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const createMarketOnChain = async (description: string): Promise<boolean> => {
     const isTeam = walletAddress?.toLowerCase() === "0x6e832252ea4c78068ee109d953724d2762431992";
     const txType = isTeam ? 'Team Deployment' : 'Market Proposal';
-    const feeText = isTeam ? '0.00 tITL (Bypassed)' : '1.00 tITL';
+    const feeText = isTeam ? '0.00 tITL (Bypassed)' : '500.00 tITL'; // Updated to match your contract constant MARKET_STAKE
 
     try {
       setTxStatus("Broadcasting market initialization payload...")
       const { contract } = await getContractInstance()
 
+      // 🕒 Generate a default 7-day end time timestamp to satisfy the new smart contract parameters
+      const marketEndTime = Math.floor(Date.now() / 1000) + (86400 * 7);
+
       let tx;
-      // 🚀 Fix: Added explicit gasLimit parameter to bypass network congestion timeouts
       if (isTeam) {
-        tx = await contract.createMarketByTeam(description, { gasLimit: 300000 })
+        // 🔄 Swapped to: createActiveMarket
+        tx = await contract.createActiveMarket(description, marketEndTime, { gasLimit: 300000 })
       } else {
-        tx = await contract.createMarket(description, { value: ethers.parseEther("1.0"), gasLimit: 350000 })
+        // 🔄 Swapped to: proposeMarket and value to 500 ether
+        tx = await contract.proposeMarket(description, marketEndTime, { value: ethers.parseEther("500"), gasLimit: 350000 })
       }
 
       setTxStatus("Awaiting on-chain verification blocks...")
@@ -820,8 +824,8 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       }
 
       setTxStatus("Escrowing security bond onto validator layer...")
-      // 🚀 Fix: Manual gas parameters overridden to guarantee pipeline priority execution
-      const tx = await contract.joinDEC({ value: ethers.parseEther("500"), gasLimit: 250000 })
+      // 🔄 Swapped function call to: joinCommittee
+      const tx = await contract.joinCommittee({ value: ethers.parseEther("500"), gasLimit: 250000 })
       await tx.wait()
       setTxStatus("Node verified! Welcome to the Decentralized Curation Committee.")
       appendLog('Committee Bond', 'Request to join DEC Committee', 'Success — 500.00 tITL locked into validation contract registry', 'Success')
@@ -838,8 +842,9 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     try {
       setTxStatus("Transmitting curation consensus weight...")
       const { contract } = await getContractInstance()
-      // 🚀 Fix: Forced execution limit parameters
-      const tx = await contract.castVote(marketId, support, { gasLimit: 150000 })
+
+      // 🔄 Swapped function call to: voteOnCuration
+      const tx = await contract.voteOnCuration(marketId, support, { gasLimit: 150000 })
       await tx.wait()
       setTxStatus("Ballot updated successfully on-chain.")
       appendLog('Governance Vote', `Vote cast on Proposal ID #${marketId}`, `Success — ${ballotText}`, 'Success')
@@ -851,14 +856,17 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
   const placeBetOnChain = async (marketId: number, outcome: number, amount: string) => {
     const targetSide = outcome === 0 ? 'YES' : 'NO';
+    const isYes = outcome === 0; // Convert the number index to a clean boolean for the new contract signature
+
     try {
       setTxStatus("Transmitting position collateral payload...")
       const { contract } = await getContractInstance()
-      // 🚀 Fix: Gas limit allocation forced to prevent node stalling errors
-      const tx = await contract.placeWager(marketId, outcome, { value: ethers.parseEther(amount), gasLimit: 250000 })
+
+      // 🔄 Swapped function call to: buyShares (takes marketId, bool isYes)
+      const tx = await contract.buyShares(marketId, isYes, { value: ethers.parseEther(amount), gasLimit: 250000 })
       await tx.wait()
       setTxStatus("Trade position logged securely inside on-chain pool matrix!")
-      appendLog('Market Trade', `Wager placed on Pool #${marketId}`, `Success — Predicted {targetSide} with ${amount} tITL`, 'Success')
+      appendLog('Market Trade', `Wager placed on Pool #${marketId}`, `Success — Predicted ${targetSide} with ${amount} tITL`, 'Success')
     } catch (err: any) {
       setTxStatus(`Execution Error: ${err.message}`)
       appendLog('Market Trade', `Wager placed on Pool #${marketId}`, `Failed — ${targetSide} allocation timed out`, 'Failed')

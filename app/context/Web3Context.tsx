@@ -27,7 +27,7 @@ interface Web3ContextType {
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
 
 const INTERLINK_TESTNET_CHAIN_ID = '0x5d'
-const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS!;
+const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0x4A98F9556964e2790f458ca9cE8683CEa6Dd3ABA";
 
 const CONTRACT_ABI = [
   {

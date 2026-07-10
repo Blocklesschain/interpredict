@@ -733,7 +733,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
               chainId: INTERLINK_TESTNET_CHAIN_ID,
               chainName: 'Interlink Testnet',
               nativeCurrency: { name: 'Interlink Token', symbol: 'tITL', decimals: 18 },
-              rpcUrls: ['https://testnet-rpc.interlinklabs.ai'],
+              rpcUrls: ['https://evm-rpc.test-net.interlinklabs.ai/v1'],
               blockExplorerUrls: ['https://testnet-explorer.interlinklabs.ai']
             }]
           })

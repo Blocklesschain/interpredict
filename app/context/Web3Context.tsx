@@ -27,7 +27,7 @@ interface Web3ContextType {
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
 
 const INTERLINK_TESTNET_CHAIN_ID = '0x5d'
-const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0x00B8fF9773317046DF8aC08041017c9f9109eE73";
+const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0x11A81a7cb2D885820D89e49Ce03f663c67403F1B";
 
 const CONTRACT_ABI = [
   {
@@ -794,14 +794,14 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       if (isTeam) {
         // 🚀 Team address bypasses the escrow requirement with low gas pricing
         tx = await contract.createActiveMarket(description, marketEndTime, {
-          gasLimit: 130000,
+          gasLimit: 120000,
           gasPrice: ethers.parseUnits("5", "gwei")
         })
       } else {
         // 🔄 Adjusted value threshold down to 1.0 ethers with low gas pricing
         tx = await contract.proposeMarket(description, marketEndTime, {
           value: ethers.parseEther("1.0"),
-          gasLimit: 130000,
+          gasLimit: 120000,
           gasPrice: ethers.parseUnits("5", "gwei")
         })
       }
@@ -824,25 +824,28 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const { contract, provider } = await getContractInstance()
 
       const balance = await provider.getBalance(walletAddress!);
-      const readableBalance = parseFloat(ethers.formatEther(balance));
-
-      // Safe decimal comparison to bypass the frontend validation trap
-      if (readableBalance < 1.0) {
-        setTxStatus("Registration Rejected: Insufficient balance. 1.00 tITL required.");
+      
+      // 🚀 Bulletproof BigInt validation comparison
+      if (BigInt(balance) < ethers.parseEther("0.1")) {
+        setTxStatus("Registration Rejected: Insufficient balance. 0.10 tITL required.");
         appendLog('Committee Bond', 'Request to join DEC Committee', 'Failed — Insufficient tITL balance parameters', 'Failed');
         return false;
       }
 
-      setTxStatus("Escrowing security bond onto validator layer...")
-      // 🔄 Fixed: Injected low gasPrice configuration to cap transaction fees safely
+      setTxStatus("Processing DEC Committee registration payment...")
+      
+      // 🔄 Injected low gasPrice configuration to cap transaction fees safely
       const tx = await contract.joinCommittee({
-        value: ethers.parseEther("1.0"),
+        value: ethers.parseEther("0.1"), 
         gasLimit: 75000,
         gasPrice: ethers.parseUnits("5", "gwei")
       })
       await tx.wait()
+      
       setTxStatus("Node verified! Welcome to the Decentralized Curation Committee.")
-      appendLog('Committee Bond', 'Request to join DEC Committee', 'Success — 1.00 tITL locked into validation contract registry', 'Success')
+      
+      // 🔄 Swapped type back to 'Committee Bond' to clear the TypeScript error matrix
+      appendLog('Committee Bond', 'Request to join DEC Committee', 'Success — 0.10 tITL routed to treasury registry contract', 'Success')
       return true
     } catch (err: any) {
       setTxStatus(`Verification Cancelled: ${err.message}`)
@@ -882,7 +885,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       // 🔄 Fixed: Added low gasPrice configuration to protect your token balance
       const tx = await contract.buyShares(marketId, isYes, {
         value: ethers.parseEther(amount),
-        gasLimit: 120000,
+        gasLimit: 60000,
         gasPrice: ethers.parseUnits("5", "gwei")
       })
       await tx.wait()

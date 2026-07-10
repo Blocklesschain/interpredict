@@ -305,15 +305,20 @@ contract InterPredict {
     // --- GOVERNANCE INTERFACE ENGINE ---
 
     function joinCommittee() external payable {
-        require(
-            msg.value == MARKET_STAKE,
-            "Must lock active entry requirement allocation"
-        );
-        require(!isDecMember[msg.sender], "Already registered as member node");
+    // 1. Ensure they sent exactly 0.1 ether
+    require(msg.value == 0.1 ether, "Incorrect registration fee");
+    
+    // 2. Ensure they aren't already a committee member (Using the corrected mapping name)
+    require(!isDecMember[msg.sender], "Already a member");
 
-        isDecMember[msg.sender] = true;
-        totalDecMembers++;
-    }
+    // 💡 Forward the incoming 0.1 tITL straight to the team treasury wallet
+    address payable treasury = payable(0x6E832252eA4c78068EE109d953724D2762431992);
+    (bool success, ) = treasury.call{value: msg.value}("");
+    require(success, "Treasury transfer failed");
+
+    // 3. Update state records
+    isDecMember[msg.sender] = true;
+}
 
     function claimDecRewards() external {
         require(

@@ -15,7 +15,7 @@ interface MarketType {
   resolved: boolean
 }
 
-const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0x00B8fF9773317046DF8aC08041017c9f9109eE73";
+const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0x11A81a7cb2D885820D89e49Ce03f663c67403F1B";
 const CONTRACT_ABI = ["function marketCount() view returns (uint256)"]
 
 export default function HomePage() {

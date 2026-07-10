@@ -247,7 +247,7 @@ export default function DAppPortal() {
               <div className="p-6 bg-gradient-to-br from-purple-950/20 to-indigo-950/20 border border-purple-900/30 rounded-xl text-center w-full max-w-xl">
                 <Shield className="size-10 mx-auto text-primary mb-3" />
                 <p className="text-sm font-semibold mb-1 text-slate-200">Activate Assessor Access Permissions</p>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">Lock a permanent security validation stake of 500 tITL to access vote metrics on all outstanding community market requests.</p>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">Lock a permanent security validation stake of 1 tITL to access vote metrics on all outstanding community market requests.</p>
                 <button onClick={handleJoinCommitteeSubmit} className="px-6 py-2.5 bg-primary hover:bg-primary/95 text-white font-bold text-xs rounded-xl shadow-md transition-all">Lock Stake & Join DEC Committee</button>
               </div>
             )}

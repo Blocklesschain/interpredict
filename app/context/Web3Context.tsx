@@ -792,11 +792,18 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
       let tx;
       if (isTeam) {
-        // 🚀 Team address bypasses the escrow requirement
-        tx = await contract.createActiveMarket(description, marketEndTime, { gasLimit: 120000 })
+        // 🚀 Team address bypasses the escrow requirement with low gas pricing
+        tx = await contract.createActiveMarket(description, marketEndTime, {
+          gasLimit: 130000,
+          gasPrice: ethers.parseUnits("5", "gwei")
+        })
       } else {
-        // 🔄 Adjusted value threshold down to 1.0 ether so your 4 tITL balance can clear it
-        tx = await contract.proposeMarket(description, marketEndTime, { value: ethers.parseEther("1.0"), gasLimit: 120000 })
+        // 🔄 Adjusted value threshold down to 1.0 ethers with low gas pricing
+        tx = await contract.proposeMarket(description, marketEndTime, {
+          value: ethers.parseEther("1.0"),
+          gasLimit: 130000,
+          gasPrice: ethers.parseUnits("5", "gwei")
+        })
       }
 
       setTxStatus("Awaiting on-chain verification blocks...")
@@ -827,8 +834,12 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       }
 
       setTxStatus("Escrowing security bond onto validator layer...")
-      // 🔄 Fixed: Updated the value parameter sent to joinCommittee to exactly 1.0 ether
-      const tx = await contract.joinCommittee({ value: ethers.parseEther("1.0"), gasLimit: 75000 })
+      // 🔄 Fixed: Injected low gasPrice configuration to cap transaction fees safely
+      const tx = await contract.joinCommittee({
+        value: ethers.parseEther("1.0"),
+        gasLimit: 75000,
+        gasPrice: ethers.parseUnits("5", "gwei")
+      })
       await tx.wait()
       setTxStatus("Node verified! Welcome to the Decentralized Curation Committee.")
       appendLog('Committee Bond', 'Request to join DEC Committee', 'Success — 1.00 tITL locked into validation contract registry', 'Success')
@@ -846,8 +857,11 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       setTxStatus("Transmitting curation consensus weight...")
       const { contract } = await getContractInstance()
 
-      // 🔄 Swapped function call to: voteOnCuration
-      const tx = await contract.voteOnCuration(marketId, support, { gasLimit: 60000 })
+      // 🔄 Fixed: Added low gasPrice configuration to protect your token balance
+      const tx = await contract.voteOnCuration(marketId, support, {
+        gasLimit: 60000,
+        gasPrice: ethers.parseUnits("5", "gwei")
+      })
       await tx.wait()
       setTxStatus("Ballot updated successfully on-chain.")
       appendLog('Governance Vote', `Vote cast on Proposal ID #${marketId}`, `Success — ${ballotText}`, 'Success')
@@ -865,8 +879,12 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       setTxStatus("Transmitting position collateral payload...")
       const { contract } = await getContractInstance()
 
-      // 🔄 Swapped function call to: buyShares (takes marketId, bool isYes)
-      const tx = await contract.buyShares(marketId, isYes, { value: ethers.parseEther(amount), gasLimit: 120000 })
+      // 🔄 Fixed: Added low gasPrice configuration to protect your token balance
+      const tx = await contract.buyShares(marketId, isYes, {
+        value: ethers.parseEther(amount),
+        gasLimit: 120000,
+        gasPrice: ethers.parseUnits("5", "gwei")
+      })
       await tx.wait()
       setTxStatus("Trade position logged securely inside on-chain pool matrix!")
       appendLog('Market Trade', `Wager placed on Pool #${marketId}`, `Success — Predicted ${targetSide} with ${amount} tITL`, 'Success')

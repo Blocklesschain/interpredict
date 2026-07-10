@@ -794,14 +794,14 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       if (isTeam) {
         // 🚀 Team address bypasses the escrow requirement with low gas pricing
         tx = await contract.createActiveMarket(description, marketEndTime, {
-          gasLimit: 120000,
+          gasLimit: 250000,
           gasPrice: ethers.parseUnits("5", "gwei")
         })
       } else {
         // 🔄 Adjusted value threshold down to 1.0 ethers with low gas pricing
         tx = await contract.proposeMarket(description, marketEndTime, {
           value: ethers.parseEther("1.0"),
-          gasLimit: 120000,
+          gasLimit: 250000,
           gasPrice: ethers.parseUnits("5", "gwei")
         })
       }
@@ -824,26 +824,19 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const { contract, provider } = await getContractInstance()
 
       const balance = await provider.getBalance(walletAddress!);
-      
-      // 🚀 Bulletproof BigInt validation comparison
-      if (BigInt(balance) < ethers.parseEther("0.1")) {
-        setTxStatus("Registration Rejected: Insufficient balance. 0.10 tITL required.");
-        appendLog('Committee Bond', 'Request to join DEC Committee', 'Failed — Insufficient tITL balance parameters', 'Failed');
-        return false;
-      }
 
       setTxStatus("Processing DEC Committee registration payment...")
-      
+
       // 🔄 Injected low gasPrice configuration to cap transaction fees safely
       const tx = await contract.joinCommittee({
-        value: ethers.parseEther("0.1"), 
-        gasLimit: 75000,
+        value: ethers.parseEther("0.1"),
+        gasLimit: 250000,
         gasPrice: ethers.parseUnits("5", "gwei")
       })
       await tx.wait()
-      
+
       setTxStatus("Node verified! Welcome to the Decentralized Curation Committee.")
-      
+
       // 🔄 Swapped type back to 'Committee Bond' to clear the TypeScript error matrix
       appendLog('Committee Bond', 'Request to join DEC Committee', 'Success — 0.10 tITL routed to treasury registry contract', 'Success')
       return true
@@ -862,7 +855,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
       // 🔄 Fixed: Added low gasPrice configuration to protect your token balance
       const tx = await contract.voteOnCuration(marketId, support, {
-        gasLimit: 60000,
+        gasLimit: 250000,
         gasPrice: ethers.parseUnits("5", "gwei")
       })
       await tx.wait()
@@ -885,7 +878,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       // 🔄 Fixed: Added low gasPrice configuration to protect your token balance
       const tx = await contract.buyShares(marketId, isYes, {
         value: ethers.parseEther(amount),
-        gasLimit: 60000,
+        gasLimit: 250000,
         gasPrice: ethers.parseUnits("5", "gwei")
       })
       await tx.wait()

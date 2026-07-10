@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import { Space_Grotesk, Inter, Geist_Mono } from 'next/font/google'
 import Script from 'next/script'
 import { Web3Provider } from './context/Web3Context'
+import ScrollToTop from '../components/ScrollToTop'
 import './globals.css'
 
 const spaceGrotesk = Space_Grotesk({
@@ -63,6 +64,8 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         <Web3Provider>
           {children}
+          {/*Scroll To Top engine running smoothly across pages */}
+          <ScrollToTop />
         </Web3Provider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

@@ -27,7 +27,7 @@ interface Web3ContextType {
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
 
 const INTERLINK_TESTNET_CHAIN_ID = '0x5d'
-const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0x4A98F9556964e2790f458ca9cE8683CEa6Dd3ABA";
+const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0x00B8fF9773317046DF8aC08041017c9f9109eE73";
 
 const CONTRACT_ABI = [
   {
@@ -781,7 +781,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const createMarketOnChain = async (description: string): Promise<boolean> => {
     const isTeam = walletAddress?.toLowerCase() === "0x6e832252ea4c78068ee109d953724d2762431992";
     const txType = isTeam ? 'Team Deployment' : 'Market Proposal';
-    const feeText = isTeam ? '0.00 tITL (Bypassed)' : '500.00 tITL'; // Updated to match your contract constant MARKET_STAKE
+    const feeText = isTeam ? '0.00 tITL (Bypassed)' : '1.00 tITL'; // 🔄 Updated display text to 1.00 tITL
 
     try {
       setTxStatus("Broadcasting market initialization payload...")
@@ -792,11 +792,11 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
       let tx;
       if (isTeam) {
-        // 🔄 Swapped to: createActiveMarket
+        // 🚀 Team address bypasses the escrow requirement
         tx = await contract.createActiveMarket(description, marketEndTime, { gasLimit: 300000 })
       } else {
-        // 🔄 Swapped to: proposeMarket and value to 500 ether
-        tx = await contract.proposeMarket(description, marketEndTime, { value: ethers.parseEther("500"), gasLimit: 350000 })
+        // 🔄 Adjusted value threshold down to 1.0 ether so your 4 tITL balance can clear it
+        tx = await contract.proposeMarket(description, marketEndTime, { value: ethers.parseEther("1.0"), gasLimit: 350000 })
       }
 
       setTxStatus("Awaiting on-chain verification blocks...")
@@ -817,18 +817,19 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const { contract, provider } = await getContractInstance()
 
       const balance = await provider.getBalance(walletAddress!)
-      if (balance < ethers.parseEther("500")) {
-        setTxStatus("Registration Rejected: Insufficient balance. 500 tITL required.")
+      // 🚀 Balance guard threshold check adjusted down to 1.0 tITL
+      if (balance < ethers.parseEther("1.0")) {
+        setTxStatus("Registration Rejected: Insufficient balance. 1.00 tITL required.")
         appendLog('Committee Bond', 'Request to join DEC Committee', 'Failed — Insufficient tITL balance parameters', 'Failed')
         return false
       }
 
       setTxStatus("Escrowing security bond onto validator layer...")
-      // 🔄 Swapped function call to: joinCommittee
-      const tx = await contract.joinCommittee({ value: ethers.parseEther("500"), gasLimit: 250000 })
+      // 🔄 Fixed: Updated the value parameter sent to joinCommittee to exactly 1.0 ether
+      const tx = await contract.joinCommittee({ value: ethers.parseEther("1.0"), gasLimit: 250000 })
       await tx.wait()
       setTxStatus("Node verified! Welcome to the Decentralized Curation Committee.")
-      appendLog('Committee Bond', 'Request to join DEC Committee', 'Success — 500.00 tITL locked into validation contract registry', 'Success')
+      appendLog('Committee Bond', 'Request to join DEC Committee', 'Success — 1.00 tITL locked into validation contract registry', 'Success')
       return true
     } catch (err: any) {
       setTxStatus(`Verification Cancelled: ${err.message}`)

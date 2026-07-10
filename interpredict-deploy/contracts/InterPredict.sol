@@ -63,7 +63,7 @@ contract InterPredict {
     address public immutable owner;
     address public oracle;
 
-    uint256 public constant MARKET_STAKE = 500 ether;
+    uint256 public constant MARKET_STAKE = 1 ether;
     uint256 public constant VOTING_DURATION = 1 days;
     uint256 public constant PLATFORM_FEE_BPS = 200;
     uint256 public constant CREATOR_FEE_BPS = 100;

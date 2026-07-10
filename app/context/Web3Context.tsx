@@ -793,10 +793,10 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       let tx;
       if (isTeam) {
         // 🚀 Team address bypasses the escrow requirement
-        tx = await contract.createActiveMarket(description, marketEndTime, { gasLimit: 300000 })
+        tx = await contract.createActiveMarket(description, marketEndTime, { gasLimit: 120000 })
       } else {
         // 🔄 Adjusted value threshold down to 1.0 ether so your 4 tITL balance can clear it
-        tx = await contract.proposeMarket(description, marketEndTime, { value: ethers.parseEther("1.0"), gasLimit: 350000 })
+        tx = await contract.proposeMarket(description, marketEndTime, { value: ethers.parseEther("1.0"), gasLimit: 120000 })
       }
 
       setTxStatus("Awaiting on-chain verification blocks...")
@@ -816,17 +816,19 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       setTxStatus("Reading native node balance parameters...")
       const { contract, provider } = await getContractInstance()
 
-      const balance = await provider.getBalance(walletAddress!)
-      // 🚀 Balance guard threshold check adjusted down to 1.0 tITL
-      if (balance < ethers.parseEther("1.0")) {
-        setTxStatus("Registration Rejected: Insufficient balance. 1.00 tITL required.")
-        appendLog('Committee Bond', 'Request to join DEC Committee', 'Failed — Insufficient tITL balance parameters', 'Failed')
-        return false
+      const balance = await provider.getBalance(walletAddress!);
+      const readableBalance = parseFloat(ethers.formatEther(balance));
+
+      // Safe decimal comparison to bypass the frontend validation trap
+      if (readableBalance < 1.0) {
+        setTxStatus("Registration Rejected: Insufficient balance. 1.00 tITL required.");
+        appendLog('Committee Bond', 'Request to join DEC Committee', 'Failed — Insufficient tITL balance parameters', 'Failed');
+        return false;
       }
 
       setTxStatus("Escrowing security bond onto validator layer...")
       // 🔄 Fixed: Updated the value parameter sent to joinCommittee to exactly 1.0 ether
-      const tx = await contract.joinCommittee({ value: ethers.parseEther("1.0"), gasLimit: 250000 })
+      const tx = await contract.joinCommittee({ value: ethers.parseEther("1.0"), gasLimit: 75000 })
       await tx.wait()
       setTxStatus("Node verified! Welcome to the Decentralized Curation Committee.")
       appendLog('Committee Bond', 'Request to join DEC Committee', 'Success — 1.00 tITL locked into validation contract registry', 'Success')
@@ -845,7 +847,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const { contract } = await getContractInstance()
 
       // 🔄 Swapped function call to: voteOnCuration
-      const tx = await contract.voteOnCuration(marketId, support, { gasLimit: 150000 })
+      const tx = await contract.voteOnCuration(marketId, support, { gasLimit: 60000 })
       await tx.wait()
       setTxStatus("Ballot updated successfully on-chain.")
       appendLog('Governance Vote', `Vote cast on Proposal ID #${marketId}`, `Success — ${ballotText}`, 'Success')
@@ -864,7 +866,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const { contract } = await getContractInstance()
 
       // 🔄 Swapped function call to: buyShares (takes marketId, bool isYes)
-      const tx = await contract.buyShares(marketId, isYes, { value: ethers.parseEther(amount), gasLimit: 250000 })
+      const tx = await contract.buyShares(marketId, isYes, { value: ethers.parseEther(amount), gasLimit: 120000 })
       await tx.wait()
       setTxStatus("Trade position logged securely inside on-chain pool matrix!")
       appendLog('Market Trade', `Wager placed on Pool #${marketId}`, `Success — Predicted ${targetSide} with ${amount} tITL`, 'Success')

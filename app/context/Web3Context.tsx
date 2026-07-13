@@ -26,8 +26,8 @@ interface Web3ContextType {
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
 
-const INTERLINK_TESTNET_CHAIN_ID = '0x5d'
-const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0x11A81a7cb2D885820D89e49Ce03f663c67403F1B";
+const INTERLINK_TESTNET_CHAIN_ID = '19042026'
+const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0xD6CA8AB227dE04be92e3c0076c54BD9d60705Da2";
 
 const CONTRACT_ABI = [
   {
@@ -722,7 +722,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     try {
       await provider.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: INTERLINK_TESTNET_CHAIN_ID }],
+        params: [{ chainId: INTERLINK_TESTNET_CHAIN_ID || 19042026 }],
       })
     } catch (switchError: any) {
       if (switchError.code === 4902) {
@@ -730,10 +730,10 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
           await provider.request({
             method: 'wallet_addEthereumChain',
             params: [{
-              chainId: INTERLINK_TESTNET_CHAIN_ID,
+              chainId: INTERLINK_TESTNET_CHAIN_ID || 19042026,
               chainName: 'Interlink Testnet',
               nativeCurrency: { name: 'Interlink Token', symbol: 'tITL', decimals: 18 },
-              rpcUrls: ['https://evm-rpc.test-net.interlinklabs.ai/v1'],
+              rpcUrls: ['https://evm-rpc.test-net.interlinklabs.ai/v1/rpc'],
               blockExplorerUrls: ['https://testnet-explorer.interlinklabs.ai']
             }]
           })

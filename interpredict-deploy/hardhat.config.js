@@ -18,7 +18,7 @@ const config = {
   networks: {
     interlinkTestnet: {
       type: "http",
-      url: "https://evm-rpc.test-net.interlinklabs.ai/v1",
+      url: "https://evm-rpc.test-net.interlinklabs.ai/v1/rpc",
       accounts: [deployerKey],
       httpHeaders: {
         Authorization: `Bearer ${process.env.INTERLINK_TOKEN || ""}`

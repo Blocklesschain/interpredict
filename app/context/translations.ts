@@ -66,7 +66,11 @@ export const translations = {
     docForum: 'Governance Forum',
     docTerms: 'Terms of Service',
     docPrivacy: 'Privacy Policy',
-    docRisk: 'Risk Disclosure'
+    docRisk: 'Risk Disclosure',
+    adminPanel: 'DEC Members Directory',
+    noDecMembers: 'No addresses have registered as DEC Committee members yet.',
+    memberAddress: 'Member Wallet Address',
+    registrationTime: 'Registration Timestamp'
   },
   zh: {
     title: 'InterPredict — 社区预测 market',
@@ -135,7 +139,11 @@ export const translations = {
     docForum: '治理论坛',
     docTerms: '服务条款',
     docPrivacy: '隐私政策',
-    docRisk: '风险披露'
+    docRisk: '风险披露',
+    adminPanel: 'DEC 委员会成员目录',
+    noDecMembers: '目前还没有地址注册为 DEC 委员会成员。',
+    memberAddress: '成员钱包地址',
+    registrationTime: '注册时间戳'
   },
 
   es: {
@@ -205,7 +213,11 @@ export const translations = {
     docForum: 'Foro de Gobernanza',
     docTerms: 'Términos de Servicio',
     docPrivacy: 'Política de Privacidad',
-    docRisk: 'Divulgación de Riesgos'
+    docRisk: 'Divulgación de Riesgos',
+    adminPanel: 'Directorio de Miembros de DEC',
+    noDecMembers: 'Aún no se han registrado direcciones como miembros del Comité DEC.',
+    memberAddress: 'Dirección de Billetera del Miembro',
+    registrationTime: 'Marca de Tiempo de Registro'
   },
 
   fr: {
@@ -275,7 +287,11 @@ export const translations = {
     docForum: 'Forum de Gouvernance',
     docTerms: 'Conditions d\'Utilisation',
     docPrivacy: 'Politique de Confidentialité',
-    docRisk: 'Divulgation des Risques'
+    docRisk: 'Divulgation des Risques',
+    adminPanel: 'Répertoire des Membres du DEC',
+    noDecMembers: 'Aucune adresse ne s\'est encore enregistrée en tant que membre du comité DEC.',
+    memberAddress: 'Adresse de Portefeuille du Membre',
+    registrationTime: 'Horodatage d\'Enregistrement'
   }
 }
 

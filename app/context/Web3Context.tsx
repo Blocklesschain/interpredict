@@ -17,6 +17,7 @@ interface Web3ContextType {
   walletAddress: string | null
   txStatus: string | null
   historyLogs: HistoryRecord[]
+  decMembers: string[]
   locale: 'en' | 'zh' | 'es' | 'fr'
   setLocale: (lang: 'en' | 'zh' | 'es' | 'fr') => void
   t: (key: keyof typeof translations['en']) => string
@@ -860,6 +861,12 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const [decMembers, setDecMembers] = useState<string[]>([
+    // Prefill with some mock assessor addresses for your presentation demo!
+    "0x9A54b9d038eF3c0076c54BD9d60705Da25A12bc4",
+    "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"
+  ])
+
   const joinDecOnChain = async (): Promise<boolean> => {
     try {
       setTxStatus("Reading native node balance parameters...")
@@ -881,6 +888,12 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
       // 🔄 Swapped type back to 'Committee Bond' to clear the TypeScript error matrix
       appendLog('Committee Bond', 'Request to join DEC Committee', 'Success — 0.10 tITL routed to treasury registry contract', 'Success')
+
+      // 👥Append the current user's address to the DEC members state directory
+      if (walletAddress) {
+        setDecMembers((prev) => [...prev, walletAddress])
+      }
+
       return true
     } catch (err: any) {
       setTxStatus(`Verification Cancelled: ${err.message}`)
@@ -888,7 +901,6 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       return false
     }
   }
-
   const castVoteOnChain = async (marketId: number, support: boolean) => {
     const ballotText = support ? 'Voted FOR' : 'Voted AGAINST';
     try {
@@ -933,7 +945,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <Web3Context.Provider value={{ walletAddress, txStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain }}>
+    <Web3Context.Provider value={{ walletAddress, decMembers, txStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain }}>
       {children}
     </Web3Context.Provider>
   )

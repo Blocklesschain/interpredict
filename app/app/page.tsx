@@ -2,15 +2,16 @@
 
 import { useState } from 'react'
 import { useWeb3 } from '../context/Web3Context'
-import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight } from 'lucide-react'
+import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import { LanguageSelector } from '@/components/LanguageSelector'
 import Link from 'next/link'
 
-type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History'
+// 1. Added 'DEC Members' type to the navigation options array
+type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History' | 'DEC Members'
 
 export default function DAppPortal() {
-  const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, locale, t } = useWeb3()
+  const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, decMembers, locale, t } = useWeb3()
   const [activeTab, setActiveTab] = useState<TabType>('MarketPlace')
   const [stakeAmount, setStakeAmount] = useState<string>('0.1')
   const [marketDesc, setMarketDesc] = useState('')
@@ -18,14 +19,25 @@ export default function DAppPortal() {
   const [hasJoinedDEC, setHasJoinedDEC] = useState<boolean>(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false)
 
+  // 🛡️ Safe hardcoded validation parameter
+  const ADMIN_ADDRESS = "0x6e832252ea4c78068ee109d953724d2762431992"
+
   const getVisibleTabs = (): TabType[] => {
     if (!walletAddress) return ['MarketPlace', 'Pending Markets']
     const tabs: TabType[] = ['MarketPlace']
+
     if (hasJoinedDEC) tabs.push('Market Proposals')
     else tabs.push('Pending Markets')
+
     tabs.push('Make Market')
     if (!hasJoinedDEC) tabs.push('Join DEC')
     tabs.push('History')
+
+    // 🔒 Security Check: Only append Admin Panel to the menu lists if team wallet is active!
+    if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
+      tabs.push('DEC Members')
+    }
+
     return tabs
   }
 
@@ -65,7 +77,8 @@ export default function DAppPortal() {
       'Market Proposals': 'Market Proposals',
       'Make Market': t('makeMarket'),
       'Join DEC': t('joinDec'),
-      'History': t('history')
+      'History': t('history'),
+      'DEC Members': t('adminPanel') // 👈 Dynamic admin tab key
     }
     return translationMap[tab] || tab
   }
@@ -148,7 +161,15 @@ export default function DAppPortal() {
         {/* Desktop Sidebar Navigation Panels */}
         <aside className="hidden lg:flex flex-col gap-1.5 lg:col-span-1">
           {visibleTabs.map((tab) => {
-            const Icon = { 'MarketPlace': Layers, 'Market Proposals': Hourglass, 'Pending Markets': Hourglass, 'Make Market': PlusCircle, 'Join DEC': Shield, 'History': History }[tab]
+            const Icon = {
+              'MarketPlace': Layers,
+              'Market Proposals': Hourglass,
+              'Pending Markets': Hourglass,
+              'Make Market': PlusCircle,
+              'Join DEC': Shield,
+              'History': History,
+              'DEC Members': Users // 👈 Icon paired to Members directory
+            }[tab]
             return (
               <button
                 key={tab}
@@ -267,7 +288,7 @@ export default function DAppPortal() {
                   </div>
                 </div>
                 <button onClick={handleCreateMarketSubmit} className="w-full py-3 bg-gradient-to-r from-primary to-purple-600 text-white text-xs font-bold rounded-xl shadow-md hover:opacity-95 transition-opacity">
-                  {walletAddress?.toLowerCase() === "0x6e832252ea4c78068ee109d953724d2762431992"
+                  {walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
                     ? t('teamBypass')
                     : t('userPropose')}
                 </button>
@@ -312,7 +333,6 @@ export default function DAppPortal() {
                             </span>
                             <span className="text-[11px] text-slate-500 font-mono">{log.timestamp}</span>
                           </div>
-                          {/* 🔄 Checked for hardcoded log text description and detail tags mapping to localized variables */}
                           <p className="text-sm font-semibold text-slate-200 leading-snug">
                             {log.description === "Wager placed on Pool #0" ? t('logTitleWager') : log.description}
                           </p>
@@ -334,11 +354,44 @@ export default function DAppPortal() {
               </div>
             )}
 
+            {/* 🔒 🆕 TAB: ADMIN DEC MEMBERS DIRECTORY PANEL (SECURED & RESTRICTED) */}
+            {activeTab === 'DEC Members' && walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase() && (
+              <div className="space-y-4 w-full">
+                <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-4 font-mono">
+                  ● {t('adminPanel')}
+                </h4>
+
+                {!decMembers || decMembers.length === 0 ? (
+                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">
+                    {t('noDecMembers')}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-purple-950/60 bg-black/30 shadow-md">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-purple-950/80 bg-purple-950/15 text-[10px] font-mono font-bold uppercase tracking-wider text-purple-300">
+                          <th className="p-4">{t('memberAddress')}</th>
+                          <th className="p-4">{t('registrationTime')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-purple-950/40 font-mono text-xs">
+                        {decMembers.map((member, index) => (
+                          <tr key={index} className="hover:bg-purple-950/5 transition-colors">
+                            <td className="p-4 text-slate-200">{member}</td>
+                            <td className="p-4 text-slate-400">1.0 tITL Stake Verified</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
 
           {txStatus && <div className="mt-6 p-4 bg-purple-950/40 border border-purple-500/20 rounded-xl text-xs text-purple-300 font-mono animate-pulse">{txStatus}</div>}
 
-          {/* 🔄 Replaced the raw string message with our matching translation property key */}
           <div className="mt-6 p-4 bg-purple-950/40 border border-purple-500/20 rounded-xl text-xs text-purple-300 font-mono text-center">
             {t('walletSuccessMessage')}
           </div>

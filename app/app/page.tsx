@@ -1,13 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useWeb3 } from '../context/Web3Context'
-import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users } from 'lucide-react'
+import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Image as ImageIcon } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import { LanguageSelector } from '@/components/LanguageSelector'
 import Link from 'next/link'
 
-// 1. Added 'DEC Members' type to the navigation options array
 type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History' | 'DEC Members'
 
 export default function DAppPortal() {
@@ -15,11 +14,18 @@ export default function DAppPortal() {
   const [activeTab, setActiveTab] = useState<TabType>('MarketPlace')
   const [stakeAmount, setStakeAmount] = useState<string>('0.1')
   const [marketDesc, setMarketDesc] = useState('')
-  const [outcomes, setOutcomes] = useState(['YES', 'NO'])
+
+  // 🚀 Dynamic choices state (supports up to 4 options)
+  const [outcomes, setOutcomes] = useState<string[]>(['YES', 'NO'])
+  // 📆 Custom End Date timeframe (Defaults to December 31, 2026)
+  const [endDate, setEndDate] = useState<string>('2026-12-31')
+  // 🖼️ Market Icon Upload State (Stores local Base64 URL for rendering preview cards)
+  const [marketImage, setMarketImage] = useState<string | null>(null)
+
   const [hasJoinedDEC, setHasJoinedDEC] = useState<boolean>(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // 🛡️ Safe hardcoded validation parameter
   const ADMIN_ADDRESS = "0x6e832252ea4c78068ee109d953724d2762431992"
 
   const getVisibleTabs = (): TabType[] => {
@@ -33,7 +39,6 @@ export default function DAppPortal() {
     if (!hasJoinedDEC) tabs.push('Join DEC')
     tabs.push('History')
 
-    // 🔒 Security Check: Only append Admin Panel to the menu lists if team wallet is active!
     if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
       tabs.push('DEC Members')
     }
@@ -48,10 +53,48 @@ export default function DAppPortal() {
     setMobileMenuOpen(false)
   }
 
+  // 🖼️ File Upload Conversion to Base64
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setMarketImage(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  // Add a new empty choice (Max 4 limit rule)
+  const addOutcomeChoice = () => {
+    if (outcomes.length < 4) {
+      setOutcomes([...outcomes, ''])
+    }
+  }
+
+  // Remove a choice at specific index (Min 2 limit rule)
+  const removeOutcomeChoice = (index: number) => {
+    if (outcomes.length > 2) {
+      const updated = outcomes.filter((_, i) => i !== index)
+      setOutcomes(updated)
+    }
+  }
+
+  // Handle typing choices
+  const handleOutcomeTextChange = (index: number, text: string) => {
+    const updated = [...outcomes]
+    updated[index] = text
+    setOutcomes(updated)
+  }
+
   const handleCreateMarketSubmit = async () => {
     if (!marketDesc) return
     const success = await createMarketOnChain(marketDesc)
-    if (success) setMarketDesc('')
+    if (success) {
+      setMarketDesc('')
+      setOutcomes(['YES', 'NO'])
+      setMarketImage(null)
+    }
   }
 
   const handleJoinCommitteeSubmit = async () => {
@@ -78,7 +121,7 @@ export default function DAppPortal() {
       'Make Market': t('makeMarket'),
       'Join DEC': t('joinDec'),
       'History': t('history'),
-      'DEC Members': t('adminPanel') // 👈 Dynamic admin tab key
+      'DEC Members': t('adminPanel')
     }
     return translationMap[tab] || tab
   }
@@ -129,7 +172,7 @@ export default function DAppPortal() {
       {/* Main Responsive Frame Layout */}
       <div className="max-w-7xl mx-auto pt-28 px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
 
-        {/* Mobile menu panel dropdown container block */}
+        {/* Mobile menu dropdown */}
         <div className="lg:hidden w-full relative z-30">
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -158,7 +201,7 @@ export default function DAppPortal() {
           )}
         </div>
 
-        {/* Desktop Sidebar Navigation Panels */}
+        {/* Desktop Sidebar */}
         <aside className="hidden lg:flex flex-col gap-1.5 lg:col-span-1">
           {visibleTabs.map((tab) => {
             const Icon = {
@@ -168,7 +211,7 @@ export default function DAppPortal() {
               'Make Market': PlusCircle,
               'Join DEC': Shield,
               'History': History,
-              'DEC Members': Users // 👈 Icon paired to Members directory
+              'DEC Members': Users
             }[tab]
             return (
               <button
@@ -184,7 +227,7 @@ export default function DAppPortal() {
           })}
         </aside>
 
-        {/* Dynamic Display Panel Viewport */}
+        {/* Display Viewport */}
         <section className="lg:col-span-3 bg-secondary/10 border border-secondary/20 rounded-2xl p-5 sm:p-6 min-h-[500px] flex flex-col justify-between shadow-inner w-full overflow-hidden">
           <div className="w-full">
             <div className="mb-6 border-b border-purple-950/40 pb-5">
@@ -197,25 +240,49 @@ export default function DAppPortal() {
             {/* TAB: MARKETPLACE */}
             {activeTab === 'MarketPlace' && (
               <div className="space-y-4">
-                <div className="bg-secondary/40 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl">
-                  <div className="flex justify-between items-center mb-3">
+                <div className="bg-secondary/40 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl relative">
+
+                  {/* Dynamic Top Right Thumbnail Display */}
+                  <div className="absolute top-4 right-4 size-12 rounded-xl bg-purple-950/40 border border-purple-900/30 overflow-hidden flex items-center justify-center">
+                    {marketImage ? (
+                      <img src={marketImage} alt="Market logo" className="size-full object-cover" />
+                    ) : (
+                      <Logo className="size-8 rounded-lg" />
+                    )}
+                  </div>
+
+                  <div className="flex justify-between items-center mb-3 pr-14">
                     <span className="px-2 py-0.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded text-[10px] font-bold tracking-wider uppercase">Live Pool #0</span>
                     <span className="text-[11px] text-slate-400 font-mono">{t('statusActive')}</span>
                   </div>
-                  <h4 className="text-sm sm:text-base font-bold text-slate-200 mb-4 leading-snug">{t('demoQuestion0')}</h4>
+
+                  <h4 className="text-sm sm:text-base font-bold text-slate-200 mb-4 leading-snug pr-14">
+                    {marketDesc ? marketDesc : t('demoQuestion0')}
+                  </h4>
+
                   <div className="mb-4">
                     <label className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block mb-1">
                       {t('wagerTitle')}
                     </label>
                     <input type="number" value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} className="w-full bg-black/20 border border-purple-900/40 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none" />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => executeTradeAction(0, 0)} className="py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs rounded-lg shadow-md hover:scale-[1.01] transition-transform">
-                      {t('predictYes')}
-                    </button>
-                    <button onClick={() => executeTradeAction(0, 1)} className="py-2.5 bg-gradient-to-r from-rose-600 to-red-600 text-white font-bold text-xs rounded-lg shadow-md hover:scale-[1.01] transition-transform">
-                      {t('predictNo')}
-                    </button>
+
+                  {/* 🛡️ Dynamic Voting buttons renderer depending on Outcome Array count */}
+                  <div className={`grid gap-3 ${outcomes.length > 2 ? 'grid-cols-2' : 'grid-cols-2'}`}>
+                    {outcomes.map((choice, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => executeTradeAction(0, idx)}
+                        className="py-2.5 bg-gradient-to-r from-purple-700 to-indigo-600 hover:from-purple-600 hover:to-indigo-500 text-white font-bold text-xs rounded-lg shadow-md hover:scale-[1.01] transition-transform uppercase"
+                      >
+                        {choice ? choice : `Choice ${idx + 1}`}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Date Metadata bottom banner */}
+                  <div className="mt-4 pt-3 border-t border-purple-950/40 flex justify-between items-center text-[11px] font-mono text-slate-400">
+                    <span>Deadline: {endDate}</span>
                   </div>
                 </div>
               </div>
@@ -263,30 +330,108 @@ export default function DAppPortal() {
               </div>
             )}
 
-
             {/* TAB: MAKE MARKET */}
             {activeTab === 'Make Market' && (
               <div className="space-y-4 w-full max-w-xl">
+                {/* 🎨 Double-grid row layout containing Statement Description & Logo Thumbnail Uploader */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="text-xs font-bold text-slate-400 block mb-1.5">
+                      {t('marketStatement')}
+                    </label>
+                    <textarea
+                      placeholder="e.g., Will Bitcoin settle above $120,000 on the global macro index deadline?"
+                      value={marketDesc}
+                      onChange={(e) => setMarketDesc(e.target.value)}
+                      className="w-full h-24 bg-black/20 border border-purple-900/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary resize-none"
+                    />
+                  </div>
+
+                  {/* Premium drag/upload miniature zone */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 block mb-1.5">
+                      {t('uploadImageLabel')}
+                    </label>
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="h-24 bg-black/30 hover:bg-black/50 border border-dashed border-purple-900/50 hover:border-primary rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all p-2 relative overflow-hidden text-center"
+                    >
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleImageChange}
+                        accept="image/*"
+                        className="hidden"
+                      />
+                      {marketImage ? (
+                        <img src={marketImage} alt="Preview" className="size-full object-cover rounded-lg" />
+                      ) : (
+                        <>
+                          <Upload className="size-5 text-purple-400 mb-1" />
+                          <span className="text-[9px] text-slate-400 leading-tight">{t('uploadPlaceholder')}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 📆 Timeframe Date Picker Configuration Strip */}
                 <div>
                   <label className="text-xs font-bold text-slate-400 block mb-1.5">
-                    {t('marketStatement')}
+                    {t('votingEndDate')}
                   </label>
-                  <textarea placeholder="e.g., Will Bitcoin settle above $120,000 on the global macro index deadline?" value={marketDesc} onChange={(e) => setMarketDesc(e.target.value)} className="w-full min-h-[90px] bg-black/20 border border-purple-900/50 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary resize-none" />
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full bg-black/20 border border-purple-900/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary text-slate-200"
+                  />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 block mb-1.5">
-                      {t('outcome0')}
+
+                {/* 🔄 Dynamic Multiple Choice outcome field logic arrays (Max 4 limits enforced) */}
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="text-xs font-bold text-slate-400">
+                      {t('outcomesTitle')}
                     </label>
-                    <input type="text" disabled value={outcomes[0]} className="w-full bg-slate-900/40 border border-purple-900/20 rounded-xl px-3 py-2 text-sm text-slate-500 font-mono" />
+                    {outcomes.length < 4 && (
+                      <button
+                        type="button"
+                        onClick={addOutcomeChoice}
+                        className="text-[11px] text-primary hover:text-purple-400 font-semibold"
+                      >
+                        {t('addChoiceBtn')}
+                      </button>
+                    )}
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 block mb-1.5">
-                      {t('outcome1')}
-                    </label>
-                    <input type="text" disabled value={outcomes[1]} className="w-full bg-slate-900/40 border border-purple-900/20 rounded-xl px-3 py-2 text-sm text-slate-500 font-mono" />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {outcomes.map((outcome, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-2.5 text-[10px] font-mono text-slate-500 font-bold uppercase">Option {idx + 1}</span>
+                          <input
+                            type="text"
+                            value={outcome}
+                            placeholder={idx === 0 ? "YES" : idx === 1 ? "NO" : `Choice ${idx + 1}`}
+                            onChange={(e) => handleOutcomeTextChange(idx, e.target.value)}
+                            className="w-full bg-black/20 border border-purple-900/50 rounded-xl pl-16 pr-3 py-2 text-sm focus:outline-none focus:border-primary font-mono text-slate-200"
+                          />
+                        </div>
+                        {outcomes.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => removeOutcomeChoice(idx)}
+                            className="p-2 bg-red-950/20 hover:bg-red-900/30 border border-red-900/30 rounded-xl text-red-400 text-xs font-bold"
+                          >
+                            {t('removeChoiceBtn')}
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
+
                 <button onClick={handleCreateMarketSubmit} className="w-full py-3 bg-gradient-to-r from-primary to-purple-600 text-white text-xs font-bold rounded-xl shadow-md hover:opacity-95 transition-opacity">
                   {walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
                     ? t('teamBypass')
@@ -354,7 +499,7 @@ export default function DAppPortal() {
               </div>
             )}
 
-            {/* 🔒 🆕 TAB: ADMIN DEC MEMBERS DIRECTORY PANEL (SECURED & RESTRICTED) */}
+            {/* TAB: ADMIN DEC MEMBERS DIRECTORY PANEL */}
             {activeTab === 'DEC Members' && walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase() && (
               <div className="space-y-4 w-full">
                 <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-4 font-mono">
@@ -392,7 +537,7 @@ export default function DAppPortal() {
 
           {txStatus && <div className="mt-6 p-4 bg-purple-950/40 border border-purple-500/20 rounded-xl text-xs text-purple-300 font-mono animate-pulse">{txStatus}</div>}
 
-          <div className="mt-6 p-4 bg-purple-950/40 border border-purple-500/20 rounded-xl text-xs text-purple-300 font-mono text-center">
+          <div className="mt-6 p-4 bg-purple-950/40 border border-purple-500/20 rounded-xl text-xs text-purple-300 font-mono text-center font-semibold">
             {t('walletSuccessMessage')}
           </div>
         </section>

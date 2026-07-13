@@ -70,7 +70,14 @@ export const translations = {
     adminPanel: 'DEC Members Directory',
     noDecMembers: 'No addresses have registered as DEC Committee members yet.',
     memberAddress: 'Member Wallet Address',
-    registrationTime: 'Registration Timestamp'
+    registrationTime: 'Registration Timestamp',
+    votingEndDate: 'Voting End Date',
+    addChoiceBtn: '+ Add Choice',
+    removeChoiceBtn: 'Remove',
+    outcomesTitle: 'Outcome Options (Max 4)',
+    uploadImageLabel: 'Market Thumbnail Icon',
+    uploadPlaceholder: 'Upload custom logo/image',
+    daysLeft: 'Days Left'
   },
   zh: {
     title: 'InterPredict — 社区预测 market',
@@ -143,7 +150,14 @@ export const translations = {
     adminPanel: 'DEC 委员会成员目录',
     noDecMembers: '目前还没有地址注册为 DEC 委员会成员。',
     memberAddress: '成员钱包地址',
-    registrationTime: '注册时间戳'
+    registrationTime: '注册时间戳',
+    votingEndDate: '投票截止日期',
+    addChoiceBtn: '+ 添加选项',
+    removeChoiceBtn: '删除',
+    outcomesTitle: '预测选项 (最多 4 项)',
+    uploadImageLabel: '市场缩略图/图标',
+    uploadPlaceholder: '上传自定义徽标/图片',
+    daysLeft: '天剩余'
   },
 
   es: {
@@ -217,7 +231,14 @@ export const translations = {
     adminPanel: 'Directorio de Miembros de DEC',
     noDecMembers: 'Aún no se han registrado direcciones como miembros del Comité DEC.',
     memberAddress: 'Dirección de Billetera del Miembro',
-    registrationTime: 'Marca de Tiempo de Registro'
+    registrationTime: 'Marca de Tiempo de Registro',
+    votingEndDate: 'Fecha de Cierre de Votación',
+    addChoiceBtn: '+ Añadir Opción',
+    removeChoiceBtn: 'Eliminar',
+    outcomesTitle: 'Opciones de Resultado (Máx 4)',
+    uploadImageLabel: 'Icono del Mercado',
+    uploadPlaceholder: 'Subir logo/imagen personalizada',
+    daysLeft: 'Días Restantes'
   },
 
   fr: {
@@ -291,7 +312,14 @@ export const translations = {
     adminPanel: 'Répertoire des Membres du DEC',
     noDecMembers: 'Aucune adresse ne s\'est encore enregistrée en tant que membre du comité DEC.',
     memberAddress: 'Adresse de Portefeuille du Membre',
-    registrationTime: 'Horodatage d\'Enregistrement'
+    registrationTime: 'Horodatage d\'Enregistrement',
+    votingEndDate: 'Date de Fin de Vote',
+    addChoiceBtn: '+ Ajouter Option',
+    removeChoiceBtn: 'Supprimer',
+    outcomesTitle: 'Choix de Résultat (Max 4)',
+    uploadImageLabel: 'Icône Miniature du Marché',
+    uploadPlaceholder: 'Téléverser un logo/image personnalisé',
+    daysLeft: 'Jours Restants'
   }
 }
 

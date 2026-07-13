@@ -112,12 +112,17 @@ export default function HomePage() {
           ) : liveMarkets.length === 0 ? (
             <div className="border border-dashed border-border rounded-2xl p-8 sm:p-12 text-center max-w-xl mx-auto bg-background/50 backdrop-blur-sm shadow-sm">
               <TrendingUp className="size-8 mx-auto text-muted-foreground mb-3" />
-              <p className="text-sm font-semibold text-foreground">No active markets found</p>
-              <p className="text-xs text-muted-foreground mt-1 mb-6 max-w-xs mx-auto">
-                No active pools are deployed at the moment. Initialize your custom prediction contract index via the dApp terminal.
+
+              <p className="text-sm font-semibold text-foreground">
+                {t('noActiveMarkets')}
               </p>
+
+              <p className="text-xs text-muted-foreground mt-1 mb-6 max-w-xs mx-auto">
+                {t('noActivePoolsDesc')} 
+              </p>
+
               <Link href="/app" className="px-5 py-2.5 bg-primary text-primary-foreground text-xs font-bold rounded-full inline-block transition-colors hover:bg-primary/90">
-                Create First Market
+                {t('createFirstMarketBtn')} 
               </Link>
             </div>
           ) : (

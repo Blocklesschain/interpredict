@@ -35,6 +35,9 @@ export const translations = {
     footerRights: '© 2026 InterPredict Protocol. All rights reserved.',
 
     // 🆕 Navbar & Architecture & Footer additions
+    noActiveMarkets: 'No active markets found',
+    noActivePoolsDesc: 'No active pools are deployed at the moment. Initialize your custom prediction contract index via the dApp terminal.',
+    createFirstMarketBtn: 'Create First Market',
     navMarkets: 'Markets',
     navEcosystem: 'Ecosystem',
     navWhitepaper: 'Whitepaper',
@@ -93,6 +96,9 @@ export const translations = {
     footerRights: '© 2026 InterPredict 协议。保留所有权利。',
 
     // 🆕 Navbar & Architecture & Footer additions
+    noActiveMarkets: '未找到活动预测市场',
+    noActivePoolsDesc: '目前没有部署活跃的预测资金池。请通过 dApp 终端初始化您的自定义预测合约索引。',
+    createFirstMarketBtn: '创建第一个市场',
     navMarkets: '市场',
     navEcosystem: '生态系统',
     navWhitepaper: '白皮书',
@@ -115,6 +121,7 @@ export const translations = {
     docPrivacy: '隐私政策',
     docRisk: '风险披露'
   },
+
   es: {
     title: 'InterPredict — Mercado de Predicciones Comunitario',
     titleSuffix: 'Mercado de Predicciones Comunitario en Interlink',
@@ -151,6 +158,9 @@ export const translations = {
     footerRights: '© 2026 Protocolo InterPredict. Todos los derechos reservados.',
 
     // 🆕 Navbar & Architecture & Footer additions
+    noActiveMarkets: 'No se encontraron mercados activos',
+    noActivePoolsDesc: 'No hay fondos activos desplegados en este momento. Inicialice su índice de contrato de predicción personalizado a través de la dApp.',
+    createFirstMarketBtn: 'Crear Primer Mercado',
     navMarkets: 'Mercados',
     navEcosystem: 'Ecosistema',
     navWhitepaper: 'Libro Blanco',
@@ -173,6 +183,7 @@ export const translations = {
     docPrivacy: 'Política de Privacidad',
     docRisk: 'Divulgación de Riesgos'
   },
+
   fr: {
     title: 'InterPredict — Marché de Prédiction Communautaire',
     titleSuffix: 'Marché de Prédiction Communautaire sur Interlink',
@@ -209,6 +220,9 @@ export const translations = {
     footerRights: '© 2026 Protocole InterPredict. Tous droits réservés.',
 
     // 🆕 Navbar & Architecture & Footer additions
+    noActiveMarkets: 'Aucun marché actif trouvé',
+    noActivePoolsDesc: 'Aucun pool actif n\'est déployé pour le moment. Initialisez votre index de contrat de prédiction personnalisé via le terminal dApp.',
+    createFirstMarketBtn: 'Créer le Premier Marché',
     navMarkets: 'Marchés',
     navEcosystem: 'Écosystème',
     navWhitepaper: 'Livre Blanc',

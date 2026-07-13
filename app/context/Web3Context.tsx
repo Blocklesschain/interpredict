@@ -708,6 +708,14 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
         }
       }
     }
+
+    const savedLocale = localStorage.getItem('interpredict_lang') as LocaleType
+    if (savedLocale) {
+      setLocaleState(savedLocale)
+    } else {
+      setLocaleState('en') //English as the application default
+      localStorage.setItem('interpredict_lang', 'en')
+    }
     checkExistingConnection()
   }, [])
 

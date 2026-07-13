@@ -18,7 +18,7 @@ const config = {
       // REPLACE the placeholder below with your secret PRIVATE KEY (not your public address)
       accounts: ["830839d41dac6aa3d3d1860c0e5de43e8ce0801d28ace6d7a71c3ab0a92de4e9"],
       httpHeaders: {
-        Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJpbnRlcmxpbmstd2FsbGV0IiwiZXhwIjoxNzgzNjgxOTU2LCJpYXQiOjE3ODM2ODEwNTYsImlzcyI6ImludGVybGluayIsImp0aSI6IjY2ZWViMmI2MzJiZWNiYzRjYTIwOWNjYiIsInN1YiI6IjB4NkU4MzIyNTJlQTRjNzgwNjhFRTEwOWQ5NTM3MjREMjc2MjQzMTk5MiIsIndhbGxldEFkZHJlc3MiOiIweDZFODMyMjUyZUE0Yzc4MDY4RUUxMDlkOTUzNzI0RDI3NjI0MzE5OTIifQ.lGaA-HZR66lg33AwmEJ9r0_0pnjnfxdgB-mKaSV4ggM"
+        Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJpbnRlcmxpbmstd2FsbGV0IiwiZXhwIjoxNzgzOTMwNTI4LCJpYXQiOjE3ODM5Mjk2MjgsImlzcyI6ImludGVybGluayIsImp0aSI6Ijc4MGM4Njc0NjdiNjgzM2JjOWEzYTI4ZiIsInN1YiI6IjB4NkU4MzIyNTJlQTRjNzgwNjhFRTEwOWQ5NTM3MjREMjc2MjQzMTk5MiIsIndhbGxldEFkZHJlc3MiOiIweDZFODMyMjUyZUE0Yzc4MDY4RUUxMDlkOTUzNzI0RDI3NjI0MzE5OTIifQ.XYk7J7L-kHxEMRdyUfsINYa4qqto-PzBv9OWEBCnhCQ"
       }
     }
   }

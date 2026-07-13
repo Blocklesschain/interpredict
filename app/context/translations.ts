@@ -35,6 +35,14 @@ export const translations = {
     footerRights: '© 2026 InterPredict Protocol. All rights reserved.',
 
     // 🆕 Navbar & Architecture & Footer additions
+    statusActive: 'Status: Active',
+    demoQuestion0: 'Will Interlink network testnet gateway process over 10M transactions this week?',
+    demoQuestion14: 'Will the upcoming Smart Money Concepts indicator update introduce automated mitigation mapping?',
+    decCommitteeFor: 'DEC Committee FOR',
+    decCommitteeAgainst: 'DEC Committee AGAINST',
+    walletSuccessMessage: 'Wallet interface integrated successfully.',
+    logTitleWager: 'Wager placed on Pool #0',
+    logDetailWager: 'Failed — YES allocation timed out',
     noActiveMarkets: 'No active markets found',
     noActivePoolsDesc: 'No active pools are deployed at the moment. Initialize your custom prediction contract index via the dApp terminal.',
     createFirstMarketBtn: 'Create First Market',
@@ -96,6 +104,14 @@ export const translations = {
     footerRights: '© 2026 InterPredict 协议。保留所有权利。',
 
     // 🆕 Navbar & Architecture & Footer additions
+    statusActive: '状态：活跃',
+    demoQuestion0: 'Interlink 网络测试网网关本周处理的交易量会超过 1000 万笔吗？',
+    demoQuestion14: '即将推出的智能货币概念（SMC）指标更新会引入自动缓解映射功能吗？',
+    decCommitteeFor: '决策委员会 [赞成]',
+    decCommitteeAgainst: '决策委员会 [反对]',
+    walletSuccessMessage: '钱包接口集成成功。',
+    logTitleWager: '在资金池 #0 中进行预测下注',
+    logDetailWager: '失败 — YES 分配超时',
     noActiveMarkets: '未找到活动预测市场',
     noActivePoolsDesc: '目前没有部署活跃的预测资金池。请通过 dApp 终端初始化您的自定义预测合约索引。',
     createFirstMarketBtn: '创建第一个市场',
@@ -158,6 +174,14 @@ export const translations = {
     footerRights: '© 2026 Protocolo InterPredict. Todos los derechos reservados.',
 
     // 🆕 Navbar & Architecture & Footer additions
+    statusActive: 'Estado: Activo',
+    demoQuestion0: '¿La pasarela de la red de prueba de Interlink procesará más de 10 millones de transacciones esta semana?',
+    demoQuestion14: '¿La próxima actualización del indicador Smart Money Concepts introducirá el mapeo de mitigación automatizado?',
+    decCommitteeFor: 'Comité DEC A FAVOR',
+    decCommitteeAgainst: 'Comité DEC EN CONTRA',
+    walletSuccessMessage: 'Interfaz de billetera integrada con éxito.',
+    logTitleWager: 'Apuesta realizada en el Pool #0',
+    logDetailWager: 'Fallido — Se agotó el tiempo de asignación de SÍ',
     noActiveMarkets: 'No se encontraron mercados activos',
     noActivePoolsDesc: 'No hay fondos activos desplegados en este momento. Inicialice su índice de contrato de predicción personalizado a través de la dApp.',
     createFirstMarketBtn: 'Crear Primer Mercado',
@@ -220,6 +244,14 @@ export const translations = {
     footerRights: '© 2026 Protocole InterPredict. Tous droits réservés.',
 
     // 🆕 Navbar & Architecture & Footer additions
+    statusActive: 'Statut : Actif',
+    demoQuestion0: 'La passerelle du réseau de test Interlink traitera-t-elle plus de 10 millions de transactions cette semaine ?',
+    demoQuestion14: 'La prochaine mise à jour de l’indicateur Smart Money Concepts introduira-t-elle une cartographie d’atténuation automatisée ?',
+    decCommitteeFor: 'Comité DEC POUR',
+    decCommitteeAgainst: 'Comité DEC CONTRE',
+    walletSuccessMessage: 'Interface de portefeuille intégrée avec succès.',
+    logTitleWager: 'Mise placée sur le Pool #0',
+    logDetailWager: 'Échec — L’allocation OUI a expiré',
     noActiveMarkets: 'Aucun marché actif trouvé',
     noActivePoolsDesc: 'Aucun pool actif n\'est déployé pour le moment. Initialisez votre index de contrat de prédiction personnalisé via le terminal dApp.',
     createFirstMarketBtn: 'Créer le Premier Marché',

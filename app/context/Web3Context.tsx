@@ -773,9 +773,19 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
   const getContractInstance = async () => {
     if (!(window as any).ethereum) throw new Error("Wallet not identified")
-    const provider = new ethers.BrowserProvider((window as any).ethereum)
-    const signer = await provider.getSigner()
-    return { contract: new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer), provider }
+
+    // 1. Instantiate the browser provider to capture the user's active signer credentials
+    const walletProvider = new ethers.BrowserProvider((window as any).ethereum)
+    const signer = await walletProvider.getSigner()
+
+    // Force a direct fallback provider pointing explicitly to Interlink Testnet RPC URL.
+    // Prevent the Interlink In-App Browser from forcing Chain ID 1 (Ethereum) behavior.
+    const testnetProvider = new ethers.JsonRpcProvider("https://evm-rpc.test-net.interlinklabs.ai/v1/rpc")
+
+    // 3. Attach the contract instance using your globally defined variables
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer)
+
+    return { contract, provider: testnetProvider }
   }
 
   const createMarketOnChain = async (description: string): Promise<boolean> => {

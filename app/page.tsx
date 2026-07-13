@@ -19,6 +19,7 @@ const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0xD6CA8AB227dE
 const CONTRACT_ABI = ["function marketCount() view returns (uint256)"]
 
 export default function HomePage() {
+  const { t } = useWeb3() // 🔮 Initializing our dictionary lookup mapper
   const [liveMarkets, setLiveMarkets] = useState<MarketType[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
@@ -60,19 +61,18 @@ export default function HomePage() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(98,0,238,0.06),transparent_50%)]" />
         <div className="max-w-5xl mx-auto text-center relative z-10">
 
-          {/* Refined, Understated Metallic Satin Gradients with Moderate Font Sizes */}
           <h1 className="text-3xl sm:text-5xl md:text-5xl font-heading font-extrabold tracking-tight leading-[1.2] mb-6 max-w-4xl mx-auto">
             <span className="bg-gradient-to-r from-[#d946ef] via-[#ef4444] to-[#f59e0b] bg-clip-text text-transparent">
               InterPredict
             </span>{" "}
             <span className="text-slate-600 font-light">—</span>{" "}
             <span className="bg-gradient-to-r from-[#f59e0b] via-[#fef08a] to-[#eab308] bg-clip-text text-transparent">
-              Community Prediction Marketplace on Interlink
+              {t('titleSuffix')} {/* 🔄 Localized */}
             </span>
           </h1>
 
           <p className="text-muted-foreground text-base sm:text-lg max-w-3xl mx-auto leading-relaxed mb-10">
-            InterPredict is a decentralized, community-owned prediction marketplace built natively on the Interlink Network. Propose, vote and trade your insights on anything and everything.
+            {t('tagline')} {/* 🔄 Localized */}
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center w-full max-w-md mx-auto sm:max-w-none">
@@ -80,7 +80,7 @@ export default function HomePage() {
               href="/app"
               className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-primary hover:bg-primary/95 text-primary-foreground font-bold rounded-full transition-all shadow-lg shadow-primary/20 text-sm tracking-wide"
             >
-              <span>Launch dApp</span>
+              <span>{t('launchBtn')}</span> {/* 🔄 Localized */}
               <ArrowRight className="size-4" />
             </Link>
 
@@ -88,7 +88,7 @@ export default function HomePage() {
               href="#architecture"
               className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-secondary/80 hover:bg-secondary text-foreground font-semibold rounded-full border border-border transition-colors text-sm"
             >
-              How it works
+              {t('howItWorksBtn')} {/* 🔄 Localized */}
             </a>
           </div>
         </div>
@@ -99,11 +99,11 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-12 gap-4">
             <div>
-              <h2 className="text-2xl sm:text-4xl font-heading font-bold tracking-tight">Explore Markets</h2>
-              <p className="text-muted-foreground text-sm mt-1">Live market positions tracked securely on-chain.</p>
+              <h2 className="text-2xl sm:text-4xl font-heading font-bold tracking-tight">{t('exploreMarketsTitle')}</h2> {/* 🔄 Localized */}
+              <p className="text-muted-foreground text-sm mt-1">{t('exploreMarketsSub')}</p> {/* 🔄 Localized */}
             </div>
             <Link href="/app" className="text-sm font-bold text-primary hover:underline flex items-center gap-1.5 transition-all">
-              <span>Trade Real-Time</span>
+              <span>{t('tradeRealtimeBtn')}</span> {/* 🔄 Localized */}
               <ArrowRight className="size-3.5" />
             </Link>
           </div>
@@ -148,7 +148,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <span className="text-xs font-bold text-primary uppercase tracking-widest bg-primary/10 px-3 py-1 rounded-full border border-primary/20">Protocol Infrastructure</span>
-            <h2 className="text-3xl sm:text-5xl font-heading font-bold tracking-tight mt-4">How It Works</h2>
+            <h2 className="text-3xl sm:text-5xl font-heading font-bold tracking-tight mt-4">{t('howItWorksBtn')}</h2> {/* 🔄 Localized */}
             <p className="text-muted-foreground text-sm sm:text-base mt-2">A concise, professional look at our native on-chain curation and settlement pipeline.</p>
           </div>
 
@@ -182,11 +182,9 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* --- FOOTER COMPONENT WITH DESIGNER LINK CARDS & BRANDED ICON LOGOS --- */}
+      {/* --- FOOTER --- */}
       <footer className="border-t border-border bg-secondary/30 py-12 text-xs text-muted-foreground px-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-
-          {/* Highly Visible Legal Document Link Grid */}
           <div className="flex flex-col gap-3 text-center md:text-left">
             <p className="font-semibold text-slate-400">© 2026 InterPredict Protocol. All rights reserved.</p>
             <div className="flex flex-wrap justify-center md:justify-start gap-x-5 gap-y-2">
@@ -199,14 +197,13 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Social Array including accurate X, Telegram Airplane, and Interlink png asset layouts */}
           <div className="flex items-center gap-5 shrink-0 bg-background/40 px-5 py-3 rounded-full border border-border shadow-inner">
-            <a href="https://twitter.com/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-semibold text-slate-300" title="Twitter Updates">
+            <a href="https://twitter.com/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-semibold text-slate-300">
               <svg className="size-4 fill-current" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
               <span>Twitter</span>
             </a>
             <span className="w-px h-3.5 bg-border" />
-            <a href="https://t.me/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-semibold text-slate-300" title="Telegram Messenger">
+            <a href="https://t.me/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-semibold text-slate-300">
               <svg className="size-4 fill-current" viewBox="0 0 24 24"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.18 1.897-.961 6.505-1.359 8.641-.168.9-.501 1.201-.82 1.23-.703.064-1.237-.465-1.917-.912-1.065-.7-1.666-1.134-2.698-1.814-1.194-.786-.42-1.218.26-1.926.178-.184 3.279-3.008 3.339-3.264.008-.033.014-.154-.059-.219-.073-.064-.18-.042-.258-.025-.111.024-1.884 1.196-5.319 3.518-.503.346-.959.516-1.367.507-.45-.01-1.317-.254-1.961-.464-.79-.258-1.418-.394-1.363-.833.028-.23.347-.465.955-.705 3.733-1.623 6.222-2.694 7.467-3.213 3.543-1.479 4.28-1.736 4.761-1.745.106-.002.344.025.497.15.13.105.166.248.178.349.012.106.027.34-.01.597z" /></svg>
               <span>Telegram</span>
             </a>
@@ -216,7 +213,6 @@ export default function HomePage() {
               <span>Interlink</span>
             </a>
           </div>
-
         </div>
       </footer>
     </div>

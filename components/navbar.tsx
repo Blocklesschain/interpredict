@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useWeb3 } from "@/app/context/Web3Context" // 🚀 Hook imported cleanly here
 import { Menu, X } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
 import { Logo } from "@/components/logo"
@@ -21,6 +22,7 @@ const links = [
 ]
 
 export function Navbar() {
+  const { t } = useWeb3() // 🔮 Initializing dictionary lookup map string functions
   const [open, setOpen] = useState(false)
 
   return (
@@ -46,6 +48,7 @@ export function Navbar() {
             ))}
           </div>
 
+          {/* DESKTOP NAV WRAPPER PANEL */}
           <div className="hidden md:flex md:items-center md:gap-2">
             <ThemeToggle />
             <Link
@@ -55,7 +58,7 @@ export function Navbar() {
                 "glow-purple rounded-full bg-primary px-5 font-semibold text-primary-foreground hover:bg-[#4f00c5]",
               )}
             >
-              Launch dApp
+              {t('launchBtn')} {/* 🔄 Localized Desktop Trigger text string asset */}
             </Link>
           </div>
 
@@ -70,6 +73,7 @@ export function Navbar() {
           </div>
         </nav>
 
+        {/* MOBILE LAYOUT COLLAPSE MENU CHANNELS */}
         {open && (
           <div className="nav-glass mt-2 flex flex-col gap-1 rounded-2xl p-3 md:hidden">
             {links.map((link) => (
@@ -90,7 +94,7 @@ export function Navbar() {
                 "glow-purple mt-1 rounded-full bg-primary font-semibold text-primary-foreground text-center",
               )}
             >
-              Launch dApp
+              {t('launchBtn')} {/* 🔄 Localized Mobile Trigger text string asset */}
             </Link>
           </div>
         )}

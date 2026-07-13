@@ -6,25 +6,26 @@ import { Menu, X } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
 import { Logo } from "@/components/logo"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { LanguageSelector } from "@/components/LanguageSelector"
+import { LanguageSelector } from ".LanguageSelector"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-
-const links = [
-  { label: "Markets", href: "#markets" },
-  { label: "How it works", href: "#architecture" },
-  { label: "Ecosystem", href: "#ecosystem" },
-  { label: "Whitepaper", href: "/whitepaper" },
-  {
-    label: "About InterLink",
-    href: "https://interlinklabs.ai/",
-    external: true,
-  },
-]
 
 export function Navbar() {
   const { t } = useWeb3()
   const [open, setOpen] = useState(false)
+
+  // 🔮 Dynamic links array declared inside the component so it can use the translation engine
+  const links = [
+    { label: t('navMarkets'), href: "#markets" },
+    { label: t('howItWorksBtn'), href: "#architecture" },
+    { label: t('navEcosystem'), href: "#ecosystem" },
+    { label: t('navWhitepaper'), href: "/whitepaper" },
+    {
+      label: t('navAbout'),
+      href: "https://interlinklabs.ai/",
+      external: true,
+    },
+  ]
 
   return (
     <header className="fixed inset-x-0 top-0 z-50">
@@ -52,7 +53,7 @@ export function Navbar() {
           {/* DESKTOP NAV WRAPPER PANEL */}
           <div className="hidden md:flex md:items-center md:gap-3">
             <ThemeToggle />
-            <LanguageSelector /> {/* 🌐 Placed directly in the desktop header row */}
+            <LanguageSelector />
             <Link
               href="/app"
               className={cn(
@@ -90,7 +91,7 @@ export function Navbar() {
             ))}
             <div className="flex justify-between items-center px-3 py-1.5 border-t border-border/40 mt-1 pt-3">
               <span className="text-xs text-muted-foreground font-medium">Language:</span>
-              <LanguageSelector /> {/* 🌐 Embedded inside mobile drawer framework */}
+              <LanguageSelector />
             </div>
             <Link
               href="/app"

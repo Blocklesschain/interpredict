@@ -19,7 +19,7 @@ const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0xD6CA8AB227dE
 const CONTRACT_ABI = ["function marketCount() view returns (uint256)"]
 
 export default function HomePage() {
-  const { t } = useWeb3() // 🔮 Initializing our dictionary lookup mapper
+  const { t } = useWeb3()
   const [liveMarkets, setLiveMarkets] = useState<MarketType[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
@@ -60,19 +60,18 @@ export default function HomePage() {
       <section className="relative pt-32 pb-16 md:pt-44 md:pb-28 overflow-hidden px-4">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(98,0,238,0.06),transparent_50%)]" />
         <div className="max-w-5xl mx-auto text-center relative z-10">
-
           <h1 className="text-3xl sm:text-5xl md:text-5xl font-heading font-extrabold tracking-tight leading-[1.2] mb-6 max-w-4xl mx-auto">
             <span className="bg-gradient-to-r from-[#d946ef] via-[#ef4444] to-[#f59e0b] bg-clip-text text-transparent">
               InterPredict
             </span>{" "}
             <span className="text-slate-600 font-light">—</span>{" "}
             <span className="bg-gradient-to-r from-[#f59e0b] via-[#fef08a] to-[#eab308] bg-clip-text text-transparent">
-              {t('titleSuffix')} {/* 🔄 Localized */}
+              {t('titleSuffix')}
             </span>
           </h1>
 
           <p className="text-muted-foreground text-base sm:text-lg max-w-3xl mx-auto leading-relaxed mb-10">
-            {t('tagline')} {/* 🔄 Localized */}
+            {t('tagline')}
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center w-full max-w-md mx-auto sm:max-w-none">
@@ -80,7 +79,7 @@ export default function HomePage() {
               href="/app"
               className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-primary hover:bg-primary/95 text-primary-foreground font-bold rounded-full transition-all shadow-lg shadow-primary/20 text-sm tracking-wide"
             >
-              <span>{t('launchBtn')}</span> {/* 🔄 Localized */}
+              <span>{t('launchBtn')}</span>
               <ArrowRight className="size-4" />
             </Link>
 
@@ -88,7 +87,7 @@ export default function HomePage() {
               href="#architecture"
               className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-secondary/80 hover:bg-secondary text-foreground font-semibold rounded-full border border-border transition-colors text-sm"
             >
-              {t('howItWorksBtn')} {/* 🔄 Localized */}
+              {t('howItWorksBtn')}
             </a>
           </div>
         </div>
@@ -99,11 +98,11 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-12 gap-4">
             <div>
-              <h2 className="text-2xl sm:text-4xl font-heading font-bold tracking-tight">{t('exploreMarketsTitle')}</h2> {/* 🔄 Localized */}
-              <p className="text-muted-foreground text-sm mt-1">{t('exploreMarketsSub')}</p> {/* 🔄 Localized */}
+              <h2 className="text-2xl sm:text-4xl font-heading font-bold tracking-tight">{t('exploreMarketsTitle')}</h2>
+              <p className="text-muted-foreground text-sm mt-1">{t('exploreMarketsSub')}</p>
             </div>
             <Link href="/app" className="text-sm font-bold text-primary hover:underline flex items-center gap-1.5 transition-all">
-              <span>{t('tradeRealtimeBtn')}</span> {/* 🔄 Localized */}
+              <span>{t('tradeRealtimeBtn')}</span>
               <ArrowRight className="size-3.5" />
             </Link>
           </div>
@@ -147,53 +146,64 @@ export default function HomePage() {
       <section id="architecture" className="py-24 border-t border-border px-4">
         <div className="max-w-7xl mx-auto">
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <span className="text-xs font-bold text-primary uppercase tracking-widest bg-primary/10 px-3 py-1 rounded-full border border-primary/20">Protocol Infrastructure</span>
-            <h2 className="text-3xl sm:text-5xl font-heading font-bold tracking-tight mt-4">{t('howItWorksBtn')}</h2> {/* 🔄 Localized */}
-            <p className="text-muted-foreground text-sm sm:text-base mt-2">A concise, professional look at our native on-chain curation and settlement pipeline.</p>
+            <span className="text-xs font-bold text-primary uppercase tracking-widest bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
+              {t('infraBadge')} {/* 🔄 Localized */}
+            </span>
+            <h2 className="text-3xl sm:text-5xl font-heading font-bold tracking-tight mt-4">
+              {t('howItWorksBtn')} {/* 🔄 Localized */}
+            </h2>
+            <p className="text-muted-foreground text-sm sm:text-base mt-2">
+              {t('infraSub')} {/* 🔄 Localized */}
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+            {/* 🔄 Card 01 Localized */}
             <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
               <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">01</div>
-              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><Layers className="size-4 text-primary" /><span>Proposal Phase</span></h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">Users open custom prediction structures by defining forecasting logic inside the terminal workspace dashboard.</p>
+              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><Layers className="size-4 text-primary" /><span>{t('step1Title')}</span></h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">{t('step1Desc')}</p>
             </div>
+            {/* 🔄 Card 02 Localized */}
             <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
               <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">02</div>
-              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><Coins className="size-4 text-primary" /><span>Collateral Escrow</span></h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">Market deployment requires a 1.0 tITL security fee bond to defend the network registry channels from spam variables.</p>
+              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><Coins className="size-4 text-primary" /><span>{t('step2Title')}</span></h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">{t('step2Desc')}</p>
             </div>
+            {/* 🔄 Card 03 Localized */}
             <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
               <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">03</div>
-              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><Gavel className="size-4 text-primary" /><span>DEC Evaluation</span></h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">Proposals pass through a 24-hour verification window. Decentralized Curation Committee (DEC) members cast consensus weights.</p>
+              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><Gavel className="size-4 text-primary" /><span>{t('step3Title')}</span></h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">{t('step3Desc')}</p>
             </div>
+            {/* 🔄 Card 04 Localized */}
             <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
               <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">04</div>
-              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><CheckCircle2 className="size-4 text-primary" /><span>Curation Settlement</span></h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">Passed assets move directly to trading. Forfeited assets apply a 10% network burn fee, returning the 90% balance back to creators.</p>
+              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><CheckCircle2 className="size-4 text-primary" /><span>{t('step4Title')}</span></h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">{t('step4Desc')}</p>
             </div>
+            {/* 🔄 Card 05 Localized */}
             <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
               <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">05</div>
-              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><ShieldCheck className="size-4 text-primary" /><span>Position Trading</span></h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">Ecosystem traders buy YES or NO contract shares. Upon market maturity, independent oracles trigger automated smart execution payouts.</p>
+              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><ShieldCheck className="size-4 text-primary" /><span>{t('step5Title')}</span></h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">{t('step5Desc')}</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* --- FOOTER --- */}
+      {/* --- FOOTER COMPONENT --- */}
       <footer className="border-t border-border bg-secondary/30 py-12 text-xs text-muted-foreground px-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex flex-col gap-3 text-center md:text-left">
-            <p className="font-semibold text-slate-400">© 2026 InterPredict Protocol. All rights reserved.</p>
+            <p className="font-semibold text-slate-400">{t('footerRights')}</p> {/* 🔄 Localized Copyright */}
             <div className="flex flex-wrap justify-center md:justify-start gap-x-5 gap-y-2">
-              <Link href="/whitepaper" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">Whitepaper</Link>
-              <Link href="/documentation" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">Documentation</Link>
-              <Link href="/governance-forum" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">Governance Forum</Link>
-              <Link href="/terms-of-service" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">Terms of Service</Link>
-              <Link href="/privacy-policy" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">Privacy Policy</Link>
-              <Link href="/risk-disclosure" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">Risk Disclosure</Link>
+              <Link href="/whitepaper" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">{t('navWhitepaper')}</Link>
+              <Link href="/documentation" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">{t('docDocumentation')}</Link>
+              <Link href="/governance-forum" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">{t('docForum')}</Link>
+              <Link href="/terms-of-service" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">{t('docTerms')}</Link>
+              <Link href="/privacy-policy" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">{t('docPrivacy')}</Link>
+              <Link href="/risk-disclosure" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">{t('docRisk')}</Link>
             </div>
           </div>
 

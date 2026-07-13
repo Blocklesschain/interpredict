@@ -6,7 +6,7 @@ import { Menu, X } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
 import { Logo } from "@/components/logo"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { LanguageSelector } from ".LanguageSelector"
+import { LanguageSelector } from "./LanguageSelector"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 

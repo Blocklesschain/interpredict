@@ -4,12 +4,14 @@ import { useState } from 'react'
 import { useWeb3 } from '../context/Web3Context'
 import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight } from 'lucide-react'
 import { Logo } from '@/components/logo'
+import { LanguageSelector } from '@/components/LanguageSelector'
 import Link from 'next/link'
 
 type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History'
 
 export default function DAppPortal() {
-  const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain } = useWeb3()
+  // 🌐 Extracted localization primitives `locale` and `t` safely from the context layer
+  const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, locale, t } = useWeb3()
   const [activeTab, setActiveTab] = useState<TabType>('MarketPlace')
   const [stakeAmount, setStakeAmount] = useState<string>('0.1')
   const [marketDesc, setMarketDesc] = useState('')
@@ -49,13 +51,25 @@ export default function DAppPortal() {
     }
   }
 
-  // 🛡️ Wallet Connection Security Guard & Trade Routing Engine
   const executeTradeAction = async (marketId: number, outcomeIndex: number) => {
     if (!walletAddress) {
       await connectWallet()
       return
     }
     await placeBetOnChain(marketId, outcomeIndex, stakeAmount)
+  }
+
+  // Helper dictionary lookup map to pair localized dynamic tabs with appropriate Lucide icon graphics cleanly
+  const getTabLabel = (tab: TabType): string => {
+    const translationMap: Record<TabType, string> = {
+      'MarketPlace': t('marketPlace'),
+      'Pending Markets': t('pendingMarkets'),
+      'Market Proposals': 'Market Proposals', // Optional dynamic fallback configuration placeholder
+      'Make Market': t('makeMarket'),
+      'Join DEC': t('joinDec'),
+      'History': t('history')
+    }
+    return translationMap[tab] || tab
   }
 
   return (
@@ -72,6 +86,9 @@ export default function DAppPortal() {
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-4">
+            {/* 🌐 Integrated global language selector component into header right navigation array strip */}
+            <LanguageSelector />
+
             <Link href="/" className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors mr-2">
               <Home className="size-3.5" />
               <span className="hidden sm:inline">Home</span>
@@ -94,7 +111,7 @@ export default function DAppPortal() {
                 className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-700 text-xs sm:text-sm font-semibold rounded-full border border-purple-500/20 shadow-lg"
               >
                 <Wallet className="size-3.5" />
-                <span>Connect Wallet</span>
+                <span>{t('connectBtn')}</span>
               </button>
             )}
           </div>
@@ -112,7 +129,7 @@ export default function DAppPortal() {
           >
             <div className="flex items-center gap-2">
               <Menu className="size-4 text-primary" />
-              <span>{activeTab}</span>
+              <span>{getTabLabel(activeTab)}</span>
             </div>
             {mobileMenuOpen ? <X className="size-4" /> : <ArrowRight className="size-4 rotate-90" />}
           </button>
@@ -126,7 +143,7 @@ export default function DAppPortal() {
                   className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-primary text-white' : 'text-slate-400 hover:bg-purple-950/40'
                     }`}
                 >
-                  {tab}
+                  {getTabLabel(tab)}
                 </button>
               ))}
             </div>
@@ -145,7 +162,7 @@ export default function DAppPortal() {
                   }`}
               >
                 <Icon className="size-4 shrink-0" />
-                <span>{tab}</span>
+                <span>{getTabLabel(tab)}</span>
               </button>
             )
           })}
@@ -156,7 +173,6 @@ export default function DAppPortal() {
           <div className="w-full">
             <div className="mb-6 border-b border-purple-950/40 pb-5">
               <h2 className="text-lg sm:text-xl font-bold font-heading">InterPredict dApp</h2>
-              {/* 🌟 Fixed: Removed uppercase tracking class so that tagline uses premiumTitle Case format */}
               <p className="text-purple-400 text-[10px] sm:text-xs font-semibold tracking-wide mt-1">
                 Create the Market | Predict the Future | Earn from the Outcome
               </p>

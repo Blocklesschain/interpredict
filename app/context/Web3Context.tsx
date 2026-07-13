@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect } from 'react'
 import { ethers } from 'ethers'
+import { translations, LocaleType } from './translations'
 
 export interface HistoryRecord {
   id: string
@@ -16,6 +17,9 @@ interface Web3ContextType {
   walletAddress: string | null
   txStatus: string | null
   historyLogs: HistoryRecord[]
+  locale: 'en' | 'zh' | 'es' | 'fr'
+  setLocale: (lang: 'en' | 'zh' | 'es' | 'fr') => void
+  t: (key: keyof typeof translations['en']) => string
   connectWallet: () => Promise<void>
   disconnectWallet: () => void
   createMarketOnChain: (description: string) => Promise<boolean>
@@ -23,6 +27,7 @@ interface Web3ContextType {
   castVoteOnChain: (marketId: number, support: boolean) => Promise<void>
   placeBetOnChain: (marketId: number, outcome: number, amount: string) => Promise<void>
 }
+
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
 
@@ -667,6 +672,25 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const [txStatus, setTxStatus] = useState<string | null>(null)
   const [historyLogs, setHistoryLogs] = useState<HistoryRecord[]>([])
 
+  const [locale, setLocaleState] = useState<LocaleType>('en')
+
+  // Hydrate language preference from localStorage on boot safely
+  useEffect(() => {
+    const savedLocale = localStorage.getItem('interpredict_lang') as LocaleType
+    if (savedLocale) setLocaleState(savedLocale)
+  }, [])
+
+  const setLocale = (lang: LocaleType) => {
+    setLocaleState(lang)
+    localStorage.setItem('interpredict_lang', lang)
+  }
+
+  // Simple translation look-up function helper
+  const t = (key: keyof typeof translations['en']) => {
+    return translations[locale][key] || translations['en'][key]
+  }
+
+
   // 🔄 Persistent Hydration Session Loop
   useEffect(() => {
     async function checkExistingConnection() {
@@ -901,7 +925,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <Web3Context.Provider value={{ walletAddress, txStatus, historyLogs, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain }}>
+    <Web3Context.Provider value={{ walletAddress, txStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain }}>
       {children}
     </Web3Context.Provider>
   )

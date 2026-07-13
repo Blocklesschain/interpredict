@@ -86,9 +86,6 @@ export default function DAppPortal() {
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-4">
-            {/* 🌐 Integrated global language selector component into header right navigation array strip */}
-            <LanguageSelector />
-
             <Link href="/" className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors mr-2">
               <Home className="size-3.5" />
               <span className="hidden sm:inline">Home</span>

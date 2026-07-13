@@ -169,9 +169,9 @@ export default function DAppPortal() {
         <section className="lg:col-span-3 bg-secondary/10 border border-secondary/20 rounded-2xl p-5 sm:p-6 min-h-[500px] flex flex-col justify-between shadow-inner w-full overflow-hidden">
           <div className="w-full">
             <div className="mb-6 border-b border-purple-950/40 pb-5">
-              <h2 className="text-lg sm:text-xl font-bold font-heading">InterPredict dApp</h2>
+              <h2 className="text-lg sm:text-xl font-bold font-heading">{t('statusPanel')}</h2>
               <p className="text-purple-400 text-[10px] sm:text-xs font-semibold tracking-wide mt-1">
-                Create the Market | Predict the Future | Earn from the Outcome
+                {t('taglineSub')}
               </p>
             </div>
 
@@ -185,12 +185,18 @@ export default function DAppPortal() {
                   </div>
                   <h4 className="text-sm sm:text-base font-bold text-slate-200 mb-4 leading-snug">Will Interlink network testnet gateway process over 10M transactions this week?</h4>
                   <div className="mb-4">
-                    <label className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block mb-1">Wager Amount (ITL)</label>
+                    <label className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block mb-1">
+                      {t('wagerTitle')} {/* 🔄 Localized "Wager Amount (ITL)" */}
+                    </label>
                     <input type="number" value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} className="w-full bg-black/20 border border-purple-900/40 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => executeTradeAction(0, 0)} className="py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs rounded-lg shadow-md hover:scale-[1.01] transition-transform">Predict YES</button>
-                    <button onClick={() => executeTradeAction(0, 1)} className="py-2.5 bg-gradient-to-r from-rose-600 to-red-600 text-white font-bold text-xs rounded-lg shadow-md hover:scale-[1.01] transition-transform">Predict NO</button>
+                    <button onClick={() => executeTradeAction(0, 0)} className="py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs rounded-lg shadow-md hover:scale-[1.01] transition-transform">
+                      {t('predictYes')} {/* 🔄 Localized "Predict YES" */}
+                    </button>
+                    <button onClick={() => executeTradeAction(0, 1)} className="py-2.5 bg-gradient-to-r from-rose-600 to-red-600 text-white font-bold text-xs rounded-lg shadow-md hover:scale-[1.01] transition-transform">
+                      {t('predictNo')} {/* 🔄 Localized "Predict NO" */}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -201,7 +207,9 @@ export default function DAppPortal() {
               <div className="bg-secondary/20 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl">
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-xs font-mono text-purple-400 font-bold">Query Index #14</span>
-                  <span className="text-[10px] bg-purple-500/10 text-purple-300 px-2 py-0.5 rounded font-bold uppercase">In Voting Phase</span>
+                  <span className="text-[10px] bg-purple-500/10 text-purple-300 px-2 py-0.5 rounded font-bold uppercase">
+                    {t('votingPhase')} {/* 🔄 Localized "In Voting Phase" */}
+                  </span>
                 </div>
                 <p className="text-sm font-medium mb-5 text-slate-300 leading-normal">Will the upcoming Smart Money Concepts indicator update introduce automated mitigation mapping?</p>
                 <div className="space-y-3 bg-black/20 p-4 rounded-xl border border-purple-950/40">
@@ -226,31 +234,44 @@ export default function DAppPortal() {
                 </div>
                 <p className="text-sm font-semibold mb-4 text-slate-200">Will the upcoming Smart Money Concepts indicator update introduce automated mitigation mapping?</p>
                 <div className="grid grid-cols-2 gap-3">
-                  <button onClick={() => castVoteOnChain(14, true)} className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm">Vote FOR (Graduate)</button>
-                  <button onClick={() => castVoteOnChain(14, false)} className="py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm">Vote AGAINST (Reject)</button>
+                  <button onClick={() => castVoteOnChain(14, true)} className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm">
+                    {t('voteFor')} {/* 🔄 Localized "Vote FOR" */}
+                  </button>
+                  <button onClick={() => castVoteOnChain(14, false)} className="py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm">
+                    {t('voteAgainst')} {/* 🔄 Localized "Vote AGAINST" */}
+                  </button>
                 </div>
               </div>
             )}
+
 
             {/* TAB: MAKE MARKET */}
             {activeTab === 'Make Market' && (
               <div className="space-y-4 w-full max-w-xl">
                 <div>
-                  <label className="text-xs font-bold text-slate-400 block mb-1.5">Market Objective Statement</label>
+                  <label className="text-xs font-bold text-slate-400 block mb-1.5">
+                    {t('marketStatement')} {/* 🔄 Localized "Market Objective Statement" */}
+                  </label>
                   <textarea placeholder="e.g., Will Bitcoin settle above $120,000 on the global macro index deadline?" value={marketDesc} onChange={(e) => setMarketDesc(e.target.value)} className="w-full min-h-[90px] bg-black/20 border border-purple-900/50 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary resize-none" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-bold text-slate-400 block mb-1.5">Outcome Index 0</label>
+                    <label className="text-xs font-bold text-slate-400 block mb-1.5">
+                      {t('outcome0')} {/* 🔄 Localized "Outcome Index 0" */}
+                    </label>
                     <input type="text" disabled value={outcomes[0]} className="w-full bg-slate-900/40 border border-purple-900/20 rounded-xl px-3 py-2 text-sm text-slate-500 font-mono" />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-slate-400 block mb-1.5">Outcome Index 1</label>
+                    <label className="text-xs font-bold text-slate-400 block mb-1.5">
+                      {t('outcome1')} {/* 🔄 Localized "Outcome Index 1" */}
+                    </label>
                     <input type="text" disabled value={outcomes[1]} className="w-full bg-slate-900/40 border border-purple-900/20 rounded-xl px-3 py-2 text-sm text-slate-500 font-mono" />
                   </div>
                 </div>
                 <button onClick={handleCreateMarketSubmit} className="w-full py-3 bg-gradient-to-r from-primary to-purple-600 text-white text-xs font-bold rounded-xl shadow-md hover:opacity-95 transition-opacity">
-                  {walletAddress?.toLowerCase() === "0x6e832252ea4c78068ee109d953724d2762431992" ? "Deploy Straight to Marketplace (Team Bypass)" : "Broadcast Proposal to DEC (1.0 tITL Fee)"}
+                  {walletAddress?.toLowerCase() === "0x6e832252ea4c78068ee109d953724d2762431992"
+                    ? t('teamBypass')
+                    : t('userPropose')} {/* 🔄 Localized Submission buttons */}
                 </button>
               </div>
             )}
@@ -259,9 +280,15 @@ export default function DAppPortal() {
             {activeTab === 'Join DEC' && (
               <div className="p-6 bg-gradient-to-br from-purple-950/20 to-indigo-950/20 border border-purple-900/30 rounded-xl text-center w-full max-w-xl">
                 <Shield className="size-10 mx-auto text-primary mb-3" />
-                <p className="text-sm font-semibold mb-1 text-slate-200">Activate Assessor Access Permissions</p>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">Pay a one time security validation stake of 0.1 tITL to access vote metrics on all outstanding community market requests.</p>
-                <button onClick={handleJoinCommitteeSubmit} className="px-6 py-2.5 bg-primary hover:bg-primary/95 text-white font-bold text-xs rounded-xl shadow-md transition-all">Lock Stake & Join DEC Committee</button>
+                <p className="text-sm font-semibold mb-1 text-slate-200">
+                  {t('assessorTitle')} {/* 🔄 Localized "Activate Assessor Access Permissions" */}
+                </p>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">
+                  {t('assessorSub')} {/* 🔄 Localized explanation stake text */}
+                </p>
+                <button onClick={handleJoinCommitteeSubmit} className="px-6 py-2.5 bg-primary hover:bg-primary/95 text-white font-bold text-xs rounded-xl shadow-md transition-all">
+                  {t('assessorBtn')} {/* 🔄 Localized Join Button */}
+                </button>
               </div>
             )}
 
@@ -269,12 +296,12 @@ export default function DAppPortal() {
             {activeTab === 'History' && (
               <div className="space-y-4 w-full">
                 <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-3 font-mono">
-                  ● Real-Time On-Chain Transaction Ledger
+                  {t('ledgerTitle')} {/* 🔄 Localized "Real-Time On-Chain Transaction Ledger" */}
                 </h4>
 
                 {historyLogs.length === 0 ? (
                   <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">
-                    No transactions executed during this session interface loop yet.
+                    {t('noLogs')} {/* 🔄 Localized Empty session loop message */}
                   </div>
                 ) : (
                   <div className="space-y-3">

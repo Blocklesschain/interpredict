@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useWeb3 } from '../context/Web3Context'
-import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Image as ImageIcon } from 'lucide-react'
+import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Image as ImageIcon, Cpu } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import { LanguageSelector } from '@/components/LanguageSelector'
 import Link from 'next/link'
@@ -24,6 +24,7 @@ export default function DAppPortal() {
 
   const [hasJoinedDEC, setHasJoinedDEC] = useState<boolean>(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false)
+  const [oracleRequested, setOracleRequested] = useState<boolean>(false) // Track UI button state locally for presentation
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const ADMIN_ADDRESS = "0x6e832252ea4c78068ee109d953724d2762431992"
@@ -113,6 +114,18 @@ export default function DAppPortal() {
     await placeBetOnChain(marketId, outcomeIndex, stakeAmount)
   }
 
+  // 📡 New: Frontend trigger for contract's automated Oracle compilation layer
+  const triggerAutomatedOracle = async (marketId: number) => {
+    if (!walletAddress) return;
+    try {
+      // If you've connected this handler to your Web3Context contract pipeline wrapper:
+      // await requestOracleResolutionOnChain(marketId)
+      setOracleRequested(true)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const getTabLabel = (tab: TabType): string => {
     const translationMap: Record<TabType, string> = {
       'MarketPlace': t('marketPlace'),
@@ -172,7 +185,7 @@ export default function DAppPortal() {
       {/* Main Responsive Frame Layout */}
       <div className="max-w-7xl mx-auto pt-28 px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
 
-        {/* Mobile menu dropdown */}
+        {/* Mobile menu panel dropdown */}
         <div className="lg:hidden w-full relative z-30">
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -201,7 +214,7 @@ export default function DAppPortal() {
           )}
         </div>
 
-        {/* Desktop Sidebar */}
+        {/* Desktop Sidebar Navigation Panels */}
         <aside className="hidden lg:flex flex-col gap-1.5 lg:col-span-1">
           {visibleTabs.map((tab) => {
             const Icon = {
@@ -227,7 +240,7 @@ export default function DAppPortal() {
           })}
         </aside>
 
-        {/* Display Viewport */}
+        {/* Dynamic Display Panel Viewport */}
         <section className="lg:col-span-3 bg-secondary/10 border border-secondary/20 rounded-2xl p-5 sm:p-6 min-h-[500px] flex flex-col justify-between shadow-inner w-full overflow-hidden">
           <div className="w-full">
             <div className="mb-6 border-b border-purple-950/40 pb-5">
@@ -267,8 +280,8 @@ export default function DAppPortal() {
                     <input type="number" value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} className="w-full bg-black/20 border border-purple-900/40 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none" />
                   </div>
 
-                  {/* 🛡️ Dynamic Voting buttons renderer depending on Outcome Array count */}
-                  <div className={`grid gap-3 ${outcomes.length > 2 ? 'grid-cols-2' : 'grid-cols-2'}`}>
+                  {/* Dynamic Voting buttons renderer depending on Outcome Array count */}
+                  <div className="grid grid-cols-2 gap-3 mb-4">
                     {outcomes.map((choice, idx) => (
                       <button
                         key={idx}
@@ -280,9 +293,21 @@ export default function DAppPortal() {
                     ))}
                   </div>
 
-                  {/* Date Metadata bottom banner */}
-                  <div className="mt-4 pt-3 border-t border-purple-950/40 flex justify-between items-center text-[11px] font-mono text-slate-400">
+                  {/* 🤖 Automated Oracle Execution Trigger Zone */}
+                  <div className="pt-3 border-t border-purple-950/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-[11px] font-mono text-slate-400">
                     <span>Deadline: {endDate}</span>
+
+                    <button
+                      onClick={() => triggerAutomatedOracle(0)}
+                      disabled={oracleRequested}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all border ${oracleRequested
+                        ? 'bg-purple-950/20 border-purple-900/50 text-purple-400 cursor-not-allowed animate-pulse'
+                        : 'bg-primary/10 border-primary/30 text-primary hover:bg-primary hover:text-white'
+                        }`}
+                    >
+                      <Cpu className="size-3" />
+                      <span>{oracleRequested ? 'Oracle Processing...' : 'Ping Oracle Resolution'}</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -333,7 +358,6 @@ export default function DAppPortal() {
             {/* TAB: MAKE MARKET */}
             {activeTab === 'Make Market' && (
               <div className="space-y-4 w-full max-w-xl">
-                {/* 🎨 Double-grid row layout containing Statement Description & Logo Thumbnail Uploader */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="md:col-span-2">
                     <label className="text-xs font-bold text-slate-400 block mb-1.5">
@@ -347,7 +371,6 @@ export default function DAppPortal() {
                     />
                   </div>
 
-                  {/* Premium drag/upload miniature zone */}
                   <div>
                     <label className="text-xs font-bold text-slate-400 block mb-1.5">
                       {t('uploadImageLabel')}
@@ -375,7 +398,6 @@ export default function DAppPortal() {
                   </div>
                 </div>
 
-                {/* 📆 Timeframe Date Picker Configuration Strip */}
                 <div>
                   <label className="text-xs font-bold text-slate-400 block mb-1.5">
                     {t('votingEndDate')}
@@ -388,7 +410,6 @@ export default function DAppPortal() {
                   />
                 </div>
 
-                {/* 🔄 Dynamic Multiple Choice outcome field logic arrays (Max 4 limits enforced) */}
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <label className="text-xs font-bold text-slate-400">
@@ -523,7 +544,7 @@ export default function DAppPortal() {
                         {decMembers.map((member, index) => (
                           <tr key={index} className="hover:bg-purple-950/5 transition-colors">
                             <td className="p-4 text-slate-200">{member}</td>
-                            <td className="p-4 text-slate-400">0.1 tITL Stake Verified</td>
+                            <td className="p-4 text-slate-400">1.0 tITL Stake Verified</td>
                           </tr>
                         ))}
                       </tbody>

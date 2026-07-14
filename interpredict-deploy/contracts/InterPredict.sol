@@ -27,6 +27,7 @@ contract InterPredict {
         bool creatorFeeClaimed;
         uint256 votesForActive;
         uint256 votesAgainstActive;
+        bool oracleResolutionRequested;
     }
 
     // --- EVENTS ---
@@ -41,6 +42,11 @@ contract InterPredict {
         address indexed trader,
         bool isYes,
         uint256 amount
+    );
+    event OracleResolutionRequested(
+        uint256 indexed marketId,
+        string question,
+        uint256 marketEndTime
     );
     event MarketResolved(uint256 indexed marketId, Outcome winningOutcome);
     event PayoutClaimed(
@@ -214,6 +220,34 @@ contract InterPredict {
         emit SharePurchased(_marketId, msg.sender, _isYes, msg.value);
     }
 
+    // --- AUTOMATED ORACLE REQUEST LAYER ---
+
+    /**
+     * @notice Pings the automated off-chain oracle network infrastructure once the trading window closes.
+     * @param _marketId The ID of the target expired market to compile.
+     */
+    function requestOracleResolution(uint256 _marketId) external {
+        Market storage market = markets[_marketId];
+        require(market.state == MarketState.Active, "Market is not active");
+        require(
+            block.timestamp >= market.marketEndTime,
+            "Trading window has not closed yet"
+        );
+        require(
+            !market.oracleResolutionRequested,
+            "Oracle resolution already initialized"
+        );
+
+        market.oracleResolutionRequested = true;
+
+        // 📡 Emits structured parameters that external oracle scripts query automatically via RPC nodes
+        emit OracleResolutionRequested(
+            _marketId,
+            market.question,
+            market.marketEndTime
+        );
+    }
+
     // --- SETTLEMENT LAYER (Hardened Mathematics Matrix) ---
 
     function resolveMarket(
@@ -251,16 +285,12 @@ contract InterPredict {
             require(userShares > 0, "No winning YES shares found");
 
             yesShares[_marketId][msg.sender] = 0;
-
-            //Multiply user shares by total pool before executing division math
             winnings = (userShares * totalPool) / market.totalYesPool;
         } else if (market.winningOutcome == Outcome.NO) {
             uint256 userShares = noShares[_marketId][msg.sender];
             require(userShares > 0, "No winning NO shares found");
 
             noShares[_marketId][msg.sender] = 0;
-
-            //Multiply user shares by total pool before executing division math
             winnings = (userShares * totalPool) / market.totalNoPool;
         } else {
             uint256 userYes = yesShares[_marketId][msg.sender];
@@ -305,20 +335,17 @@ contract InterPredict {
     // --- GOVERNANCE INTERFACE ENGINE ---
 
     function joinCommittee() external payable {
-    // 1. Ensure they sent exactly 0.1 ether
-    require(msg.value == 0.1 ether, "Incorrect registration fee");
-    
-    // 2. Ensure they aren't already a committee member (Using the corrected mapping name)
-    require(!isDecMember[msg.sender], "Already a member");
+        require(msg.value == 0.1 ether, "Incorrect registration fee");
+        require(!isDecMember[msg.sender], "Already a member");
 
-    // 💡 Forward the incoming 0.1 tITL straight to the team treasury wallet
-    address payable treasury = payable(0x6E832252eA4c78068EE109d953724D2762431992);
-    (bool success, ) = treasury.call{value: msg.value}("");
-    require(success, "Treasury transfer failed");
+        address payable treasury = payable(
+            0x6E832252eA4c78068EE109d953724D2762431992
+        );
+        (bool success, ) = treasury.call{value: msg.value}("");
+        require(success, "Treasury transfer failed");
 
-    // 3. Update state records
-    isDecMember[msg.sender] = true;
-}
+        isDecMember[msg.sender] = true;
+    }
 
     function claimDecRewards() external {
         require(

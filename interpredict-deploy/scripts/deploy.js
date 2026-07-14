@@ -9,6 +9,8 @@ async function main() {
   const rpcUrl = "https://evm-rpc.test-net.interlinklabs.ai/v1/rpc";
   const accessToken = `Bearer ${process.env.INTERLINK_TOKEN}`;
   let rawKey = process.env.PRIVATE_KEY || "";
+
+  // 🔐 Deployed Team Oracle Address - Passed securely to constructor
   const oracleAddress = "0x6E832252eA4c78068EE109d953724D2762431992";
 
   const privateKey = rawKey.startsWith("0x") ? rawKey.slice(2).trim() : rawKey.trim();
@@ -37,6 +39,8 @@ async function main() {
   console.log("🚀 Submitting deployment transaction via locked transport channel...");
 
   const factory = new ethers.ContractFactory(contractArtifact.abi, contractArtifact.bytecode, wallet);
+
+  // 📥 Submitting oracleAddress as the constructor argument
   const contractInstance = await factory.deploy(oracleAddress);
 
   console.log("⏳ Transaction submitted safely. Waiting for block confirmation...");

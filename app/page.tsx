@@ -15,7 +15,7 @@ interface MarketType {
   resolved: boolean
 }
 
-const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0x2cb350b490A9397AC2f1a2d898612ABDE620b260";
+const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0x75763f550a398c4E08e9bdFc33B34a40B5d5eD1A";
 const CONTRACT_ABI = ["function marketCount() view returns (uint256)"]
 
 export default function HomePage() {
@@ -118,11 +118,11 @@ export default function HomePage() {
               </p>
 
               <p className="text-xs text-muted-foreground mt-1 mb-6 max-w-xs mx-auto">
-                {t('noActivePoolsDesc')} 
+                {t('noActivePoolsDesc')}
               </p>
 
               <Link href="/app" className="px-5 py-2.5 bg-primary text-primary-foreground text-xs font-bold rounded-full inline-block transition-colors hover:bg-primary/90">
-                {t('createFirstMarketBtn')} 
+                {t('createFirstMarketBtn')}
               </Link>
             </div>
           ) : (

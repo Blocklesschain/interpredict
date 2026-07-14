@@ -69,10 +69,15 @@ contract InterPredict {
     address public immutable owner;
     address public oracle;
 
-    uint256 public constant MARKET_STAKE = 1 ether;
+    uint256 public constant MARKET_STAKE = 1 ether; // Native ITL Stake
     uint256 public constant VOTING_DURATION = 1 days;
-    uint256 public constant PLATFORM_FEE_BPS = 200;
-    uint256 public constant CREATOR_FEE_BPS = 100;
+    
+    // 🧮 Dynamically Evaluated Platform Fee Structure (5.0% Total)
+    uint256 public constant TOTAL_PLATFORM_FEE_BPS = 500; // 5.0% flat fee deducted from total winnings
+    uint256 public constant DEC_POOL_FEE_BPS = 200;       // 2.0% allocated to the DEC Committee Pool
+    uint256 public constant CREATOR_FEE_BPS = 100;        // 1.0% allocated to non-team creators
+    uint256 public constant TEAM_BASE_FEE_BPS = 200;      // 2.0% allocated to team on community markets
+    uint256 public constant TEAM_EXCLUSIVE_FEE_BPS = 300; // 3.0% allocated to team on team-created markets
 
     uint256 public totalMarkets;
     uint256 public decPool;
@@ -100,10 +105,10 @@ contract InterPredict {
     constructor(address _oracle) {
         require(_oracle != address(0), "Oracle cannot be zero address");
         owner = msg.sender;
-        oracle = _oracle;
+        oracle = _oracle; // 👈 Settled to team wallet
     }
 
-    // --- CORE DEPLOYMENT FUNCTIONS ---
+    // --- CORE LIFE-CYCLE FUNCTIONS ---
 
     function createActiveMarket(
         string calldata _question,
@@ -155,10 +160,7 @@ contract InterPredict {
             block.timestamp < market.votingEndTime,
             "Curation period ended"
         );
-        require(
-            !hasVotedOnCuration[_marketId][msg.sender],
-            "Already voted on this query"
-        );
+        require(!hasVotedOnCuration[_marketId][msg.sender], "Already voted");
 
         hasVotedOnCuration[_marketId][msg.sender] = true;
         if (_support) {
@@ -186,28 +188,34 @@ contract InterPredict {
             market.state = MarketState.Active;
             emit MarketInitialized(_marketId, market.marketEndTime);
         } else {
+            // ❌ The Proposal was REJECTED
             market.state = MarketState.Resolved;
             market.winningOutcome = Outcome.DRAW;
 
-            uint256 refundAmount = MARKET_STAKE;
-            (bool success, ) = address(market.creator).call{
-                value: refundAmount
+            // 🧮 10% Curation Penalty to Team Treasury, 90% Refund to Creator
+            uint256 teamPenalty = (MARKET_STAKE * 1000) / 10000; // 10% (0.1 ITL)
+            uint256 creatorRefund = MARKET_STAKE - teamPenalty;  // 90% (0.9 ITL)
+
+            // 1. Send 10% penalty to the Team Treasury Address
+            address payable treasury = payable(
+                0x6E832252eA4c78068EE109d953724D2762431992
+            );
+            (bool successTeam, ) = treasury.call{value: teamPenalty}("");
+            require(successTeam, "Team penalty routing failed");
+
+            // 2. Send 90% refund back to the Creator's Wallet
+            (bool successCreator, ) = address(market.creator).call{
+                value: creatorRefund
             }("");
-            require(success, "Refund failed");
+            require(successCreator, "Refund failed");
         }
     }
 
     function buyShares(uint256 _marketId, bool _isYes) external payable {
         Market storage market = markets[_marketId];
-        require(
-            market.state == MarketState.Active,
-            "Market is not active for trading"
-        );
-        require(
-            block.timestamp < market.marketEndTime,
-            "Trading window closed"
-        );
-        require(msg.value > 0, "Wager must be greater than zero");
+        require(market.state == MarketState.Active, "Market is not active");
+        require(block.timestamp < market.marketEndTime, "Trading closed");
+        require(msg.value > 0, "Wager must be > 0");
 
         if (_isYes) {
             yesShares[_marketId][msg.sender] += msg.value;
@@ -220,18 +228,20 @@ contract InterPredict {
         emit SharePurchased(_marketId, msg.sender, _isYes, msg.value);
     }
 
-    // --- AUTOMATED ORACLE REQUEST LAYER ---
+    // --- AUTOMATED FIRST-PARTY ORACLE SIGNALER ---
 
     /**
-     * @notice Pings the automated off-chain oracle network infrastructure once the trading window closes.
-     * @param _marketId The ID of the target expired market to compile.
+     * @notice Allows any user to trigger the resolution signal after the trading window closes.
+     * @param _marketId The target pool index.
      */
     function requestOracleResolution(uint256 _marketId) external {
         Market storage market = markets[_marketId];
         require(market.state == MarketState.Active, "Market is not active");
+
+        // 🔒 SECURITY GUARD: Enforces that the deadline has passed on-chain!
         require(
             block.timestamp >= market.marketEndTime,
-            "Trading window has not closed yet"
+            "Trading window is still active"
         );
         require(
             !market.oracleResolutionRequested,
@@ -240,7 +250,6 @@ contract InterPredict {
 
         market.oracleResolutionRequested = true;
 
-        // 📡 Emits structured parameters that external oracle scripts query automatically via RPC nodes
         emit OracleResolutionRequested(
             _marketId,
             market.question,
@@ -248,7 +257,7 @@ contract InterPredict {
         );
     }
 
-    // --- SETTLEMENT LAYER (Hardened Mathematics Matrix) ---
+    // --- SETTLEMENT LAYER ---
 
     function resolveMarket(
         uint256 _marketId,
@@ -302,14 +311,38 @@ contract InterPredict {
             noShares[_marketId][msg.sender] = 0;
         }
 
-        uint256 platformFee = (winnings * PLATFORM_FEE_BPS) / 10000;
-        uint256 netWinnings = winnings - platformFee;
-        decPool += platformFee;
+        // 🧮 Compute total 5.0% flat fee and 2.0% DEC fee
+        uint256 totalPlatformFee = (winnings * TOTAL_PLATFORM_FEE_BPS) / 10000; // 5.0% Total
+        uint256 decFeeAllocation = (winnings * DEC_POOL_FEE_BPS) / 10000;       // 2.0% to DEC Pool
+        
+        uint256 teamTreasuryFee;
+
+        // 🧠 Dynamic Allocation Rule: Did the Team (Owner) deploy this market?
+        if (market.creator == owner) {
+            // Team Market: 3% goes to Team Treasury (Creator share is absorbed)
+            teamTreasuryFee = (winnings * TEAM_EXCLUSIVE_FEE_BPS) / 10000;
+        } else {
+            // Community Market: 2% goes to Team, leaving 1% in escrow for creator claim
+            teamTreasuryFee = (winnings * TEAM_BASE_FEE_BPS) / 10000;
+        }
+
+        uint256 netWinnings = winnings - totalPlatformFee;
+
+        // 1. Accumulate the 2% fee in the DEC pool for committee claims
+        decPool += decFeeAllocation;
 
         emit PayoutClaimed(_marketId, msg.sender, netWinnings);
 
-        (bool success, ) = address(msg.sender).call{value: netWinnings}("");
-        require(success, "Payout transfer execution failed");
+        // 2. Route the designated fee instantly to the Team Treasury Wallet
+        address payable treasury = payable(
+            0x6E832252eA4c78068EE109d953724D2762431992
+        );
+        (bool successTeam, ) = treasury.call{value: teamTreasuryFee}("");
+        require(successTeam, "Team platform fee routing failed");
+
+        // 3. Send the remaining net winnings back to the claiming user
+        (bool successUser, ) = address(msg.sender).call{value: netWinnings}("");
+        require(successUser, "Payout transfer execution failed");
     }
 
     function claimCreatorYield(uint256 _marketId) external {
@@ -318,21 +351,20 @@ contract InterPredict {
             market.state == MarketState.Resolved,
             "Market must be resolved"
         );
-        require(msg.sender == market.creator, "Only market creator can claim");
+        require(msg.sender == market.creator, "Only creator can claim");
         require(!market.creatorFeeClaimed, "Yield already claimed");
+
+        // Safety Guard: Owner (Team) cannot claim the creator yield
+        require(market.creator != owner, "Owner cannot claim creator yield");
 
         market.creatorFeeClaimed = true;
 
         uint256 totalPool = market.totalYesPool + market.totalNoPool;
         uint256 totalYield = (totalPool * CREATOR_FEE_BPS) / 10000;
 
-        emit CreatorYieldClaimed(_marketId, msg.sender, totalYield);
-
         (bool success, ) = address(market.creator).call{value: totalYield}("");
-        require(success, "Yield settlement routing failed");
+        require(success, "Yield routing failed");
     }
-
-    // --- GOVERNANCE INTERFACE ENGINE ---
 
     function joinCommittee() external payable {
         require(msg.value == 0.1 ether, "Incorrect registration fee");
@@ -348,42 +380,24 @@ contract InterPredict {
     }
 
     function claimDecRewards() external {
-        require(
-            isDecMember[msg.sender],
-            "Not a valid committee validator credential node"
-        );
-        require(
-            totalDecMembers > 0,
-            "Zero division safety protocol constraint flag"
-        );
+        require(isDecMember[msg.sender], "Not a valid committee member");
+        require(totalDecMembers > 0, "Zero division safety");
 
         uint256 totalSharePerNode = decPool / totalDecMembers;
         uint256 claimable = totalSharePerNode -
             decRewardsClaimedTracker[msg.sender];
-        require(
-            claimable > 0,
-            "All outstanding committee network yields claimed"
-        );
+        require(claimable > 0, "All rewards claimed");
 
         decRewardsClaimedTracker[msg.sender] = totalSharePerNode;
-
-        emit DecRewardsClaimed(msg.sender, claimable);
 
         (bool success, ) = address(msg.sender).call{value: claimable}("");
         require(success, "Rewards distribution failed");
     }
 
-    // --- ADMINISTRATION SYSTEM OPERATIONS ---
-
     function updateOracle(address _newOracle) external onlyOwner {
-        require(
-            _newOracle != address(0),
-            "New oracle cannot be the zero address"
-        );
-
+        require(_newOracle != address(0), "New oracle cannot be zero address");
         address oldOracle = oracle;
         oracle = _newOracle;
-
         emit OracleUpdated(oldOracle, _newOracle);
     }
 }

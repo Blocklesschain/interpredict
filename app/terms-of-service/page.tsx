@@ -1,6 +1,12 @@
 import { BackHomeButton } from '@/components/back-home-button'
 
 export default function TermsOfServicePage() {
+  // String definitions to completely avoid raw JSX character comparison errors
+  const rejectRatio = "10% / 90%";
+  const totalFeePct = "5.0%";
+  const baseSplit = "2.0% (DEC) / 2.0% (Team) / 1.0% (Creator)";
+  const teamSplit = "2.0% (DEC) / 3.0% (Team)";
+
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-background py-24">
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
@@ -20,37 +26,60 @@ export default function TermsOfServicePage() {
 
           <section className="space-y-8 text-base leading-8 text-muted-foreground">
             <div>
-              <h2 className="text-2xl font-semibold text-foreground">Scope and acceptance</h2>
+              <h2 className="text-2xl font-semibold text-foreground">1. Scope and Acceptance</h2>
               <p className="mt-4">
-                These Terms of Service govern your use of InterPredict, a decentralized prediction marketplace built on the Interlink Network. By accessing or using the platform, you agree to the terms of service, privacy policies, and all relevant community governance rules.
+                These Terms of Service govern your interaction with the InterPredict smart contracts and frontend portal deployed on the Interlink L1 network. By connecting a Web3 wallet, transmitting native ITL tokens to the contract, proposing markets, or purchasing YES/NO shares, you unconditionally agree to these Terms. If you do not accept these constraints, you must immediately terminate your interaction with our interfaces.
               </p>
             </div>
 
             <div>
-              <h2 className="text-2xl font-semibold text-foreground">Decentralized marketplace participation</h2>
+              <h2 className="text-2xl font-semibold text-foreground">2. Non-Custodial and Peer-to-Peer Operations</h2>
               <p className="mt-4">
-                InterPredict is designed to allow users to create market proposals, participate in market curation, and trade positions in a permissionless way. Users may propose new markets when they meet platform criteria, and approved markets are made available for trading under our decentralized framework.
+                InterPredict is an entirely non-custodial, peer-to-peer prediction marketplace protocol. All pool assets are locked securely inside immutable on-chain smart contracts. InterPredict does not manage trade order books, operate central clearinghouses, custody user collateral, or control individual wallet private keys. All transactions, bets, and claims occur autonomously on the Interlink Network.
               </p>
             </div>
 
             <div>
-              <h2 className="text-2xl font-semibold text-foreground">Market proposal and review</h2>
+              <h2 className="text-2xl font-semibold text-foreground">3. Market Proposal, Escrow, and Rejection Penalty</h2>
               <p className="mt-4">
-                When a user creates a market, it enters a review process conducted by the Decentralized Curation Committee. The committee reviews proposals for clear outcome definitions, measurable resolution conditions, and alignment with community standards before the market is listed.
+                Any user may propose a market by locking exactly 1.0 ITL as a proposal stake. This proposal triggers a 24-hour curation window during which the DEC Committee curates the query:
+              </p>
+              <ul className="mt-4 list-disc list-inside space-y-2 text-sm pl-4">
+                <li>
+                  <strong>Curation Approval:</strong> If the proposal receives favorable committee consensus, the market transitions to the Active state, enabling public share trading.
+                </li>
+                <li>
+                  <strong>Curation Rejection:</strong> If the proposal fails to clear curation, the contract executes an immutable <strong>{rejectRatio}</strong> split. A 10% penalty (0.1 ITL) is sent directly to the Team Treasury Wallet to compensate for committee curation overhead, and the remaining 90% (0.9 ITL) is returned to the creator.
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-semibold text-foreground">4. Dynamic Fee Dedication and Payout Claims</h2>
+              <p className="mt-4">
+                Upon resolving a prediction pool, a flat <strong>{totalFeePct}</strong> fee is automatically subtracted from the total payout of winning shareholders during the execution of <code>claimPayout()</code>. This fee is dynamically split by the smart contract:
+              </p>
+              <ul className="mt-4 list-disc list-inside space-y-2 text-sm pl-4">
+                <li>
+                  <strong>User-Created Pools:</strong> The 5% total fee is parsed as <strong>{baseSplit}</strong>. The 1% creator yield remains held in escrow and is claimable exclusively by the community creator via <code>claimCreatorYield()</code>.
+                </li>
+                <li>
+                  <strong>Team-Created Pools:</strong> The 5% total fee is parsed as <strong>{teamSplit}</strong>. Since the team deployed the market, the creator yield is absorbed.
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-semibold text-foreground">5. Subjective Oracle Verification and Timeline Constraints</h2>
+              <p className="mt-4">
+                Markets are resolved based on real-world outcomes validated by our designated Team Oracle Wallet (<code>0x6E832252eA4c78068EE109d953724D2762431992</code>). You acknowledge that resolution can only be executed after the block timestamp has surpassed the market's registered <code>marketEndTime</code>. Only the authorized oracle address can settle outcomes, preventing unauthorized actors from executing malicious state changes.
               </p>
             </div>
 
             <div>
-              <h2 className="text-2xl font-semibold text-foreground">User responsibilities</h2>
+              <h2 className="text-2xl font-semibold text-foreground">6. Financial Risks and Technical Disclaimers</h2>
               <p className="mt-4">
-                Users are responsible for ensuring their proposals and trading activities follow applicable laws, platform rules, and the spirit of decentralized governance. Any abusive, misleading, or ambiguous market proposals may be rejected by the committee.
-              </p>
-            </div>
-
-            <div>
-              <h2 className="text-2xl font-semibold text-foreground">Disclaimers</h2>
-              <p className="mt-4">
-                InterPredict is provided as a decentralized marketplace and does not offer financial, legal, or investment advice. The platform is inspired by Polymarket’s transparency and event-driven model, but negotiations and decisions are made by the community through governance and curation mechanisms.
+                InterPredict is a decentralized protocol and does not provide financial, legal, or investment advice. Trading in prediction markets is highly speculative. You can lose 100% of your committed ITL tokens if an outcome does not settle in your favor. All smart contract actions are final, permanent, and completely irreversible.
               </p>
             </div>
           </section>

@@ -1,6 +1,9 @@
 import { BackHomeButton } from '@/components/back-home-button'
 
 export default function PrivacyPolicyPage() {
+  // String definitions to protect the JSX compiler from raw syntax interpretation issues
+  const logNamespace = "interpredict_logs_${walletAddress.toLowerCase()}";
+
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-background py-24">
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
@@ -20,37 +23,48 @@ export default function PrivacyPolicyPage() {
 
           <section className="space-y-8 text-base leading-8 text-muted-foreground">
             <div>
-              <h2 className="text-2xl font-semibold text-foreground">Data collection</h2>
+              <h2 className="text-2xl font-semibold text-foreground font-mono">1. Zero Personally Identifiable Information (PII) Collection</h2>
               <p className="mt-4">
-                InterPredict collects only the data necessary to operate the decentralized marketplace and support user interactions. Because the platform is built on Interlink, many trading and settlement activities are verified through the network rather than centralized user profiles.
+                Because InterPredict is a non-custodial Web3 application, the protocol collects zero PII. We do not maintain traditional centralized databases, and we never collect, store, or transmit your name, email address, physical location, IP address, or private key coordinates. Your identity is strictly represented by your public Interlink wallet address.
               </p>
             </div>
 
             <div>
-              <h2 className="text-2xl font-semibold text-foreground">Decentralized identity and privacy</h2>
+              <h2 className="text-2xl font-semibold text-foreground font-mono">2. Browser LocalStorage Log Persistence</h2>
               <p className="mt-4">
-                Users interact with the platform through decentralized identifiers and wallet-based authentication. We prioritize privacy by minimizing personally identifiable data and using the underlying Interlink primitives for authentication and transaction settlement.
+                To provide a continuous user experience without introducing centralized databases, InterPredict uses your browser's local sandbox memory:
+              </p>
+              <ul className="mt-4 list-disc list-inside space-y-2 text-sm pl-4">
+                <li>
+                  <strong>Wallet Mapping:</strong> Transaction success logs are written directly to your browser's local memory under the namespace: <code>{logNamespace}</code>.
+                </li>
+                <li>
+                  <strong>Local Isolation:</strong> This data remains isolated entirely in your browser cache. It is never transmitted to, stored on, or shared with external servers, tracking services, or team-operated endpoints.
+                </li>
+                <li>
+                  <strong>Session Clearing:</strong> Disconnecting your Web3 wallet immediately clears active logs from the active user interface, preserving client-side privacy.
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-semibold text-foreground font-mono">3. On-Chain Transparency & Public Ledgers</h2>
+              <p className="mt-4">
+                By interacting with our smart contracts, you acknowledge that all platform transactions are public-by-design. Your public wallet address, proposed market descriptions, curation votes, and share wagers are permanently recorded on the public Interlink L1 ledger. This public metadata is necessary to maintain an auditable, trustless, and fair forecasting venue.
               </p>
             </div>
 
             <div>
-              <h2 className="text-2xl font-semibold text-foreground">Market proposal information</h2>
+              <h2 className="text-2xl font-semibold text-foreground font-mono">4. Localized Language Selections</h2>
               <p className="mt-4">
-                Market proposals and governance discussions are public by design, because the platform depends on transparency and shared curation. Users should not submit private or sensitive information within market descriptions or forum discussions.
+                The interface utilizes the browser's <code>localStorage</code> to store your selected application language preference (<code>interpredict_lang</code>). This preference is stored locally on your device to ensure the platform loads in your preferred language upon return.
               </p>
             </div>
 
             <div>
-              <h2 className="text-2xl font-semibold text-foreground">Data use and sharing</h2>
+              <h2 className="text-2xl font-semibold text-foreground font-mono">5. Third-Party Tracker Disclosures</h2>
               <p className="mt-4">
-                The platform uses collected data to support market creation, committee review, and the settlement process. Public market metadata and trade activity are visible on-chain or in platform interfaces, while private account details remain limited to wallet addresses and session metadata.
-              </p>
-            </div>
-
-            <div>
-              <h2 className="text-2xl font-semibold text-foreground">Security and compliance</h2>
-              <p className="mt-4">
-                InterPredict follows best practices for decentralized applications: no centralized storage of secret keys, transparent transaction handling, and user control over wallet connections. Privacy is balanced with the need for a secure, auditable marketplace.
+                Our interface is free from third-party advertising cookie configurations, promotional tracking pixels, and centralized analytic script integrations. We do not sell or monetize your session parameters or trading footprints.
               </p>
             </div>
           </section>

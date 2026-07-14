@@ -29,11 +29,10 @@ interface Web3ContextType {
   placeBetOnChain: (marketId: number, outcome: number, amount: string) => Promise<void>
 }
 
-
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
 
 const INTERLINK_TESTNET_CHAIN_ID = '19042026'
-const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0x2cb350b490A9397AC2f1a2d898612ABDE620b260";
+const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0x75763f550a398c4E08e9bdFc33B34a40B5d5eD1A";
 
 const CONTRACT_ABI = [
   {
@@ -244,6 +243,19 @@ const CONTRACT_ABI = [
   },
   {
     "inputs": [],
+    "name": "DEC_POOL_FEE_BPS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "MARKET_STAKE",
     "outputs": [
       {
@@ -257,7 +269,33 @@ const CONTRACT_ABI = [
   },
   {
     "inputs": [],
-    "name": "PLATFORM_FEE_BPS",
+    "name": "TEAM_BASE_FEE_BPS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "TEAM_EXCLUSIVE_FEE_BPS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "TOTAL_PLATFORM_FEE_BPS",
     "outputs": [
       {
         "internalType": "uint256",
@@ -486,6 +524,26 @@ const CONTRACT_ABI = [
         "type": "uint256"
       },
       {
+        "internalType": "uint8",
+        "name": "state",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "winningOutcome",
+        "type": "uint8"
+      },
+      {
+        "internalType": "address",
+        "name": "creator",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "creatorFeeClaimed",
+        "type": "bool"
+      },
+      {
         "internalType": "uint256",
         "name": "votesForActive",
         "type": "uint256"
@@ -494,6 +552,11 @@ const CONTRACT_ABI = [
         "internalType": "uint256",
         "name": "votesAgainstActive",
         "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "oracleResolutionRequested",
+        "type": "bool"
       }
     ],
     "stateMutability": "view",
@@ -565,6 +628,19 @@ const CONTRACT_ABI = [
     "name": "proposeMarket",
     "outputs": [],
     "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_marketId",
+        "type": "uint256"
+      }
+    ],
+    "name": "requestOracleResolution",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -672,10 +748,9 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [txStatus, setTxStatus] = useState<string | null>(null)
   const [historyLogs, setHistoryLogs] = useState<HistoryRecord[]>([])
-
   const [locale, setLocaleState] = useState<LocaleType>('en')
 
-  // Hydrate language preference from localStorage on boot safely
+  // Hydrate language preference from localStorage safely
   useEffect(() => {
     const savedLocale = localStorage.getItem('interpredict_lang') as LocaleType
     if (savedLocale) setLocaleState(savedLocale)
@@ -686,11 +761,38 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('interpredict_lang', lang)
   }
 
-  // Simple translation look-up function helper
+  // Simple translation look-up helper
   const t = (key: keyof typeof translations['en']) => {
     return translations[locale][key] || translations['en'][key]
   }
 
+  // 💾 Persistent local log-saving system
+  const saveLogToLocalStorage = (
+    wallet: string,
+    logType: HistoryRecord['type'],
+    description: string,
+    detail: string,
+    status: HistoryRecord['status']
+  ) => {
+    const storageKey = `interpredict_logs_${wallet.toLowerCase()}`
+    const existingLogsRaw = localStorage.getItem(storageKey)
+    const logs = existingLogsRaw ? JSON.parse(existingLogsRaw) : []
+
+    const newLog: HistoryRecord = {
+      id: Math.random().toString(36).substring(2, 9).toUpperCase(),
+      type: logType,
+      timestamp: new Date().toLocaleTimeString(),
+      description,
+      detail,
+      status
+    }
+
+    const updatedLogs = [newLog, ...logs]
+    localStorage.setItem(storageKey, JSON.stringify(updatedLogs))
+
+    // Sync React state logs to prevent display mismatch
+    setHistoryLogs(updatedLogs)
+  }
 
   // 🔄 Persistent Hydration Session Loop
   useEffect(() => {
@@ -702,7 +804,15 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
           const cachedConnected = localStorage.getItem('interpredict_connected')
 
           if (accounts.length > 0 && cachedConnected === 'true') {
-            setWalletAddress(accounts[0].address)
+            const activeAddress = accounts[0].address
+            setWalletAddress(activeAddress)
+
+            // Populate persistent logs for this re-connected address instantly
+            const storageKey = `interpredict_logs_${activeAddress.toLowerCase()}`
+            const savedLogs = localStorage.getItem(storageKey)
+            if (savedLogs) {
+              setHistoryLogs(JSON.parse(savedLogs))
+            }
           }
         } catch (e) {
           console.error("Session rehydration skipped:", e)
@@ -714,7 +824,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     if (savedLocale) {
       setLocaleState(savedLocale)
     } else {
-      setLocaleState('en') //English as the application default
+      setLocaleState('en')
       localStorage.setItem('interpredict_lang', 'en')
     }
     checkExistingConnection()
@@ -725,31 +835,27 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined' && (window as any).ethereum) {
       const handleAccountsChanged = (accounts: string[]) => {
         if (accounts.length > 0) {
-          setWalletAddress(accounts[0])
+          const activeAddress = accounts[0]
+          setWalletAddress(activeAddress)
           localStorage.setItem('interpredict_connected', 'true')
+
+          // Reload the specific logs for this new wallet address
+          const storageKey = `interpredict_logs_${activeAddress.toLowerCase()}`
+          const savedLogs = localStorage.getItem(storageKey)
+          setHistoryLogs(savedLogs ? JSON.parse(savedLogs) : [])
         } else {
           setWalletAddress(null)
+          setHistoryLogs([])
           localStorage.removeItem('interpredict_connected')
         }
       }
-        ; (window as any).ethereum.on('accountsChanged', handleAccountsChanged)
+
+      (window as any).ethereum.on('accountsChanged', handleAccountsChanged)
       return () => {
-        ; (window as any).ethereum.removeListener('accountsChanged', handleAccountsChanged)
+        (window as any).ethereum.removeListener('accountsChanged', handleAccountsChanged)
       }
     }
   }, [])
-
-  const appendLog = (type: HistoryRecord['type'], description: string, detail: string, status: HistoryRecord['status']) => {
-    const newLog: HistoryRecord = {
-      id: Math.random().toString(36).substring(2, 9).toUpperCase(),
-      type,
-      description,
-      detail,
-      status,
-      timestamp: new Date().toLocaleTimeString()
-    }
-    setHistoryLogs(prev => [newLog, ...prev])
-  }
 
   const verifyNetwork = async (provider: any) => {
     try {
@@ -792,6 +898,12 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const address = await signer.getAddress()
       setWalletAddress(address)
       localStorage.setItem('interpredict_connected', 'true')
+
+      // Populate logs for the connected wallet
+      const storageKey = `interpredict_logs_${address.toLowerCase()}`
+      const savedLogs = localStorage.getItem(storageKey)
+      setHistoryLogs(savedLogs ? JSON.parse(savedLogs) : [])
+
       setTxStatus("Wallet interface integrated successfully.")
     } catch (err: any) {
       setTxStatus(`Connection Error: ${err.message}`)
@@ -800,6 +912,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
   const disconnectWallet = () => {
     setWalletAddress(null)
+    setHistoryLogs([]) // Clear history on disconnect for privacy
     localStorage.removeItem('interpredict_connected')
     setTxStatus("Wallet session cleared successfully.")
   }
@@ -807,15 +920,9 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const getContractInstance = async () => {
     if (!(window as any).ethereum) throw new Error("Wallet not identified")
 
-    // 1. Instantiate the browser provider to capture the user's active signer credentials
     const walletProvider = new ethers.BrowserProvider((window as any).ethereum)
     const signer = await walletProvider.getSigner()
-
-    // Force a direct fallback provider pointing explicitly to Interlink Testnet RPC URL.
-    // Prevent the Interlink In-App Browser from forcing Chain ID 1 (Ethereum) behavior.
     const testnetProvider = new ethers.JsonRpcProvider("https://evm-rpc.test-net.interlinklabs.ai/v1/rpc")
-
-    // 3. Attach the contract instance using your globally defined variables
     const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer)
 
     return { contract, provider: testnetProvider }
@@ -824,24 +931,20 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const createMarketOnChain = async (description: string): Promise<boolean> => {
     const isTeam = walletAddress?.toLowerCase() === "0x6e832252ea4c78068ee109d953724d2762431992";
     const txType = isTeam ? 'Team Deployment' : 'Market Proposal';
-    const feeText = isTeam ? '0.00 tITL (Bypassed)' : '1.00 tITL'; // 🔄 Updated display text to 1.00 tITL
+    const feeText = isTeam ? '0.00 tITL (Bypassed)' : '1.00 tITL';
 
     try {
       setTxStatus("Broadcasting market initialization payload...")
       const { contract } = await getContractInstance()
-
-      // 🕒 Generate a default 7-day end time timestamp to satisfy the new smart contract parameters
       const marketEndTime = Math.floor(Date.now() / 1000) + (86400 * 7);
 
       let tx;
       if (isTeam) {
-        // 🚀 Team address bypasses the escrow requirement with low gas pricing
         tx = await contract.createActiveMarket(description, marketEndTime, {
           gasLimit: 250000,
           gasPrice: ethers.parseUnits("5", "gwei")
         })
       } else {
-        // 🔄 Adjusted value threshold down to 1.0 ethers with low gas pricing
         tx = await contract.proposeMarket(description, marketEndTime, {
           value: ethers.parseEther("1.0"),
           gasLimit: 250000,
@@ -852,17 +955,21 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       setTxStatus("Awaiting on-chain verification blocks...")
       await tx.wait()
       setTxStatus("Market structure deployed securely to Interlink registry!")
-      appendLog(txType, description, `Success — Fee: ${feeText}`, 'Success')
+
+      if (walletAddress) {
+        saveLogToLocalStorage(walletAddress, txType, description, `Success — Fee: ${feeText}`, 'Success')
+      }
       return true
     } catch (err: any) {
       setTxStatus(`Deployment Cancelled: ${err.message}`)
-      appendLog(txType, description, `Failed — RPC Error or Rejection`, 'Failed')
+      if (walletAddress) {
+        saveLogToLocalStorage(walletAddress, txType, description, `Failed — RPC Error or Rejection`, 'Failed')
+      }
       return false
     }
   }
 
   const [decMembers, setDecMembers] = useState<string[]>([
-    // Prefill with some mock assessor addresses for your presentation demo!
     "0x9A54b9d038eF3c0076c54BD9d60705Da25A12bc4",
     "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"
   ])
@@ -870,13 +977,9 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const joinDecOnChain = async (): Promise<boolean> => {
     try {
       setTxStatus("Reading native node balance parameters...")
-      const { contract, provider } = await getContractInstance()
-
-      const balance = await provider.getBalance(walletAddress!);
+      const { contract } = await getContractInstance()
 
       setTxStatus("Processing DEC Committee registration payment...")
-
-      // 🔄 Injected low gasPrice configuration to cap transaction fees safely
       const tx = await contract.joinCommittee({
         value: ethers.parseEther("0.1"),
         gasLimit: 250000,
@@ -886,50 +989,77 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
       setTxStatus("Node verified! Welcome to the Decentralized Curation Committee.")
 
-      // 🔄 Swapped type back to 'Committee Bond' to clear the TypeScript error matrix
-      appendLog('Committee Bond', 'Request to join DEC Committee', 'Success — 0.10 tITL routed to treasury registry contract', 'Success')
-
-      // 👥Append the current user's address to the DEC members state directory
       if (walletAddress) {
+        saveLogToLocalStorage(
+          walletAddress,
+          'Committee Bond',
+          'Request to join DEC Committee',
+          'Success — 0.10 tITL routed to treasury registry contract',
+          'Success'
+        )
         setDecMembers((prev) => [...prev, walletAddress])
       }
 
       return true
     } catch (err: any) {
       setTxStatus(`Verification Cancelled: ${err.message}`)
-      appendLog('Committee Bond', 'Request to join DEC Committee', 'Failed — Transaction execution terminated', 'Failed')
+      if (walletAddress) {
+        saveLogToLocalStorage(
+          walletAddress,
+          'Committee Bond',
+          'Request to join DEC Committee',
+          'Failed — Transaction execution terminated',
+          'Failed'
+        )
+      }
       return false
     }
   }
+
   const castVoteOnChain = async (marketId: number, support: boolean) => {
     const ballotText = support ? 'Voted FOR' : 'Voted AGAINST';
     try {
       setTxStatus("Transmitting curation consensus weight...")
       const { contract } = await getContractInstance()
 
-      // 🔄 Fixed: Added low gasPrice configuration to protect your token balance
       const tx = await contract.voteOnCuration(marketId, support, {
         gasLimit: 250000,
         gasPrice: ethers.parseUnits("5", "gwei")
       })
       await tx.wait()
       setTxStatus("Ballot updated successfully on-chain.")
-      appendLog('Governance Vote', `Vote cast on Proposal ID #${marketId}`, `Success — ${ballotText}`, 'Success')
+
+      if (walletAddress) {
+        saveLogToLocalStorage(
+          walletAddress,
+          'Governance Vote',
+          `Vote cast on Proposal ID #${marketId}`,
+          `Success — ${ballotText}`,
+          'Success'
+        )
+      }
     } catch (err: any) {
       setTxStatus(`Voting Error: ${err.message}`)
-      appendLog('Governance Vote', `Vote cast on Proposal ID #${marketId}`, `Failed — ${err.message.slice(0, 40)}...`, 'Failed')
+      if (walletAddress) {
+        saveLogToLocalStorage(
+          walletAddress,
+          'Governance Vote',
+          `Vote cast on Proposal ID #${marketId}`,
+          `Failed — ${err.message.slice(0, 40)}...`,
+          'Failed'
+        )
+      }
     }
   }
 
   const placeBetOnChain = async (marketId: number, outcome: number, amount: string) => {
     const targetSide = outcome === 0 ? 'YES' : 'NO';
-    const isYes = outcome === 0; // Convert the number index to a clean boolean for the new contract signature
+    const isYes = outcome === 0;
 
     try {
       setTxStatus("Transmitting position collateral payload...")
       const { contract } = await getContractInstance()
 
-      // 🔄 Fixed: Added low gasPrice configuration to protect your token balance
       const tx = await contract.buyShares(marketId, isYes, {
         value: ethers.parseEther(amount),
         gasLimit: 250000,
@@ -937,10 +1067,27 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       })
       await tx.wait()
       setTxStatus("Trade position logged securely inside on-chain pool matrix!")
-      appendLog('Market Trade', `Wager placed on Pool #${marketId}`, `Success — Predicted ${targetSide} with ${amount} tITL`, 'Success')
+
+      if (walletAddress) {
+        saveLogToLocalStorage(
+          walletAddress,
+          'Market Trade',
+          `Wager placed on Pool #${marketId}`,
+          `Success — Predicted ${targetSide} with ${amount} tITL`,
+          'Success'
+        )
+      }
     } catch (err: any) {
       setTxStatus(`Execution Error: ${err.message}`)
-      appendLog('Market Trade', `Wager placed on Pool #${marketId}`, `Failed — ${targetSide} allocation timed out`, 'Failed')
+      if (walletAddress) {
+        saveLogToLocalStorage(
+          walletAddress,
+          'Market Trade',
+          `Wager placed on Pool #${marketId}`,
+          `Failed — ${targetSide} allocation timed out`,
+          'Failed'
+        )
+      }
     }
   }
 

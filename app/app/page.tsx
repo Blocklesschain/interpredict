@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useWeb3 } from '../context/Web3Context'
 import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Image as ImageIcon, Cpu } from 'lucide-react'
 import { Logo } from '@/components/logo'
@@ -28,6 +28,22 @@ export default function DAppPortal() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const ADMIN_ADDRESS = "0x6e832252ea4c78068ee109d953724d2762431992"
+
+  // 💾 Recover or initialize persistent wallet-mapped logs from localStorage
+  const [persistentLogs, setPersistentLogs] = useState<any[]>([])
+
+  useEffect(() => {
+    if (walletAddress) {
+      const savedLogs = localStorage.getItem(`interpredict_logs_${walletAddress.toLowerCase()}`)
+      if (savedLogs) {
+        setPersistentLogs(JSON.parse(savedLogs))
+      } else {
+        setPersistentLogs(historyLogs)
+      }
+    } else {
+      setPersistentLogs([])
+    }
+  }, [walletAddress, historyLogs])
 
   const getVisibleTabs = (): TabType[] => {
     if (!walletAddress) return ['MarketPlace', 'Pending Markets']
@@ -114,13 +130,13 @@ export default function DAppPortal() {
     await placeBetOnChain(marketId, outcomeIndex, stakeAmount)
   }
 
-  // 📡 New: Frontend trigger for contract's automated Oracle compilation layer
+  // 📡 Trigger frontend notification for oracle request status
   const triggerAutomatedOracle = async (marketId: number) => {
     if (!walletAddress) return;
     try {
-      // If you've connected this handler to your Web3Context contract pipeline wrapper:
-      // await requestOracleResolutionOnChain(marketId)
       setOracleRequested(true)
+      // Connect to context logic if needed:
+      // await requestOracleResolutionOnChain(marketId)
     } catch (err) {
       console.error(err)
     }
@@ -297,17 +313,33 @@ export default function DAppPortal() {
                   <div className="pt-3 border-t border-purple-950/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-[11px] font-mono text-slate-400">
                     <span>Deadline: {endDate}</span>
 
-                    <button
-                      onClick={() => triggerAutomatedOracle(0)}
-                      disabled={oracleRequested}
-                      className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all border ${oracleRequested
-                        ? 'bg-purple-950/20 border-purple-900/50 text-purple-400 cursor-not-allowed animate-pulse'
-                        : 'bg-primary/10 border-primary/30 text-primary hover:bg-primary hover:text-white'
-                        }`}
-                    >
-                      <Cpu className="size-3" />
-                      <span>{oracleRequested ? 'Oracle Processing...' : 'Ping Oracle Resolution'}</span>
-                    </button>
+                    {(() => {
+                      // ⏱️ Determine if current day has surpassed the defined target deadline
+                      const deadlinePassed = new Date().getTime() >= new Date(endDate).getTime();
+
+                      return (
+                        <button
+                          onClick={() => triggerAutomatedOracle(0)}
+                          disabled={!deadlinePassed || oracleRequested}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all border ${!deadlinePassed
+                            ? 'bg-slate-900/30 border-slate-800/80 text-slate-500 cursor-not-allowed' // 🔒 Grayed out & locked before timeline closes
+                            : oracleRequested
+                              ? 'bg-purple-950/20 border-purple-900/50 text-purple-400 cursor-not-allowed animate-pulse'
+                              : 'bg-primary/10 border-primary/30 text-primary hover:bg-primary hover:text-white' // 🚀 Active once deadline passes
+                            }`}
+                          title={!deadlinePassed ? "Available once market deadline passes" : "Submit request to official oracle"}
+                        >
+                          <Cpu className="size-3" />
+                          <span>
+                            {!deadlinePassed
+                              ? 'Market Active'
+                              : oracleRequested
+                                ? 'Oracle Processing...'
+                                : 'Ping Oracle Resolution'}
+                          </span>
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -484,13 +516,13 @@ export default function DAppPortal() {
                   {t('ledgerTitle')}
                 </h4>
 
-                {historyLogs.length === 0 ? (
+                {persistentLogs.length === 0 ? (
                   <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">
                     {t('noLogs')}
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {historyLogs.map((log) => (
+                    {persistentLogs.map((log) => (
                       <div key={log.id} className="bg-black/30 border border-purple-950/60 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">

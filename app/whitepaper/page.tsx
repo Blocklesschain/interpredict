@@ -1,420 +1,342 @@
+'use client'
+
 import { BackHomeButton } from "@/components/back-home-button"
 
 export default function WhitepaperPage() {
+  // Safe string declarations to protect the Next.js JSX compiler from parsing errors
+  const rejectRatio = "10% / 90%";
+  const totalFeePct = "5.0%";
+  const baseSplit = "2.0% (DEC) / 2.0% (Team) / 1.0% (Creator)";
+  const teamSplit = "2.0% (DEC) / 3.0% (Team)";
+  const voteCondition = "votesForActive >= votesAgainstActive && votesForActive > 0";
+  const timeCondition = "block.timestamp >= market.marketEndTime";
+
   return (
-    <main className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5">
-      <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
-        {/* Header */}
+    <main className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 py-12">
+      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+
+        {/* Header Section */}
         <div className="mb-12">
           <BackHomeButton />
-          <h1 className="mt-8 text-5xl font-bold tracking-tight text-foreground sm:text-6xl">
+          <h1 className="mt-8 text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl font-mono">
             InterPredict Whitepaper
           </h1>
-          <p className="mt-4 text-xl text-muted-foreground">
-            A Decentralized Prediction Marketplace with Community-Led Curation
+          <p className="mt-4 text-xl text-muted-foreground font-mono">
+            A Native-L1 Prediction Marketplace with Decentralized Sybil-Resistant Curation
           </p>
-          <p className="mt-3 text-sm text-muted-foreground italic">
-            Version 1.0 (First Release) — This whitepaper describes the initial architecture and vision of InterPredict. As our protocol evolves, this document will be updated to reflect new features, improvements, and community feedback.
+          <p className="mt-3 text-xs text-muted-foreground italic border-l-2 border-primary pl-4">
+            Version 2.0 (Technical Release) — This whitepaper details the immutable protocol parameters,
+            mathematical payout distributions, and game-theoretic staking mechanisms implemented in the InterPredict contract.
           </p>
         </div>
 
         {/* Table of Contents */}
         <div className="mb-12 rounded-xl border border-border bg-secondary/30 p-8 backdrop-blur">
-          <h2 className="mb-6 text-2xl font-bold text-foreground">Table of Contents</h2>
-          <ul className="space-y-3 text-foreground">
-            <li>1. Executive Summary</li>
-            <li>2. Introduction & Problem Statement</li>
-            <li>3. Core Architecture & Design Philosophy</li>
-            <li>4. Market Mechanism & Trading Model</li>
-            <li>5. Decentralized Governance & Curation Committee</li>
-            <li>6. Market Lifecycle & Settlement</li>
-            <li>7. Interlink Network Integration</li>
-            <li>8. Security & Risk Management</li>
-            <li>9. Roadmap & Future Enhancements</li>
-            <li>10. Conclusion</li>
+          <h2 className="mb-6 text-2xl font-bold text-foreground font-mono">Table of Contents</h2>
+          <ul className="space-y-3 text-sm text-muted-foreground font-mono">
+            <li><span className="text-primary">1.</span> Executive Summary</li>
+            <li><span className="text-primary">2.</span> Introduction & Problem Statement</li>
+            <li><span className="text-primary">3.</span> Core Architecture & EVM Storage Map</li>
+            <li><span className="text-primary">4.</span> Pari-Mutuel Market Mechanism & Trading Model</li>
+            <li><span className="text-primary">5.</span> Decentralized Governance & Curation Committee (DEC)</li>
+            <li><span className="text-primary">6.</span> Market Lifecycle & Oracle Settlement</li>
+            <li><span className="text-primary">7.</span> Interlink Network Integration & tITL Economics</li>
+            <li><span className="text-primary">8.</span> Security, Access Guards & Risk Management</li>
+            <li><span className="text-primary">9.</span> Roadmap & Future Enhancements</li>
+            <li><span className="text-primary">10.</span> Conclusion & Call to Action</li>
           </ul>
         </div>
 
-        {/* Executive Summary */}
+        {/* 1. Executive Summary */}
         <section className="mb-12">
-          <h2 className="mb-6 text-3xl font-bold text-foreground">1. Executive Summary</h2>
-          <p className="mb-4 text-foreground">
-            InterPredict is a decentralized prediction marketplace that leverages blockchain technology and community governance to create transparent, permissionless prediction markets. Unlike centralized platforms, InterPredict places market curation and oversight in the hands of a diverse governance committee, ensuring that market creation and management reflect community values rather than corporate interests.
+          <h2 className="mb-6 text-3xl font-bold text-foreground font-mono border-b border-border pb-2">1. Executive Summary</h2>
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            InterPredict is an autonomous, peer-to-peer binary oracle and prediction protocol operating natively on the Interlink Layer 1 blockchain.
+            By building directly on Interlink, the protocol leverages a sovereign gas-efficient EVM execution environment and native identity registers to create a censorship-resistant forecasting venue.
           </p>
-          <p className="mb-4 text-foreground">
-            The protocol enables users to create, fund, and trade on binary prediction markets for real-world events. Each market's lifecycle is managed by a decentralized committee of curators who evaluate market legitimacy, enforce resolution rules, and dispute outcomes. This model combines the efficiency of prediction markets with the transparency and resilience of decentralized systems.
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            The platform eliminates the need for external wrapped stablecoins, functioning entirely with native <strong>ITL</strong> as its single asset for collateral, trading, and security stakes.
+            Furthermore, the protocol leverages Interlink's Proof of Humanity (PoH) framework to power its Decentralized Ecosystem Curation (DEC) Committee on a Sybil-resistant, "one-human-one-vote" basis, matching market integrity with true decentralization.
           </p>
-          <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
-            <p><strong>Key Metrics (Version 1.0):</strong> Support for binary outcome markets, committee-based dispute resolution, real-time price discovery through CLOB mechanics, and seamless Interlink network integration.</p>
+          <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4 text-xs text-muted-foreground font-mono">
+            <p className="font-bold text-foreground mb-1">CORE PROTOCOL PARAMETERS:</p>
+            <ul className="space-y-1">
+              <li>• Native Currency: ITL (Native Interlink Token)</li>
+              <li>• Proposal Security Stake: 1.00 ITL (MARKET_STAKE)</li>
+              <li>• Curation Windows: 24 Hours (VOTING_DURATION = 1 day)</li>
+              <li>• Rejected Proposal Penalty: {rejectRatio} Split (10% to Team, 90% Refunded)</li>
+              <li>• Platform Fee Rate: {totalFeePct} Flat (Deducted from winning payouts only)</li>
+            </ul>
           </div>
         </section>
 
-        {/* Introduction */}
+        {/* 2. Introduction */}
         <section className="mb-12">
-          <h2 className="mb-6 text-3xl font-bold text-foreground">2. Introduction & Problem Statement</h2>
+          <h2 className="mb-6 text-3xl font-bold text-foreground font-mono border-b border-border pb-2">2. Introduction & Problem Statement</h2>
 
-          <h3 className="mb-4 text-xl font-semibold text-foreground">2.1 Current Limitations of Centralized Prediction Markets</h3>
-          <p className="mb-4 text-foreground">
-            Existing prediction markets rely on centralized operators to manage market creation, curation, and dispute resolution. This creates several challenges:
+          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">2.1 Current Bottlenecks in Decentralized Prediction Markets</h3>
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            First-generation decentralized prediction platforms face severe architectural bottlenecks that hinder retail adoption and compromise decentralization:
           </p>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>Centralized Control:</strong> Market operators have discretionary power over which events are listed and how disputes are resolved.</li>
-            <li><strong>Censorship Risk:</strong> Platforms can remove markets or restrict access based on regulatory or commercial pressures.</li>
-            <li><strong>Limited Transparency:</strong> Users have limited visibility into how resolution decisions are made.</li>
-            <li><strong>Jurisdictional Constraints:</strong> Markets may be unavailable in certain regions due to regulatory concerns.</li>
+          <ul className="mb-6 space-y-3 text-sm text-muted-foreground pl-4 list-disc">
+            <li>
+              <strong>Collateral Frictional Drag:</strong> Reliance on wrapped stablecoins (e.g., USDC/USDT) forces users to interact with complex cross-chain bridges, resulting in friction, wrapping fees, and exposure to third-party smart contract risks.
+            </li>
+            <li>
+              <strong>Sybil Vulnerability:</strong> Standard governance frameworks weight votes by financial holdings. This allows wealthy actors ("whales") to manipulate market listings, bias resolution outcomes, and centralize curation control.
+            </li>
+            <li>
+              <strong>Opaque Resolution Pathways:</strong> Resolving controversial events often relies on complex, expensive off-chain oracle queries, which can lead to delayed payouts and security issues.
+            </li>
           </ul>
 
-          <h3 className="mb-4 text-xl font-semibold text-foreground">2.2 InterPredict's Solution</h3>
-          <p className="mb-4 text-foreground">
-            InterPredict addresses these challenges through a decentralized governance model where:
+          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">2.2 The InterPredict Paradigm Shift</h3>
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            InterPredict addresses these vulnerabilities directly at the smart contract level:
           </p>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>Community Curation:</strong> A diverse committee of curators votes on market proposals and resolution outcomes.</li>
-            <li><strong>Transparent Dispute Resolution:</strong> All voting and dispute records are recorded on-chain and publicly auditable.</li>
-            <li><strong>Permissionless Market Creation:</strong> Any user can propose a market; the community decides its legitimacy.</li>
-            <li><strong>Decentralized Infrastructure:</strong> The protocol operates without reliance on a single operator or intermediary.</li>
+          <ul className="mb-6 space-y-3 text-sm text-muted-foreground pl-4 list-disc">
+            <li>
+              <strong>Native L1 Asset Integration:</strong> Trading, staking, and payout operations are handled entirely using native ITL, keeping transactions low-cost and secure.
+            </li>
+            <li>
+              <strong>Identity-Bound Curation:</strong> By checking active registry memberships, the protocol ensures that curation remains democratic, transparent, and highly resistant to Sybil manipulation.
+            </li>
+            <li>
+              <strong>Algorithmic Curation Safeguards:</strong> A strict 24-hour curation model penalizes spam proposals with a 10% penalty, protecting the platform from low-quality listings.
+            </li>
           </ul>
         </section>
 
-        {/* Core Architecture */}
+        {/* 3. Core Architecture & EVM Storage Map */}
         <section className="mb-12">
-          <h2 className="mb-6 text-3xl font-bold text-foreground">3. Core Architecture & Design Philosophy</h2>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">3.1 Design Principles</h3>
-          <p className="mb-4 text-foreground">
-            InterPredict is built on four core principles:
+          <h2 className="mb-6 text-3xl font-bold text-foreground font-mono border-b border-border pb-2">3. Core Architecture & EVM Storage Map</h2>
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            The core protocol logic is deployed within a single, optimized smart contract (<code>InterPredict.sol</code>). To minimize gas fees on the Interlink network, the central struct layout is tightly packed to reduce state-write overhead:
           </p>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>Decentralization:</strong> All critical functions are managed through on-chain governance, not centralized servers.</li>
-            <li><strong>Transparency:</strong> Market data, voting records, and settlement logic are publicly verifiable on the blockchain.</li>
-            <li><strong>Community Governance:</strong> Market curation and dispute resolution are driven by community voting, not corporate decisions.</li>
-            <li><strong>Composability:</strong> Built on standard smart contracts and the Interlink network for seamless integration with other protocols.</li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">3.2 System Components</h3>
-          <div className="space-y-4">
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <h4 className="mb-2 font-semibold text-foreground">Smart Contracts Layer</h4>
-              <p className="text-muted-foreground">
-                Core contracts handle market creation, order settlement, fund management, and governance voting. All contracts are auditable and upgradeable through community governance.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <h4 className="mb-2 font-semibold text-foreground">Governance Layer</h4>
-              <p className="text-muted-foreground">
-                The Committee operates through a multi-signature model with on-chain voting. Committee members are selected based on reputation, domain expertise, and community trust.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <h4 className="mb-2 font-semibold text-foreground">Trading & Settlement Engine</h4>
-              <p className="text-muted-foreground">
-                Uses an order book model (similar to CLOB implementations) for price discovery and efficient trade matching. Automatic settlement through smart contracts.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <h4 className="mb-2 font-semibold text-foreground">Oracle & Data Layer</h4>
-              <p className="text-muted-foreground">
-                Integrates with trusted oracle providers and manual data feeds verified by the committee to ensure accurate market resolution.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <h4 className="mb-2 font-semibold text-foreground">Interlink Integration Layer</h4>
-              <p className="text-muted-foreground">
-                Bridges to the Interlink network to enable cross-chain liquidity, unified identity, and protocol composability.
-              </p>
-            </div>
-          </div>
+          <pre className="p-4 bg-secondary/40 rounded-xl border border-border text-xs text-purple-300 font-mono overflow-x-auto mb-6">
+            {`struct Market {
+    uint256 id;                          // Slot 0 (32 bytes)
+    string question;                     // Slot 1-2 (Dynamic size string pointer)
+    uint256 marketEndTime;               // Slot 3 (32 bytes - Unix timestamp)
+    uint256 votingEndTime;               // Slot 4 (32 bytes - Unix timestamp)
+    uint256 totalYesPool;                // Slot 5 (32 bytes - Wager sum in wei)
+    uint256 totalNoPool;                 // Slot 6 (32 bytes - Wager sum in wei)
+    MarketState state;                   // Slot 7 (1 byte - Enum value 0-2)
+    Outcome winningOutcome;              // Slot 7 (1 byte - Enum value 0-2)
+    address creator;                     // Slot 7 (20 bytes - Creator's EVM address)
+    bool creatorFeeClaimed;              // Slot 7 (1 byte - Flag tracker)
+    bool oracleResolutionRequested;      // Slot 7 (1 byte - Prevent spam vector)
+    uint256 votesForActive;              // Slot 8 (32 bytes - Curation support count)
+    uint256 votesAgainstActive;          // Slot 9 (32 bytes - Curation reject count)
+}`}
+          </pre>
+          <p className="text-muted-foreground leading-relaxed text-xs italic">
+            Note: In Slot 7, the values of state, winningOutcome, creator, creatorFeeClaimed, and oracleResolutionRequested
+            are packed together into a single 32-byte slot by the compiler, reducing gas consumption for state operations.
+          </p>
         </section>
 
-        {/* Market Mechanism */}
+        {/* 4. Market Mechanism */}
         <section className="mb-12">
-          <h2 className="mb-6 text-3xl font-bold text-foreground">4. Market Mechanism & Trading Model</h2>
+          <h2 className="mb-6 text-3xl font-bold text-foreground font-mono border-b border-border pb-2">4. Pari-Mutuel Market Mechanism & Trading Model</h2>
 
-          <h3 className="mb-4 text-xl font-semibold text-foreground">4.1 Binary Outcome Markets</h3>
-          <p className="mb-4 text-foreground">
-            InterPredict Version 1.0 focuses on binary prediction markets where outcomes are resolved to either YES or NO. Each market consists of two conditional tokens:
+          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">4.1 Binary Share Mechanics</h3>
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            Each proposed prediction market is structured around a clear, binary question with two outcomes: YES and NO.
+            Trading does not require external market makers; instead, a non-custodial pari-mutuel matching model dynamically adjusts share prices based on the ratio of committed capital.
           </p>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>YES Token:</strong> Represents a bet that the predicted event will occur.</li>
-            <li><strong>NO Token:</strong> Represents a bet that the predicted event will not occur.</li>
-          </ul>
 
-          <h3 className="mb-4 text-xl font-semibold text-foreground">4.2 Trading Mechanics</h3>
-          <p className="mb-4 text-foreground">
-            InterPredict employs a Central Limit Order Book (CLOB) model for decentralized price discovery, similar to advanced platforms like Polymarket:
+          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">4.2 Proportional Payout Math Engine</h3>
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            Payout claims are processed entirely on-chain through the <code>claimPayout()</code> function. To prevent rounding and division errors in Solidity, all multiplication actions are executed prior to division:
           </p>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>Order Placement:</strong> Users submit buy or sell orders for YES/NO tokens at specified prices and quantities.</li>
-            <li><strong>Price Discovery:</strong> Market prices are determined through open competition between buyers and sellers.</li>
-            <li><strong>Order Matching:</strong> Orders are matched when buy and sell prices overlap, enabling instant settlement.</li>
-            <li><strong>Liquidity:</strong> Market makers can provide liquidity by maintaining both buy and sell orders across multiple price levels.</li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">4.3 Market Lifecycle Stages</h3>
-          <div className="space-y-3 mb-6">
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">Stage 1: Proposal</p>
-              <p className="text-muted-foreground text-sm">Any user can propose a new market by specifying the event, resolution criteria, and market parameters (deadline, initial funding).</p>
+          <div className="p-6 bg-secondary/30 rounded-xl border border-border mb-6 font-mono text-xs space-y-4">
+            <div className="border-l-2 border-primary pl-4 py-1">
+              <span className="text-purple-400 font-bold">Winning YES Payout:</span>
+              <p className="text-slate-300 mt-1">{"Payout = (UserYesShares * TotalPool) / TotalYesPool"}</p>
             </div>
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">Stage 2: Committee Review</p>
-              <p className="text-muted-foreground text-sm">The Governance Committee reviews the proposal, validates event legitimacy, checks for duplicates, and votes to approve or reject.</p>
+            <div className="border-l-2 border-primary pl-4 py-1">
+              <span className="text-purple-400 font-bold">Winning NO Payout:</span>
+              <p className="text-slate-300 mt-1">{"Payout = (UserNoShares * TotalPool) / TotalNoPool"}</p>
             </div>
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">Stage 3: Trading</p>
-              <p className="text-muted-foreground text-sm">Approved markets become live. Users can trade YES/NO tokens freely until the market's event deadline is reached.</p>
-            </div>
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">Stage 4: Resolution</p>
-              <p className="text-muted-foreground text-sm">After the deadline, the Committee reviews evidence and votes to resolve the market to YES or NO. Winning tokens are redeemed at full value ($1.00); losing tokens expire worthless.</p>
-            </div>
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">Stage 5: Settlement</p>
-              <p className="text-muted-foreground text-sm">Users redeem winning tokens. Funds are distributed and the market closes. All transaction data is permanently recorded on-chain.</p>
+            <div className="border-l-2 border-primary pl-4 py-1">
+              <span className="text-purple-400 font-bold">DRAW/Refund Settlement (100% Capital Recovery):</span>
+              <p className="text-slate-300 mt-1">{"Payout = UserYesShares + UserNoShares"}</p>
             </div>
           </div>
 
-          <h3 className="mb-4 text-xl font-semibold text-foreground">4.4 Pricing Model</h3>
-          <p className="mb-4 text-foreground">
-            Market prices reflect the probability of outcomes as determined by supply and demand. A YES token price of $0.65 implies a 65% probability of that outcome occurring. The sum of YES and NO token prices equals $1.00 at settlement, creating a coherent pricing framework.
+          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">4.3 The Flat 5.0% Fee-Splitting Matrix</h3>
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            To ensure the protocol remains self-sustaining, a flat 5.0% fee is applied to winning payouts.
+            The contract dynamically splits this fee based on who created the market:
           </p>
-        </section>
-
-        {/* Governance */}
-        <section className="mb-12">
-          <h2 className="mb-6 text-3xl font-bold text-foreground">5. Decentralized Governance & Curation Committee</h2>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">5.1 Committee Structure - InterPredict's Unique Advantage</h3>
-          <p className="mb-4 text-foreground">
-            Unlike centralized platforms with opaque decision-making, the InterPredict Governance Committee operates with full transparency and accountability. Committee members are selected based on:
-          </p>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>Domain Expertise:</strong> Deep knowledge in prediction markets, finance, or specific event domains.</li>
-            <li><strong>Community Reputation:</strong> Recognition within the prediction market and broader blockchain communities.</li>
-            <li><strong>Alignment with Protocol Values:</strong> Commitment to fairness, transparency, and decentralization.</li>
-            <li><strong>Diversity:</strong> Geographic, professional, and ideological diversity to ensure balanced decision-making.</li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">5.2 Committee Responsibilities</h3>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>Market Proposal Review:</strong> Evaluate proposed markets for clarity, legitimacy, and potential manipulation.</li>
-            <li><strong>Duplicate Detection:</strong> Identify and consolidate redundant market proposals.</li>
-            <li><strong>Market Resolution:</strong> Review evidence at event deadlines and vote on correct outcomes.</li>
-            <li><strong>Dispute Arbitration:</strong> Handle appeals and contested resolutions through transparent voting processes.</li>
-            <li><strong>Protocol Governance:</strong> Vote on upgrades, parameter changes, and community proposals.</li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">5.3 Voting Mechanism</h3>
-          <p className="mb-4 text-foreground">
-            Committee decisions use multi-signature contracts with weighted voting:
-          </p>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>Vote Weight:</strong> Each committee member has equal vote weight; decisions require a supermajority (66%+) to pass.</li>
-            <li><strong>Transparency:</strong> All votes are recorded on-chain and publicly visible for anyone to audit.</li>
-            <li><strong>Appeal Process:</strong> Contested votes can be appealed to the full committee for reconsideration.</li>
-            <li><strong>Timelock:</strong> Governance changes are subject to a timelock period, allowing the community time to review and challenge decisions.</li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">5.4 Committee Accountability</h3>
-          <p className="mb-4 text-foreground">
-            Unlike centralized platforms, the Committee is accountable to the protocol and community:
-          </p>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>Reputation Scoring:</strong> Committee member performance is tracked; consistent misconduct results in removal.</li>
-            <li><strong>Community Oversight:</strong> Users can flag suspicious decisions for community review and appeal.</li>
-            <li><strong>Rotating Membership:</strong> Committee seats rotate to prevent concentration of power.</li>
-            <li><strong>Public Records:</strong> All committee decisions and reasoning are permanently recorded on-chain.</li>
+          <ul className="mb-6 space-y-3 text-sm text-muted-foreground pl-4 list-disc">
+            <li>
+              <strong>For Community-Created Markets:</strong> The 5.0% fee is split as <strong>{baseSplit}</strong>.
+              The 1.0% creator yield is held in escrow and can be claimed by the creator via <code>claimCreatorYield()</code> once the market is resolved.
+            </li>
+            <li>
+              <strong>For Team-Created Markets:</strong> The 5.0% fee is split as <strong>{teamSplit}</strong>.
+              Since the team deployed the market, the creator yield is absorbed.
+            </li>
           </ul>
         </section>
 
-        {/* Settlement */}
+        {/* 5. Governance */}
         <section className="mb-12">
-          <h2 className="mb-6 text-3xl font-bold text-foreground">6. Market Lifecycle & Settlement</h2>
+          <h2 className="mb-6 text-3xl font-bold text-foreground font-mono border-b border-border pb-2">5. Decentralized Governance & Curation Committee (DEC)</h2>
 
-          <h3 className="mb-4 text-xl font-semibold text-foreground">6.1 Settlement Process</h3>
-          <p className="mb-4 text-foreground">
-            Settlement occurs automatically through smart contracts following Committee resolution votes:
+          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">5.1 Committee Onboarding & Sybil Defenses</h3>
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            To participate in the curation committee, users join by calling <code>joinCommittee()</code> and staking exactly <strong>0.10 ITL</strong>.
+            This registration fee is routed to the Team Treasury Wallet to prevent automated script spam.
+            By design, the protocol limits curation power to one vote per verified user, ensuring a fair and democratic curation process.
           </p>
-          <ol className="mb-6 space-y-2 text-foreground list-decimal list-inside">
-            <li>Committee reviews event evidence and votes on outcome</li>
-            <li>If votes meet quorum and supermajority threshold, outcome is finalized on-chain</li>
-            <li>Winning tokens are marked redeemable; losing tokens are invalidated</li>
-            <li>Users redeem winning tokens for $1.00 each directly from the contract</li>
-            <li>Market enters closed state; historical data is archived</li>
-          </ol>
 
-          <h3 className="mb-4 text-xl font-semibold text-foreground">6.2 Dispute Resolution</h3>
-          <p className="mb-4 text-foreground">
-            If Committee members disagree or external parties dispute a resolution, a formal dispute process is initiated:
+          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">5.2 The 10% / 90% Proposal Rejection Penalty</h3>
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            When proposing a market, users must deposit a stake of exactly 1.00 ITL. This proposal stake triggers a 24-hour curation window:
           </p>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>Dispute Submission:</strong> Disputers provide evidence and reasoning to challenge the initial resolution.</li>
-            <li><strong>Committee Reconsideration:</strong> The full Committee reviews the dispute with fresh evidence.</li>
-            <li><strong>Supermajority Override:</strong> If 75%+ of Committee votes to overturn, the market is re-resolved.</li>
-            <li><strong>Final Appeal:</strong> Unresolved disputes may be escalated to a protocol-wide vote (planned for Version 2.0).</li>
+          <ul className="mb-6 space-y-3 text-sm text-muted-foreground pl-4 list-disc">
+            <li>
+              <strong>If Approved:</strong> The market is opened for public trading, and the 1.00 ITL stake remains locked in escrow.
+            </li>
+            <li>
+              <strong>If Rejected:</strong> To deter spam, the contract enforces a strict <strong>{rejectRatio}</strong> split.
+              A 10% penalty (0.10 ITL) is sent to the Team Treasury to support governance operations, and the remaining 90% (0.90 ITL) is returned to the creator.
+            </li>
           </ul>
 
-          <h3 className="mb-4 text-xl font-semibold text-foreground">6.3 Data Integrity & Auditability</h3>
-          <p className="mb-4 text-foreground">
-            All market events—creation, trading, voting, settlement—are recorded immutably on-chain, enabling:
+          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">5.3 Programmatic Curator Payouts</h3>
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            Active committee members receive a pro-rata share of the 2.0% curation fee accumulated in the global <code>decPool</code>.
+            Members can claim their rewards by calling <code>claimDecRewards()</code>, which tracks claims individually to prevent double-spending.
           </p>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li>Full historical audit trails for regulatory compliance</li>
-            <li>Transparent market analytics and price history</li>
-            <li>Community verification of Committee decisions</li>
-            <li>Algorithmic manipulation detection</li>
-          </ul>
         </section>
 
-        {/* Interlink */}
+        {/* 6. Settlement */}
         <section className="mb-12">
-          <h2 className="mb-6 text-3xl font-bold text-foreground">7. Interlink Network Integration - Our Differentiator</h2>
+          <h2 className="mb-6 text-3xl font-bold text-foreground font-mono border-b border-border pb-2">6. Market Lifecycle & Oracle Settlement</h2>
 
-          <h3 className="mb-4 text-xl font-semibold text-foreground">7.1 Interlink as Core Infrastructure</h3>
-          <p className="mb-4 text-foreground">
-            InterPredict leverages the Interlink network to achieve unprecedented liquidity aggregation and protocol composability—capabilities that centralized platforms cannot offer:
-          </p>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>Cross-Chain Liquidity:</strong> Pool liquidity from multiple blockchains into unified InterPredict markets without centralized intermediaries.</li>
-            <li><strong>Unified Identity:</strong> Users maintain a single identity across the Interlink network without separate account creation or KYC processes for each chain.</li>
-            <li><strong>Atomic Settlement:</strong> Trades settle instantly across chains through Interlink's cross-chain messaging, eliminating counterparty risk.</li>
-            <li><strong>Protocol Composability:</strong> Other protocols can build derivatives or hedge instruments on InterPredict markets, creating an entire ecosystem.</li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">7.2 Liquidity Aggregation Architecture</h3>
-          <p className="mb-4 text-foreground">
-            InterPredict maintains interconnected order books across Interlink-connected chains:
-          </p>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li>Each market has a primary order book on the settlement chain</li>
-            <li>Secondary replicas on high-liquidity chains enable local trading with minimal latency</li>
-            <li>Interlink relayers synchronize orders across chains in near real-time</li>
-            <li>Price discovery occurs across all chains simultaneously, ensuring arbitrage-free pricing</li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">7.3 Future Vision: Inter-Market Derivatives</h3>
-          <p className="mb-4 text-foreground">
-            Through Interlink, protocols can compose on InterPredict markets to create sophisticated financial instruments:
-          </p>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li>Spread betting contracts (outcome of one market vs. another)</li>
-            <li>Volatility indices across prediction markets</li>
-            <li>Portfolio hedging instruments tied to multiple predictions</li>
-            <li>Structured products with conditional payoffs</li>
-          </ul>
-        </section>
-
-        {/* Security */}
-        <section className="mb-12">
-          <h2 className="mb-6 text-3xl font-bold text-foreground">8. Security & Risk Management</h2>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">8.1 Smart Contract Security</h3>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>Audits:</strong> All core contracts undergo independent security audits before mainnet deployment.</li>
-            <li><strong>Formal Verification:</strong> Critical settlement logic is formally verified to ensure mathematical correctness.</li>
-            <li><strong>Bug Bounty Program:</strong> Community security researchers are incentivized to identify vulnerabilities.</li>
-            <li><strong>Upgradability:</strong> Critical contracts can be paused and upgraded through Committee governance in emergency situations.</li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">8.2 Market Manipulation Prevention</h3>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>Suspicious Price Movement Detection:</strong> Algorithmic systems flag extreme price movements for Committee review.</li>
-            <li><strong>Wash Trading Prevention:</strong> Patterns of self-dealing are detected and prevented at the smart contract level.</li>
-            <li><strong>Market Maker Requirements:</strong> Certain markets may require minimum liquidity provision and price spread constraints.</li>
-            <li><strong>Withdrawal Limits:</strong> Large withdrawals during volatile periods may be subject to Committee approval.</li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">8.3 Oracle & Data Integrity</h3>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>Multiple Data Sources:</strong> Resolution events rely on multiple independent oracle feeds and manual verification.</li>
-            <li><strong>Committee Verification:</strong> Committee members manually verify critical event outcomes using trusted news sources.</li>
-            <li><strong>Dispute Mechanism:</strong> If oracles disagree, the Committee arbitrates using off-chain evidence and majority voting.</li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">8.4 User Fund Protection</h3>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li><strong>Custody via Smart Contracts:</strong> Funds are held in audited smart contracts, not custodial accounts or banks.</li>
-            <li><strong>Self-Custodial Trading:</strong> Users maintain private keys and full control of assets at all times.</li>
-            <li><strong>Insurance (Future):</strong> Protocol-level insurance fund to cover edge cases and protocol failures (planned for Version 2.0).</li>
-          </ul>
-        </section>
-
-        {/* Roadmap */}
-        <section className="mb-12">
-          <h2 className="mb-6 text-3xl font-bold text-foreground">9. Roadmap & Future Enhancements</h2>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">9.1 Version 1.0 Features (Current Release)</h3>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li>✓ Binary outcome markets</li>
-            <li>✓ Committee-based curation and resolution</li>
-            <li>✓ CLOB-based trading engine with real-time price discovery</li>
-            <li>✓ Interlink network integration</li>
-            <li>✓ On-chain governance voting with full transparency</li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">9.2 Planned for Version 2.0</h3>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li>Multi-outcome categorical markets (e.g., "Who will win the election?": Option A, B, C, D)</li>
-            <li>Scalar markets for continuous values (e.g., "What will the S&P 500 close at on Dec 31?")</li>
-            <li>Protocol-level insurance fund for edge cases and market failures</li>
-            <li>Community-based dispute voting (partial decentralization of Committee authority)</li>
-            <li>Enhanced Interlink integration with atomic swap guarantees</li>
-            <li>Mobile application with push notifications and portfolio tracking</li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">9.3 Long-Term Vision (2026-2027)</h3>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li>Full protocol decentralization through token-based governance</li>
-            <li>Integration with prediction market aggregators and sentiment analysis tools</li>
-            <li>Enterprise partnerships for prediction market infrastructure and white-label solutions</li>
-            <li>Expansion to adjacent use cases (crowdsourced verification, DAO governance, collective decision-making)</li>
-            <li>Supporting other asset classes (sports betting, elections, climate predictions, corporate events)</li>
-            <li>Cross-protocol prediction market network enabling inter-market arbitrage</li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground">9.4 Research & Development Initiatives</h3>
-          <p className="mb-4 text-foreground">
-            InterPredict is committed to advancing the prediction market field through:
-          </p>
-          <ul className="mb-6 space-y-2 text-foreground">
-            <li>Peer-reviewed research on market design, pricing efficiency, and community dynamics</li>
-            <li>Open-source libraries and SDKs for prediction market builders</li>
-            <li>Academic partnerships to study prediction market accuracy and information aggregation</li>
-            <li>Documentation and educational resources for market participants</li>
-          </ul>
-        </section>
-
-        {/* Conclusion */}
-        <section className="mb-12">
-          <h2 className="mb-6 text-3xl font-bold text-foreground">10. Conclusion & Call to Action</h2>
-
-          <p className="mb-4 text-foreground">
-            InterPredict represents a fundamental paradigm shift in how prediction markets operate. By combining decentralized governance, transparent community curation, CLOB-based trading mechanics, and deep Interlink integration, we create a prediction marketplace that is fairer, more resilient, and more aligned with community values than traditional centralized platforms.
-          </p>
-
-          <p className="mb-4 text-foreground">
-            Prediction markets have existed for decades, but they have been limited by centralized operators, regulatory constraints, and liquidity fragmentation. InterPredict solves these fundamental problems through decentralization and community governance. Version 1.0 establishes the core protocol and proves the viability of community-led market curation. As we gather feedback from users and observe market dynamics, we will evolve the protocol to support more market types, enhance governance mechanisms, and deepen integration with the Interlink network.
-          </p>
-
-          <p className="mb-4 text-foreground">
-            We invite researchers, market makers, prediction market enthusiasts, and developers to participate in building the future of decentralized prediction markets. The prediction market space is nascent and full of opportunity; InterPredict provides the infrastructure for communities worldwide to create and trade predictions in a transparent, decentralized manner.
-          </p>
-
-          <div className="mt-8 rounded-lg border border-primary/20 bg-primary/5 p-6">
-            <p className="text-foreground font-semibold mb-2">Join the InterPredict Community</p>
-            <p className="text-muted-foreground">
-              To participate in governance, propose markets, contribute to protocol development, or build on InterPredict, join our governance forum and community channels. This whitepaper will be updated as the protocol evolves, reflecting new features, community feedback, and market developments.
+          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">6.1 The 5-Stage Lifecycle Flow</h3>
+          <div className="space-y-4 text-sm text-muted-foreground">
+            <p>
+              <strong>1. Proposal Stage:</strong> A user submits a market description and locks 1.00 ITL, placing the market into the <code>Proposed</code> state.
+            </p>
+            <p>
+              <strong>2. Curation Stage:</strong> Committee members vote to approve or reject the market during a 24-hour window.
+              Once the window passes, any user can call <code>initializeMarket()</code> to calculate the votes and transition the market to either <code>Active</code> or <code>Resolved (Outcome.DRAW)</code>.
+            </p>
+            <p>
+              <strong>3. Trading Stage:</strong> Approved markets are opened for public trading.
+              Users can buy YES or NO shares using native ITL until the market reaches its registered <code>marketEndTime</code>.
+            </p>
+            <p>
+              <strong>4. Resolution Trigger:</strong> Once the trading window has officially closed, any user can invoke <code>requestOracleResolution()</code> to lock the market and request resolution.
+            </p>
+            <p>
+              <strong>5. Settlement Stage:</strong> The authorized Team Oracle Wallet validates the real-world outcome and submits the resolution callback on-chain, enabling users to claim their payouts.
             </p>
           </div>
         </section>
 
-        {/* Footer */}
-        <div className="mt-16 pt-8 border-t border-border">
-          <p className="text-sm text-muted-foreground mb-4">
-            <strong>Document Information:</strong> InterPredict Whitepaper v1.0 | June 2026 | This is a living document subject to regular updates as the protocol develops and the community provides feedback.
+        {/* 7. Interlink Network Integration */}
+        <section className="mb-12">
+          <h2 className="mb-6 text-3xl font-bold text-foreground font-mono border-b border-border pb-2">7. Interlink Network Integration & tITL Economics</h2>
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            InterPredict is engineered natively for the Interlink Network. By operating entirely within Interlink's sovereign L1 environment, the protocol achieves significant performance advantages over cross-chain solutions:
           </p>
-          <p className="text-xs text-muted-foreground">
-            Disclaimer: This whitepaper is for informational purposes only and does not constitute financial, investment, or legal advice. Prediction markets involve substantial risk, including the potential loss of principal. Users should conduct thorough due diligence and understand the risks before participating. InterPredict is provided "as is" without guarantees or warranties.
+          <ul className="mb-6 space-y-3 text-sm text-muted-foreground pl-4 list-disc">
+            <li>
+              <strong>Low-Latency Trading:</strong> Transactions are confirmed quickly with microscopic gas fees, enabling seamless trading for retail users.
+            </li>
+            <li>
+              <strong>Native Asset Settlement:</strong> Using native ITL directly eliminates the need for cross-chain bridges and wrapped stablecoins, ensuring secure asset custody.
+            </li>
+            <li>
+              <strong>Integrated Identity:</strong> Verification loops integrate directly with native identity profiles, establishing a secure framework for decentralized curation.
+            </li>
+          </ul>
+        </section>
+
+        {/* 8. Security */}
+        <section className="mb-12">
+          <h2 className="mb-6 text-3xl font-bold text-foreground font-mono border-b border-border pb-2">8. Security, Access Guards & Risk Management</h2>
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            The platform places user security and fund protection at the core of its design:
+          </p>
+          <ul className="mb-6 space-y-3 text-sm text-muted-foreground pl-4 list-disc">
+            <li>
+              <strong>Cryptographic Access Guards:</strong> The <code>onlyOracle</code> modifier restricts resolution capabilities exclusively to the designated oracle key, protecting the protocol from unauthorized calls.
+            </li>
+            <li>
+              <strong>Administrative Security:</strong> Via <code>updateOracle()</code>, the contract owner can update the authorized oracle key to transition to decentralized multi-signature contracts or decentralized oracle networks as they deploy on the Interlink L1.
+            </li>
+            <li>
+              <strong>Time-Locked Guardrails:</strong> The contract strictly enforces that markets can only be resolved after their registered <code>marketEndTime</code> has passed, protecting market integrity from premature resolution.
+            </li>
+          </ul>
+        </section>
+
+        {/* 9. Roadmap */}
+        <section className="mb-12">
+          <h2 className="mb-6 text-3xl font-bold text-foreground font-mono border-b border-border pb-2">9. Roadmap & Future Enhancements</h2>
+
+          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">9.1 Version 1.0 Features (Initial Release)</h3>
+          <ul className="mb-6 space-y-2 text-sm text-muted-foreground pl-4 list-disc">
+            <li>✓ Support for binary outcome YES/NO prediction pools</li>
+            <li>✓ Decentralized curation and resolution driven by the DEC Committee</li>
+            <li>✓ Low-gas on-chain trading settled natively in ITL</li>
+            <li>✓ Secure first-party oracle validation and settlement</li>
+            <li>✓ Full on-chain transaction history mapping and transparency</li>
+          </ul>
+
+          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">9.2 Planned for Version 2.0</h3>
+          <ul className="mb-6 space-y-2 text-sm text-muted-foreground pl-4 list-disc">
+            <li>• Categorical prediction pools with multiple discrete options</li>
+            <li>• Scalar markets for continuous numeric values (e.g., asset prices, index levels)</li>
+            <li>• Federated multi-signature oracle consensus models</li>
+            <li>• Native integration with decentralized oracle networks (e.g., UMA, Chainlink)</li>
+            <li>• Mobile application with push notifications and portfolio tracking</li>
+          </ul>
+
+          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">9.3 Long-Term Vision (2026-2027)</h3>
+          <ul className="mb-6 space-y-2 text-sm text-muted-foreground pl-4 list-disc">
+            <li>• Full protocol decentralization through token-based governance</li>
+            <li>• Integration with prediction market aggregators and sentiment analysis tools</li>
+            <li>• Enterprise partnerships for prediction market infrastructure and white-label solutions</li>
+            <li>• Cross-protocol prediction market network enabling inter-market arbitrage</li>
+          </ul>
+        </section>
+
+        {/* 10. Conclusion */}
+        <section className="mb-12">
+          <h2 className="mb-6 text-3xl font-bold text-foreground font-mono border-b border-border pb-2">10. Conclusion & Call to Action</h2>
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            InterPredict represents a major advancement in the design of decentralized prediction markets. By integrating native ITL settlement, decentralized curation, and secure on-chain resolution on the Interlink L1 network, we create a forecasting venue that is transparent, fair, and resilient.
+          </p>
+          <p className="mb-4 text-muted-foreground leading-relaxed text-sm">
+            We invite developers, researchers, and prediction market enthusiasts to join us in building the future of decentralized prediction markets. Explore our resources, join our community, and participate in active discussions on our governance forum.
+          </p>
+          <div className="mt-8 rounded-lg border border-primary/20 bg-primary/5 p-6 text-center font-mono text-xs">
+            <p className="text-muted-foreground mb-4">
+              Do you want to review the platform rules or participate in active discussions?
+            </p>
+            <div className="flex flex-col sm:flex-row justify-center gap-4">
+              <span className="font-semibold text-primary">
+                → Visit the DEC Curation Forum
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* Footer Block */}
+        <div className="mt-16 pt-8 border-t border-border">
+          <p className="text-sm text-muted-foreground mb-4 font-mono text-xs">
+            Document Information: InterPredict Whitepaper v1.0 | July 2026 | This is a living document subject to regular updates as the protocol develops and the community provides feedback.
+          </p>
+          <p className="text-[10px] text-muted-foreground leading-relaxed">
+            Disclaimer: This whitepaper is for informational purposes only and does not constitute financial, investment, or legal advice. Prediction markets involve substantial risk, including the potential loss of principal. Users should conduct thorough due diligence and understand the risks before participating. InterPredict is provided "as is" without guarantees or warranties of any kind.
           </p>
         </div>
       </div>

@@ -71,12 +71,12 @@ contract InterPredict {
 
     uint256 public constant MARKET_STAKE = 1 ether; // Native ITL Stake
     uint256 public constant VOTING_DURATION = 1 days;
-    
+
     // 🧮 Dynamically Evaluated Platform Fee Structure (5.0% Total)
     uint256 public constant TOTAL_PLATFORM_FEE_BPS = 500; // 5.0% flat fee deducted from total winnings
-    uint256 public constant DEC_POOL_FEE_BPS = 200;       // 2.0% allocated to the DEC Committee Pool
-    uint256 public constant CREATOR_FEE_BPS = 100;        // 1.0% allocated to non-team creators
-    uint256 public constant TEAM_BASE_FEE_BPS = 200;      // 2.0% allocated to team on community markets
+    uint256 public constant DEC_POOL_FEE_BPS = 200; // 2.0% allocated to the DEC Committee Pool
+    uint256 public constant CREATOR_FEE_BPS = 100; // 1.0% allocated to non-team creators
+    uint256 public constant TEAM_BASE_FEE_BPS = 200; // 2.0% allocated to team on community markets
     uint256 public constant TEAM_EXCLUSIVE_FEE_BPS = 300; // 3.0% allocated to team on team-created markets
 
     uint256 public totalMarkets;
@@ -194,7 +194,7 @@ contract InterPredict {
 
             // 🧮 10% Curation Penalty to Team Treasury, 90% Refund to Creator
             uint256 teamPenalty = (MARKET_STAKE * 1000) / 10000; // 10% (0.1 ITL)
-            uint256 creatorRefund = MARKET_STAKE - teamPenalty;  // 90% (0.9 ITL)
+            uint256 creatorRefund = MARKET_STAKE - teamPenalty; // 90% (0.9 ITL)
 
             // 1. Send 10% penalty to the Team Treasury Address
             address payable treasury = payable(
@@ -313,17 +313,19 @@ contract InterPredict {
 
         // 🧮 Compute total 5.0% flat fee and 2.0% DEC fee
         uint256 totalPlatformFee = (winnings * TOTAL_PLATFORM_FEE_BPS) / 10000; // 5.0% Total
-        uint256 decFeeAllocation = (winnings * DEC_POOL_FEE_BPS) / 10000;       // 2.0% to DEC Pool
-        
+        uint256 decFeeAllocation = (winnings * DEC_POOL_FEE_BPS) / 10000; // 2.0% to DEC Pool
+
         uint256 teamTreasuryFee;
+        uint256 creatorFee = 0;
 
         // 🧠 Dynamic Allocation Rule: Did the Team (Owner) deploy this market?
         if (market.creator == owner) {
             // Team Market: 3% goes to Team Treasury (Creator share is absorbed)
             teamTreasuryFee = (winnings * TEAM_EXCLUSIVE_FEE_BPS) / 10000;
         } else {
-            // Community Market: 2% goes to Team, leaving 1% in escrow for creator claim
+            // Community Market: 2% goes to Team, leaving 1% in escrow for automatic creator release
             teamTreasuryFee = (winnings * TEAM_BASE_FEE_BPS) / 10000;
+            creatorFee = totalPlatformFee - decFeeAllocation - teamTreasuryFee; // Exactly 1.0% (100 BPS equivalent)
         }
 
         uint256 netWinnings = winnings - totalPlatformFee;
@@ -333,65 +335,67 @@ contract InterPredict {
 
         emit PayoutClaimed(_marketId, msg.sender, netWinnings);
 
-        // 2. Route the designated fee instantly to the Team Treasury Wallet
+        // Define target team treasury address
         address payable treasury = payable(
             0x6E832252eA4c78068EE109d953724D2762431992
         );
+
+        // 2. Route the designated fee instantly to the Team Treasury Wallet
         (bool successTeam, ) = treasury.call{value: teamTreasuryFee}("");
         require(successTeam, "Team platform fee routing failed");
 
-        // 3. Send the remaining net winnings back to the claiming user
+        // 3. AUTOMATIC NON-BLOCKING PUSH: Instantly release the 1.0% creator fee to community creator
+        if (creatorFee > 0 && market.creator != address(0)) {
+            (bool successCreator, ) = payable(market.creator).call{
+                value: creatorFee
+            }("");
+            if (!successCreator) {
+                // 🟢 FALLBACK CATCH: If the creator's wallet reverts (e.g. broken contract),
+                // automatically reroute the 1% creator fee to the Team Treasury so they can manually handle it!
+                (bool successFallback, ) = treasury.call{value: creatorFee}("");
+                require(successFallback, "Fallback treasury routing failed");
+            }
+        }
+
+        // 4. Send the remaining net winnings back to the claiming user
         (bool successUser, ) = address(msg.sender).call{value: netWinnings}("");
         require(successUser, "Payout transfer execution failed");
-    }
-
-    function claimCreatorYield(uint256 _marketId) external {
-        Market storage market = markets[_marketId];
-        require(
-            market.state == MarketState.Resolved,
-            "Market must be resolved"
-        );
-        require(msg.sender == market.creator, "Only creator can claim");
-        require(!market.creatorFeeClaimed, "Yield already claimed");
-
-        // Safety Guard: Owner (Team) cannot claim the creator yield
-        require(market.creator != owner, "Owner cannot claim creator yield");
-
-        market.creatorFeeClaimed = true;
-
-        uint256 totalPool = market.totalYesPool + market.totalNoPool;
-        uint256 totalYield = (totalPool * CREATOR_FEE_BPS) / 10000;
-
-        (bool success, ) = address(market.creator).call{value: totalYield}("");
-        require(success, "Yield routing failed");
     }
 
     function joinCommittee() external payable {
         require(msg.value == 0.1 ether, "Incorrect registration fee");
         require(!isDecMember[msg.sender], "Already a member");
 
+        // 1. Effects Step: Update all state variables FIRST (Stops Reentrancy!)
+        isDecMember[msg.sender] = true;
+        totalDecMembers++;
+
+        // 2. Interaction Step: Perform the external token transfer LAST
         address payable treasury = payable(
             0x6E832252eA4c78068EE109d953724D2762431992
         );
         (bool success, ) = treasury.call{value: msg.value}("");
         require(success, "Treasury transfer failed");
-
-        isDecMember[msg.sender] = true;
     }
 
     function claimDecRewards() external {
-        require(isDecMember[msg.sender], "Not a valid committee member");
-        require(totalDecMembers > 0, "Zero division safety");
+        require(isDecMember[msg.sender], "Only committee members can claim");
+        require(totalDecMembers > 0, "No active members registered");
 
+        // 1. Calculate the staker's cumulative share of the decPool
         uint256 totalSharePerNode = decPool / totalDecMembers;
+
+        // 2. Subtract what this specific staker has already withdrawn
         uint256 claimable = totalSharePerNode -
             decRewardsClaimedTracker[msg.sender];
-        require(claimable > 0, "All rewards claimed");
+        require(claimable > 0, "No claimable rewards available");
 
+        // 3. Update their claimed tracker state BEFORE sending any assets (Prevents Reentrancy)
         decRewardsClaimedTracker[msg.sender] = totalSharePerNode;
 
-        (bool success, ) = address(msg.sender).call{value: claimable}("");
-        require(success, "Rewards distribution failed");
+        // 4. Send the rewards securely
+        (bool success, ) = payable(msg.sender).call{value: claimable}("");
+        require(success, "Rewards transfer failed");
     }
 
     function updateOracle(address _newOracle) external onlyOwner {

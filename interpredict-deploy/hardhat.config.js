@@ -1,6 +1,5 @@
 import "dotenv/config";
 
-
 const deployerKey = process.env.PRIVATE_KEY || "0000000000000000000000000000000000000000000000000000000000000000";
 
 /** @type {import('hardhat/config').HardhatUserConfig} */

@@ -2,15 +2,14 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useWeb3 } from '../context/Web3Context'
-import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Cpu } from 'lucide-react'
+import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Image as ImageIcon, Cpu } from 'lucide-react'
 import { Logo } from '@/components/logo'
-import CreateMarketForm from "@/components/CreateMarketForm" // 🟢 Clean imported form layout component
 import Link from 'next/link'
 
 type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History' | 'DEC Members'
 
 export default function DAppPortal() {
-  const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, joinDecOnChain, castVoteOnChain, placeBetOnChain, decMembers, t } = useWeb3()
+  const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, decMembers, t } = useWeb3()
   const [activeTab, setActiveTab] = useState<TabType>('MarketPlace')
   const [stakeAmount, setStakeAmount] = useState<string>('0.1')
   const [marketDesc, setMarketDesc] = useState('')
@@ -34,8 +33,7 @@ export default function DAppPortal() {
 
   useEffect(() => {
     if (walletAddress) {
-      const storageKey = `interpredict_logs_${walletAddress.toLowerCase()}`
-      const savedLogs = localStorage.getItem(storageKey)
+      const savedLogs = localStorage.getItem(`interpredict_logs_${walletAddress.toLowerCase()}`)
       if (savedLogs) {
         setPersistentLogs(JSON.parse(savedLogs))
       } else {
@@ -103,6 +101,23 @@ export default function DAppPortal() {
     const updated = [...outcomes]
     updated[index] = text
     setOutcomes(updated)
+  }
+
+  // 🟢 FIXED: Safely convert input date to Unix seconds and pass both arguments on-chain!
+  const handleCreateMarketSubmit = async () => {
+    if (!marketDesc || !endDate) {
+      alert("Please enter a question and select a settlement date!")
+      return
+    }
+
+    const marketEndTimeInSeconds = Math.floor(new Date(endDate).getTime() / 1000);
+
+    const success = await createMarketOnChain(marketDesc, marketEndTimeInSeconds)
+    if (success) {
+      setMarketDesc('')
+      setOutcomes(['YES', 'NO'])
+      setMarketImage(null)
+    }
   }
 
   const handleJoinCommitteeSubmit = async () => {
@@ -373,11 +388,109 @@ export default function DAppPortal() {
               </div>
             )}
 
-            {/* TAB: MAKE MARKET */}
+            {/* TAB: MAKE MARKET - RESTORED ORIGINAL GORGEOUS FORM */}
             {activeTab === 'Make Market' && (
-              <div className="w-full max-w-xl">
-                {/* 🟢 4. Swapped old single-argument code block with clean double-argument layout component */}
-                <CreateMarketForm />
+              <div className="space-y-4 w-full max-w-xl">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="text-xs font-bold text-slate-400 block mb-1.5">
+                      {t('marketStatement')}
+                    </label>
+                    <textarea
+                      placeholder="e.g., Will Bitcoin settle above $120,000 on the global macro index deadline?"
+                      value={marketDesc}
+                      onChange={(e) => setMarketDesc(e.target.value)}
+                      className="w-full h-24 bg-black/20 border border-purple-900/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary resize-none text-slate-200"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 block mb-1.5">
+                      {t('uploadImageLabel')}
+                    </label>
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="h-24 bg-black/30 hover:bg-black/50 border border-dashed border-purple-900/50 hover:border-primary rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all p-2 relative overflow-hidden text-center"
+                    >
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleImageChange}
+                        accept="image/*"
+                        className="hidden"
+                      />
+                      {marketImage ? (
+                        <img src={marketImage} alt="Preview" className="size-full object-cover rounded-lg" />
+                      ) : (
+                        <>
+                          <Upload className="size-5 text-purple-400 mb-1 mx-auto" />
+                          <span className="text-[9px] text-slate-400 leading-tight">{t('uploadPlaceholder')}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-400 block mb-1.5">
+                    {t('votingEndDate')}
+                  </label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full bg-black/20 border border-purple-900/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary text-slate-200"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="text-xs font-bold text-slate-400">
+                      {t('outcomesTitle')}
+                    </label>
+                    {outcomes.length < 4 && (
+                      <button
+                        type="button"
+                        onClick={addOutcomeChoice}
+                        className="text-[11px] text-primary hover:text-purple-400 font-semibold"
+                      >
+                        {t('addChoiceBtn')}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {outcomes.map((outcome, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-2.5 text-[10px] font-mono text-slate-500 font-bold uppercase">Option {idx + 1}</span>
+                          <input
+                            type="text"
+                            value={outcome}
+                            placeholder={idx === 0 ? "YES" : idx === 1 ? "NO" : `Choice ${idx + 1}`}
+                            onChange={(e) => handleOutcomeTextChange(idx, e.target.value)}
+                            className="w-full bg-black/20 border border-purple-900/50 rounded-xl pl-16 pr-3 py-2 text-sm focus:outline-none focus:border-primary font-mono text-slate-200"
+                          />
+                        </div>
+                        {outcomes.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => removeOutcomeChoice(idx)}
+                            className="p-2 bg-red-950/20 hover:bg-red-900/30 border border-red-900/30 rounded-xl text-red-400 text-xs font-bold"
+                          >
+                            {t('removeChoiceBtn')}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <button onClick={handleCreateMarketSubmit} className="w-full py-3 bg-gradient-to-r from-primary to-purple-600 text-white text-xs font-bold rounded-xl shadow-md hover:opacity-95 transition-opacity">
+                  {walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
+                    ? t('teamBypass')
+                    : t('userPropose')}
+                </button>
               </div>
             )}
 

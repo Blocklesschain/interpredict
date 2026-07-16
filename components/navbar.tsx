@@ -27,16 +27,24 @@ export function Navbar() {
     },
   ]
 
+  // 🔄 Hard refresh handler applied cleanly to the home link
+  const handleLogoClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    window.location.href = window.location.origin + window.location.pathname + '?nocache=' + Date.now();
+  };
+
   return (
     <header className="fixed inset-x-0 top-0 z-50">
       <div className="mx-auto mt-4 max-w-7xl px-4 sm:px-6">
         <nav className="nav-glass flex items-center justify-between rounded-2xl px-4 py-3 sm:px-6">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Logo className="size-9 rounded-xl" />
+
+          {/* Logo wrapper link with the hard refresh click handler attached */}
+          <a href="/" onClick={handleLogoClick} className="flex items-center gap-2.5 cursor-pointer">
+            <Logo className="size-9 rounded-xl transition hover:opacity-80 active:scale-95" />
             <span className="font-heading text-lg font-bold tracking-tight text-foreground">
               InterPredict
             </span>
-          </Link>
+          </a>
 
           <div className="hidden items-center gap-8 md:flex">
             {links.map((link) => (

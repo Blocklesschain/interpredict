@@ -45,142 +45,6 @@ const CONTRACT_ABI = {
       "type": "constructor"
     },
     {
-      "anonymous": false,
-      "inputs": [
-        { "indexed": true, "internalType": "uint256", "name": "marketId", "type": "uint256" },
-        { "indexed": true, "internalType": "address", "name": "creator", "type": "address" },
-        { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }
-      ],
-      "name": "CreatorYieldClaimed",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        { "indexed": true, "internalType": "address", "name": "decMember", "type": "address" },
-        { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }
-      ],
-      "name": "DecRewardsClaimed",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        { "indexed": true, "internalType": "uint256", "name": "marketId", "type": "uint256" },
-        { "indexed": false, "internalType": "uint256", "name": "marketEndTime", "type": "uint256" }
-      ],
-      "name": "MarketInitialized",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        { "indexed": true, "internalType": "uint256", "name": "marketId", "type": "uint256" },
-        { "indexed": false, "internalType": "string", "name": "question", "type": "string" },
-        { "indexed": false, "internalType": "uint256", "name": "votingEndTime", "type": "uint256" }
-      ],
-      "name": "MarketProposed",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        { "indexed": true, "internalType": "uint256", "name": "marketId", "type": "uint256" },
-        { "indexed": false, "internalType": "enum InterPredict.Outcome", "name": "winningOutcome", "type": "uint8" }
-      ],
-      "name": "MarketResolved",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        { "indexed": true, "internalType": "uint256", "name": "marketId", "type": "uint256" },
-        { "indexed": false, "internalType": "string", "name": "question", "type": "string" },
-        { "indexed": false, "internalType": "uint256", "name": "marketEndTime", "type": "uint256" }
-      ],
-      "name": "OracleResolutionRequested",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        { "indexed": true, "internalType": "address", "name": "previousOracle", "type": "address" },
-        { "indexed": true, "internalType": "address", "name": "newOracle", "type": "address" }
-      ],
-      "name": "OracleUpdated",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        { "indexed": true, "internalType": "uint256", "name": "marketId", "type": "uint256" },
-        { "indexed": true, "internalType": "address", "name": "trader", "type": "address" },
-        { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }
-      ],
-      "name": "PayoutClaimed",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        { "indexed": true, "internalType": "uint256", "name": "marketId", "type": "uint256" },
-        { "indexed": true, "internalType": "address", "name": "trader", "type": "address" },
-        { "indexed": false, "internalType": "bool", "name": "isYes", "type": "bool" },
-        { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }
-      ],
-      "name": "SharePurchased",
-      "type": "event"
-    },
-    {
-      "inputs": [],
-      "name": "CREATOR_FEE_BPS",
-      "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "DEC_POOL_FEE_BPS",
-      "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "MARKET_STAKE",
-      "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "TEAM_BASE_FEE_BPS",
-      "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "TEAM_EXCLUSIVE_FEE_BPS",
-      "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "TOTAL_PLATFORM_FEE_BPS",
-      "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "VOTING_DURATION",
-      "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
       "inputs": [
         { "internalType": "uint256", "name": "_marketId", "type": "uint256" },
         { "internalType": "bool", "name": "_isYes", "type": "bool" }
@@ -191,20 +55,6 @@ const CONTRACT_ABI = {
       "type": "function"
     },
     {
-      "inputs": [],
-      "name": "claimDecRewards",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [{ "internalType": "uint256", "name": "_marketId", "type": "uint256" }],
-      "name": "claimPayout",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
       "inputs": [
         { "internalType": "string", "name": "_question", "type": "string" },
         { "internalType": "uint256", "name": "_marketEndTime", "type": "uint256" }
@@ -212,37 +62,6 @@ const CONTRACT_ABI = {
       "name": "createActiveMarket",
       "outputs": [],
       "stateMutability": "payable",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "decPool",
-      "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [{ "internalType": "address", "name": "", "type": "address" }],
-      "name": "decRewardsClaimedTracker",
-      "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        { "internalType": "uint256", "name": "", "type": "uint256" },
-        { "internalType": "address", "name": "", "type": "address" }
-      ],
-      "name": "hasVotedOnCuration",
-      "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [{ "internalType": "uint256", "name": "_marketId", "type": "uint256" }],
-      "name": "initializeMarket",
-      "outputs": [],
-      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -282,30 +101,6 @@ const CONTRACT_ABI = {
     },
     {
       "inputs": [
-        { "internalType": "uint256", "name": "", "type": "uint256" },
-        { "internalType": "address", "name": "", "type": "address" }
-      ],
-      "name": "noShares",
-      "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "oracle",
-      "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "owner",
-      "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
         { "internalType": "string", "name": "_question", "type": "string" },
         { "internalType": "uint256", "name": "_marketEndTime", "type": "uint256" }
       ],
@@ -315,41 +110,10 @@ const CONTRACT_ABI = {
       "type": "function"
     },
     {
-      "inputs": [{ "internalType": "uint256", "name": "_marketId", "type": "uint256" }],
-      "name": "requestOracleResolution",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        { "internalType": "uint256", "name": "_marketId", "type": "uint256" },
-        { "internalType": "enum InterPredict.Outcome", "name": "_winningOutcome", "type": "uint8" }
-      ],
-      "name": "resolveMarket",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "totalDecMembers",
-      "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
       "inputs": [],
       "name": "totalMarkets",
       "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
       "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [{ "internalType": "address", "name": "_newOracle", "type": "address" }],
-      "name": "updateOracle",
-      "outputs": [],
-      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -361,19 +125,8 @@ const CONTRACT_ABI = {
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
-    },
-    {
-      "inputs": [
-        { "internalType": "uint256", "name": "", "type": "uint256" },
-        { "internalType": "address", "name": "", "type": "address" }
-      ],
-      "name": "yesShares",
-      "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-      "stateMutability": "view",
-      "type": "function"
     }
-  ],
-  "bytecode": "0x60a034..."
+  ]
 }
 
 export function Web3Provider({ children }: { children: React.ReactNode }) {
@@ -381,8 +134,6 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const [txStatus, setTxStatus] = useState<string | null>(null)
   const [historyLogs, setHistoryLogs] = useState<HistoryRecord[]>([])
   const [locale, setLocaleState] = useState<LocaleType>('en')
-
-  // 🟢 CLEANED UP: Default dummy data array elements dropped completely
   const [decMembers, setDecMembers] = useState<string[]>([])
 
   useEffect(() => {
@@ -501,6 +252,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // 🟢 DECLARED IN SCOPE: Explicitly defined connection configurations
   const connectWallet = async () => {
     if (typeof window === 'undefined' || !(window as any).ethereum) {
       setTxStatus("Error: Web3 Wallet extension not identified.")
@@ -599,9 +351,6 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       }
     } catch (err: any) {
       setTxStatus(`Deployment Cancelled: ${err.message}`)
-      if (walletAddress) {
-        saveLogToLocalStorage(walletAddress, txType, description, `Failed — RPC Error or Rejection`, 'Failed')
-      }
       return false
     }
   }
@@ -654,9 +403,6 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       }
     } catch (err: any) {
       setTxStatus(`Verification Cancelled: ${err.message}`)
-      if (walletAddress) {
-        saveLogToLocalStorage(walletAddress, 'Committee Bond', 'Request to join DEC Committee', 'Failed — Transaction execution terminated', 'Failed')
-      }
       return false
     }
   }
@@ -692,9 +438,6 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       }
     } catch (err: any) {
       setTxStatus(`Voting Error: ${err.message}`)
-      if (walletAddress) {
-        saveLogToLocalStorage(walletAddress, 'Governance Vote', `Vote cast on Proposal ID #${marketId}`, `Failed — ${err.message.slice(0, 40)}...`, 'Failed')
-      }
     }
   }
 
@@ -733,13 +476,11 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       }
     } catch (err: any) {
       setTxStatus(`Execution Error: ${err.message}`)
-      if (walletAddress) {
-        saveLogToLocalStorage(walletAddress, 'Market Trade', `Wager placed on Pool #${marketId}`, `Failed — ${targetSide} allocation timed out`, 'Failed')
-      }
     }
   }
 
   return (
+    // 🟢 SECURELY EXPORTED: Bundled context properties explicitly exported to page elements
     <Web3Context.Provider value={{ walletAddress, decMembers, txStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain }}>
       {children}
     </Web3Context.Provider>

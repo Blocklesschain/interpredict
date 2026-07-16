@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useWeb3 } from '../context/Web3Context'
-import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Cpu } from 'lucide-react'
+import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Image as ImageIcon, Cpu } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import Link from 'next/link'
 
@@ -21,7 +21,7 @@ interface SmartMarket {
 }
 
 export default function DAppPortal() {
-  const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, decMembers, t } = useWeb3()
+  const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, t } = useWeb3()
   const [activeTab, setActiveTab] = useState<TabType>('MarketPlace')
   const [stakeAmount, setStakeAmount] = useState<string>('0.1')
   const [marketDesc, setMarketDesc] = useState('')
@@ -38,11 +38,10 @@ export default function DAppPortal() {
   const ADMIN_ADDRESS = "0x6e832252ea4c78068ee109d953724d2762431992"
   const [persistentLogs, setPersistentLogs] = useState<any[]>([])
 
-  // 🟢 LIVE CONTRACT MATRIX ARRAYS
   const [allOnChainMarkets, setAllOnChainMarkets] = useState<SmartMarket[]>([])
   const [blockchainDecList, setBlockchainDecList] = useState<string[]>([])
 
-  // 📡 Real-time RPC Dynamic Scanner Hook
+  // 📡 DYNAMIC BLOCKCHAIN SCANNER ENGINE
   useEffect(() => {
     async function scanBlockchainRegistry() {
       try {
@@ -51,7 +50,7 @@ export default function DAppPortal() {
         const req = new Headers()
         if (localStorageToken) req.append("Authorization", `Bearer ${localStorageToken}`)
 
-        // 1. Scan for total market array structures
+        // 1. Scan market parameters
         const marketCountRes = await fetch(rpcUrl, {
           method: "POST",
           headers: req,
@@ -59,7 +58,7 @@ export default function DAppPortal() {
             jsonrpc: "2.0",
             id: 1,
             method: "eth_call",
-            params: [{ to: "0x9530477f41bA8e6272251376389d09Dd490CF38e", data: "0x3a4b5182" }, "latest"] // totalMarkets method hex
+            params: [{ to: "0x9530477f41bA8e6272251376389d09Dd490CF38e", data: "0x3a4b5182" }, "latest"] // totalMarkets
           })
         })
         const countData = await marketCountRes.json()
@@ -69,9 +68,8 @@ export default function DAppPortal() {
           const tempMarkets: SmartMarket[] = []
 
           for (let i = 0; i < totalCount; i++) {
-            // Hex function data padding for array index retrieval: markets(uint256) -> selector 0x071c7656
             const indexHex = i.toString(16).padStart(64, '0')
-            const dataPayload = "0x071c7656" + indexHex
+            const dataPayload = "0x071c7656" + indexHex // markets mapping selector
 
             const marketItemRes = await fetch(rpcUrl, {
               method: "POST",
@@ -86,15 +84,19 @@ export default function DAppPortal() {
             const itemData = await marketItemRes.json()
 
             if (itemData?.result && itemData.result !== "0x") {
-              // Parse returning structured data offsets natively
+              const stripped = itemData.result.replace('0x', '')
+              // Natively offset decode the dynamic string position pointers inside the contract payload
+              const stateVal = parseInt(stripped.slice(384, 448), 16) || 0
+              const isTeamAddress = walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
+
               tempMarkets.push({
                 id: i,
-                question: marketDesc || "Interlink Ecosystem Verified Prediction Target Node",
+                question: marketDesc || "Active Decentralized Prediction Pool Protocol Instance",
                 marketEndTime: 1798761600,
                 votingEndTime: 1798761600,
                 totalYesPool: "0",
                 totalNoPool: "0",
-                state: i === 0 ? 1 : 0, // State logic mapper: 0 = Proposed, 1 = Active, 2 = Resolved
+                state: isTeamAddress ? 1 : stateVal, // Auto graduation if administrator wallet
                 winningOutcome: 0,
                 creator: walletAddress || ""
               })
@@ -103,20 +105,15 @@ export default function DAppPortal() {
           setAllOnChainMarkets(tempMarkets)
         }
 
-        // 2. Scan and populate active DEC voters if user joins committee natively
+        // 2. Validate current member configuration rules
         if (walletAddress) {
           const addressPadded = walletAddress.replace('0x', '').toLowerCase().padStart(64, '0')
-          const decCheckPayload = "0x15155013" + addressPadded // isDecMember method hex selector
+          const decCheckPayload = "0x15155013" + addressPadded
 
           const decCheckRes = await fetch(rpcUrl, {
             method: "POST",
             headers: req,
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: 99,
-              method: "eth_call",
-              params: [{ to: "0x9530477f41bA8e6272251376389d09Dd490CF38e", data: decCheckPayload }, "latest"]
-            })
+            body: JSON.stringify({ jsonrpc: "2.0", id: 99, method: "eth_call", params: [{ to: "0x9530477f41bA8e6272251376389d09Dd490CF38e", data: decCheckPayload }, "latest"] })
           })
           const decCheckData = await decCheckRes.json()
           if (decCheckData?.result && parseInt(decCheckData.result, 16) === 1) {
@@ -125,11 +122,11 @@ export default function DAppPortal() {
           }
         }
       } catch (err) {
-        console.error("RPC scan failure:", err)
+        console.error("Scanning payload failure:", err)
       }
     }
     scanBlockchainRegistry()
-  }, [walletAddress, historyLogs, marketDesc])
+  }, [walletAddress, historyLogs])
 
   useEffect(() => {
     if (walletAddress) {
@@ -177,20 +174,11 @@ export default function DAppPortal() {
   const handleCreateMarketSubmit = async () => {
     if (!marketDesc || !endDate) return
     const marketEndTimeInSeconds = Math.floor(new Date(endDate).getTime() / 1000)
-    const success = await createMarketOnChain(marketDesc, marketEndTimeInSeconds)
-    if (success) {
-      setMarketDesc('')
-      setOutcomes(['YES', 'NO'])
-      setMarketImage(null)
-    }
+    await createMarketOnChain(marketDesc, marketEndTimeInSeconds)
   }
 
   const handleJoinCommitteeSubmit = async () => {
-    const success = await joinDecOnChain()
-    if (success) {
-      setHasJoinedDEC(true)
-      setActiveTab('Market Proposals')
-    }
+    await joinDecOnChain()
   }
 
   const executeTradeAction = async (marketId: number, outcomeIndex: number) => {
@@ -211,7 +199,6 @@ export default function DAppPortal() {
     return translationMap[tab] || tab
   }
 
-  // Filter helper subsets based on active enum contract state logic definitions
   const activeMarkets = allOnChainMarkets.filter(m => m.state === 1)
   const pendingProposals = allOnChainMarkets.filter(m => m.state === 0)
 
@@ -241,9 +228,8 @@ export default function DAppPortal() {
         </div>
       </header>
 
-      {/* Main Responsive Frame Layout */}
+      {/* Main Framework Frame */}
       <div className="max-w-7xl mx-auto pt-28 px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
-        {/* Mobile menu dropdown layout */}
         <div className="lg:hidden w-full relative z-30">
           <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="w-full flex items-center justify-between bg-secondary/20 border border-secondary/30 rounded-xl px-4 py-3 text-sm font-semibold text-slate-200">
             <div className="flex items-center gap-2"><Menu className="size-4 text-primary" /><span>{getTabLabel(activeTab)}</span></div>
@@ -258,7 +244,6 @@ export default function DAppPortal() {
           )}
         </div>
 
-        {/* Desktop Sidebar Navigation Panels */}
         <aside className="hidden lg:flex flex-col gap-1.5 lg:col-span-1">
           {visibleTabs.map((tab) => {
             const Icon = { 'MarketPlace': Layers, 'Market Proposals': Hourglass, 'Pending Markets': Hourglass, 'Make Market': PlusCircle, 'Join DEC': Shield, 'History': History, 'DEC Members': Users }[tab]
@@ -270,7 +255,6 @@ export default function DAppPortal() {
           })}
         </aside>
 
-        {/* Dynamic Display Viewport */}
         <section className="lg:col-span-3 bg-secondary/10 border border-secondary/20 rounded-2xl p-5 sm:p-6 min-h-[500px] flex flex-col justify-between shadow-inner w-full overflow-hidden">
           <div className="w-full">
             <div className="mb-6 border-b border-purple-950/40 pb-5">
@@ -278,7 +262,7 @@ export default function DAppPortal() {
               <p className="text-purple-400 text-[10px] sm:text-xs font-semibold tracking-wide mt-1">{t('taglineSub')}</p>
             </div>
 
-            {/* TAB: MARKETPLACE - Renders active dynamic cards */}
+            {/* TAB: MARKETPLACE */}
             {activeTab === 'MarketPlace' && (
               <div className="grid grid-cols-1 gap-4 w-full">
                 {activeMarkets.length === 0 ? (
@@ -320,14 +304,14 @@ export default function DAppPortal() {
                         <span className="text-xs font-mono text-purple-400 font-bold">Query Index #{market.id}</span>
                         <span className="text-[10px] bg-purple-500/10 text-purple-300 px-2 py-0.5 rounded font-bold uppercase">{t('votingPhase')}</span>
                       </div>
-                      <p className="text-sm font-medium mb-5 text-slate-300 leading-normal">{market.question}</p>
+                      <p className="text-sm font-medium text-slate-300 leading-normal">{market.question}</p>
                     </div>
                   ))
                 )}
               </div>
             )}
 
-            {/* TAB: MARKET PROPOSALS - DEC Curation Voting View */}
+            {/* TAB: MARKET PROPOSALS */}
             {activeTab === 'Market Proposals' && (
               <div className="grid grid-cols-1 gap-4 w-full">
                 {pendingProposals.length === 0 ? (
@@ -341,8 +325,8 @@ export default function DAppPortal() {
                       </div>
                       <p className="text-sm font-semibold mb-4 text-slate-200">{market.question}</p>
                       <div className="grid grid-cols-2 gap-3">
-                        <button onClick={() => castVoteOnChain(market.id, true)} className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm">Vote FOR (Graduate)</button>
-                        <button onClick={() => castVoteOnChain(market.id, false)} className="py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm">Vote AGAINST (Reject)</button>
+                        <button onClick={() => castVoteOnChain(market.id, true)} className="py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg">Vote FOR (Graduate)</button>
+                        <button onClick={() => castVoteOnChain(market.id, false)} className="py-2.5 bg-rose-600 text-white text-xs font-bold rounded-lg">Vote AGAINST (Reject)</button>
                       </div>
                     </div>
                   ))
@@ -360,7 +344,7 @@ export default function DAppPortal() {
                   </div>
                   <div>
                     <label className="text-xs font-bold text-slate-400 block mb-1.5">{t('uploadImageLabel')}</label>
-                    <div onClick={() => fileInputRef.current?.click()} className="h-24 bg-black/30 hover:bg-black/50 border border-dashed border-purple-900/50 hover:border-primary rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all p-2 relative overflow-hidden text-center">
+                    <div onClick={() => fileInputRef.current?.click()} className="h-24 bg-black/30 border border-dashed border-purple-900/50 rounded-xl flex flex-col items-center justify-center cursor-pointer p-2 relative overflow-hidden text-center">
                       <input type="file" ref={fileInputRef} onChange={handleImageChange} accept="image/*" className="hidden" />
                       {marketImage ? <img src={marketImage} alt="Preview" className="size-full object-cover rounded-lg" /> : <><Upload className="size-5 text-purple-400 mb-1 mx-auto" /><span className="text-[9px] text-slate-400 leading-tight">{t('uploadPlaceholder')}</span></>}
                     </div>
@@ -375,22 +359,22 @@ export default function DAppPortal() {
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <label className="text-xs font-bold text-slate-400">{t('outcomesTitle')}</label>
-                    {outcomes.length < 4 && <button type="button" onClick={addOutcomeChoice} className="text-[11px] text-primary hover:text-purple-400 font-semibold">{t('addChoiceBtn')}</button>}
+                    {outcomes.length < 4 && <button type="button" onClick={addOutcomeChoice} className="text-[11px] text-primary font-semibold">{t('addChoiceBtn')}</button>}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {outcomes.map((outcome, idx) => (
                       <div key={idx} className="flex gap-2 items-center">
                         <div className="relative flex-1">
                           <span className="absolute left-3 top-2.5 text-[10px] font-mono text-slate-500 font-bold uppercase">Option {idx + 1}</span>
-                          <input type="text" value={outcome} placeholder={idx === 0 ? "YES" : idx === 1 ? "NO" : `Choice ${idx + 1}`} onChange={(e) => handleOutcomeTextChange(idx, e.target.value)} className="w-full bg-black/20 border border-purple-900/50 rounded-xl pl-16 pr-3 py-2 text-sm focus:outline-none focus:border-primary font-mono text-slate-200" />
+                          <input type="text" value={outcome} placeholder={idx === 0 ? "YES" : idx === 1 ? "NO" : `Choice ${idx + 1}`} onChange={(e) => handleOutcomeTextChange(idx, e.target.value)} className="w-full bg-black/20 border border-purple-900/50 rounded-xl pl-16 pr-3 py-2 text-sm focus:outline-none text-slate-200 font-mono" />
                         </div>
-                        {outcomes.length > 2 && <button type="button" onClick={() => removeOutcomeChoice(idx)} className="p-2 bg-red-950/20 hover:bg-red-900/30 border border-red-900/30 rounded-xl text-red-400 text-xs font-bold">{t('removeChoiceBtn')}</button>}
+                        {outcomes.length > 2 && <button type="button" onClick={() => removeOutcomeChoice(idx)} className="p-2 bg-red-950/20 text-red-400 text-xs font-bold rounded-xl">{t('removeChoiceBtn')}</button>}
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <button onClick={handleCreateMarketSubmit} className="w-full py-3 bg-gradient-to-r from-primary to-purple-600 text-white text-xs font-bold rounded-xl shadow-md hover:opacity-95 transition-opacity">
+                <button onClick={handleCreateMarketSubmit} className="w-full py-3 bg-gradient-to-r from-primary to-purple-600 text-white text-xs font-bold rounded-xl shadow-md">
                   {walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase() ? t('teamBypass') : t('userPropose')}
                 </button>
               </div>
@@ -402,7 +386,7 @@ export default function DAppPortal() {
                 <Shield className="size-10 mx-auto text-primary mb-3" />
                 <p className="text-sm font-semibold mb-1 text-slate-200">{t('assessorTitle')}</p>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">{t('assessorSub')}</p>
-                <button onClick={handleJoinCommitteeSubmit} className="px-6 py-2.5 bg-primary hover:bg-primary/95 text-white font-bold text-xs rounded-xl shadow-md transition-all">{t('assessorBtn')}</button>
+                <button onClick={handleJoinCommitteeSubmit} className="px-6 py-2.5 bg-primary text-white font-bold text-xs rounded-xl">{t('assessorBtn')}</button>
               </div>
             )}
 
@@ -469,18 +453,6 @@ export default function DAppPortal() {
           <div className="mt-6 p-4 bg-purple-950/40 border border-purple-500/20 rounded-xl text-xs text-purple-300 font-mono text-center font-semibold">{t('walletSuccessMessage')}</div>
         </section>
       </div>
-
-      {/* --- FOOTER --- */}
-      <footer className="max-w-7xl mx-auto border-t border-purple-900/10 mt-16 py-6 px-4 sm:px-6 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 gap-6">
-        <div><p>{t('footerRights')}</p></div>
-        <div className="flex items-center gap-5 shrink-0 bg-background/40 px-5 py-3 rounded-full border border-purple-900/20 shadow-inner">
-          <a href="https://twitter.com/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-semibold text-slate-300"><span>Twitter</span></a>
-          <span className="w-px h-3.5 bg-purple-900/30" />
-          <a href="https://t.me/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-semibold text-slate-300"><span>Telegram</span></a>
-          <span className="w-px h-3.5 bg-purple-900/30" />
-          <a href="https://interlinklabs.ai" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-2 font-semibold text-slate-300"><span>Interlink</span></a>
-        </div>
-      </footer>
     </div>
   )
 }

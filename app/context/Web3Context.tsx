@@ -252,7 +252,6 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // 🟢 DECLARED IN SCOPE: Explicitly defined connection configurations
   const connectWallet = async () => {
     if (typeof window === 'undefined' || !(window as any).ethereum) {
       setTxStatus("Error: Web3 Wallet extension not identified.")
@@ -480,7 +479,6 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    // 🟢 SECURELY EXPORTED: Bundled context properties explicitly exported to page elements
     <Web3Context.Provider value={{ walletAddress, decMembers, txStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain }}>
       {children}
     </Web3Context.Provider>

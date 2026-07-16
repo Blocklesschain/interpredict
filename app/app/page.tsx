@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useWeb3 } from '../context/Web3Context'
-import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Image as ImageIcon, Cpu } from 'lucide-react'
+import { ethers } from 'ethers'
+import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Cpu } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import Link from 'next/link'
 
@@ -32,16 +33,16 @@ export default function DAppPortal() {
 
   const [hasJoinedDEC, setHasJoinedDEC] = useState<boolean>(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false)
-  const [oracleRequested, setOracleRequested] = useState<boolean>(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const ADMIN_ADDRESS = "0x6e832252ea4c78068ee109d953724d2762431992"
   const [persistentLogs, setPersistentLogs] = useState<any[]>([])
 
+  // 🟢 CLEAN SLATES: Zero static items. Populations are strictly real-time from contract calls.
   const [allOnChainMarkets, setAllOnChainMarkets] = useState<SmartMarket[]>([])
   const [blockchainDecList, setBlockchainDecList] = useState<string[]>([])
 
-  // 📡 DYNAMIC BLOCKCHAIN SCANNER ENGINE
+  // 📡 AUTOMATED CONTRACT DECODER SCANNER
   useEffect(() => {
     async function scanBlockchainRegistry() {
       try {
@@ -50,7 +51,14 @@ export default function DAppPortal() {
         const req = new Headers()
         if (localStorageToken) req.append("Authorization", `Bearer ${localStorageToken}`)
 
-        // 1. Scan market parameters
+        // Native Human-Readable ABI mapping descriptor for strict interface conversions
+        const iface = new ethers.Interface([
+          "function totalMarkets() view returns (uint256)",
+          "function isDecMember(address) view returns (bool)",
+          "function markets(uint256) view returns (uint256 id, string question, uint256 marketEndTime, uint256 votingEndTime, uint256 totalYesPool, uint256 totalNoPool, uint8 state, uint8 winningOutcome, address creator, bool creatorFeeClaimed, uint256 votesForActive, uint256 votesAgainstActive, bool oracleResolutionRequested)"
+        ])
+
+        // 1. Fetch count using robust camelCase signature hashes
         const marketCountRes = await fetch(rpcUrl, {
           method: "POST",
           headers: req,
@@ -58,19 +66,16 @@ export default function DAppPortal() {
             jsonrpc: "2.0",
             id: 1,
             method: "eth_call",
-            params: [{ to: "0x9530477f41bA8e6272251376389d09Dd490CF38e", data: "0x3a4b5182" }, "latest"] // totalMarkets
+            params: [{ to: "0x9530477f41bA8e6272251376389d09Dd490CF38e", data: iface.encodeFunctionData("totalMarkets") }, "latest"]
           })
         })
         const countData = await marketCountRes.json()
 
         if (countData?.result && countData.result !== "0x") {
-          const totalCount = parseInt(countData.result, 16) || 0
+          const totalCount = Number(iface.decodeFunctionResult("totalMarkets", countData.result)[0])
           const tempMarkets: SmartMarket[] = []
 
           for (let i = 0; i < totalCount; i++) {
-            const indexHex = i.toString(16).padStart(64, '0')
-            const dataPayload = "0x071c7656" + indexHex // markets mapping selector
-
             const marketItemRes = await fetch(rpcUrl, {
               method: "POST",
               headers: req,
@@ -78,51 +83,59 @@ export default function DAppPortal() {
                 jsonrpc: "2.0",
                 id: 2 + i,
                 method: "eth_call",
-                params: [{ to: "0x9530477f41bA8e6272251376389d09Dd490CF38e", data: dataPayload }, "latest"]
+                params: [{ to: "0x9530477f41bA8e6272251376389d09Dd490CF38e", data: iface.encodeFunctionData("markets", [i]) }, "latest"]
               })
             })
             const itemData = await marketItemRes.json()
 
             if (itemData?.result && itemData.result !== "0x") {
-              const stripped = itemData.result.replace('0x', '')
-              // Natively offset decode the dynamic string position pointers inside the contract payload
-              const stateVal = parseInt(stripped.slice(384, 448), 16) || 0
-              const isTeamAddress = walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
+              // 🟢 AUTOMATIC UNPACKING: Real string text values parsed natively from memory arrays
+              const decoded = iface.decodeFunctionResult("markets", itemData.result)
+              const isTeamAddress = walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
 
               tempMarkets.push({
-                id: i,
-                question: marketDesc || "Active Decentralized Prediction Pool Protocol Instance",
-                marketEndTime: 1798761600,
-                votingEndTime: 1798761600,
-                totalYesPool: "0",
-                totalNoPool: "0",
-                state: isTeamAddress ? 1 : stateVal, // Auto graduation if administrator wallet
-                winningOutcome: 0,
-                creator: walletAddress || ""
+                id: Number(decoded[0]),
+                question: String(decoded[1]),
+                marketEndTime: Number(decoded[2]),
+                votingEndTime: Number(decoded[3]),
+                totalYesPool: decoded[4].toString(),
+                totalNoPool: decoded[5].toString(),
+                state: isTeamAddress ? 1 : Number(decoded[6]), // Auto-graduate if team wallet address, else retain contract evaluation
+                winningOutcome: Number(decoded[7]),
+                creator: String(decoded[8])
               })
             }
           }
           setAllOnChainMarkets(tempMarkets)
         }
 
-        // 2. Validate current member configuration rules
+        // 2. Validate current member matrix dynamically
         if (walletAddress) {
-          const addressPadded = walletAddress.replace('0x', '').toLowerCase().padStart(64, '0')
-          const decCheckPayload = "0x15155013" + addressPadded
-
           const decCheckRes = await fetch(rpcUrl, {
             method: "POST",
             headers: req,
-            body: JSON.stringify({ jsonrpc: "2.0", id: 99, method: "eth_call", params: [{ to: "0x9530477f41bA8e6272251376389d09Dd490CF38e", data: decCheckPayload }, "latest"] })
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 99,
+              method: "eth_call",
+              params: [{ to: "0x9530477f41bA8e6272251376389d09Dd490CF38e", data: iface.encodeFunctionData("isDecMember", [walletAddress]) }, "latest"]
+            })
           })
           const decCheckData = await decCheckRes.json()
-          if (decCheckData?.result && parseInt(decCheckData.result, 16) === 1) {
-            setHasJoinedDEC(true)
-            setBlockchainDecList([walletAddress])
+
+          if (decCheckData?.result && decCheckData.result !== "0x") {
+            const isMember = iface.decodeFunctionResult("isDecMember", decCheckData.result)[0]
+            if (isMember) {
+              setHasJoinedDEC(true)
+              setBlockchainDecList([walletAddress])
+            } else {
+              setHasJoinedDEC(false)
+              setBlockchainDecList([])
+            }
           }
         }
       } catch (err) {
-        console.error("Scanning payload failure:", err)
+        console.error("Scanning synchronization failure:", err)
       }
     }
     scanBlockchainRegistry()
@@ -174,7 +187,12 @@ export default function DAppPortal() {
   const handleCreateMarketSubmit = async () => {
     if (!marketDesc || !endDate) return
     const marketEndTimeInSeconds = Math.floor(new Date(endDate).getTime() / 1000)
-    await createMarketOnChain(marketDesc, marketEndTimeInSeconds)
+    const success = await createMarketOnChain(marketDesc, marketEndTimeInSeconds)
+    if (success) {
+      setMarketDesc('')
+      setOutcomes(['YES', 'NO'])
+      setMarketImage(null)
+    }
   }
 
   const handleJoinCommitteeSubmit = async () => {
@@ -199,6 +217,7 @@ export default function DAppPortal() {
     return translationMap[tab] || tab
   }
 
+  // Pure data parsing tied directly to contract state definitions
   const activeMarkets = allOnChainMarkets.filter(m => m.state === 1)
   const pendingProposals = allOnChainMarkets.filter(m => m.state === 0)
 

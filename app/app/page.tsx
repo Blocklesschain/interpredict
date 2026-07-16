@@ -576,7 +576,7 @@ export default function DAppPortal() {
                         {decMembers.map((member, index) => (
                           <tr key={index} className="hover:bg-purple-950/5 transition-colors">
                             <td className="p-4 text-slate-200">{member}</td>
-                            <td className="p-4 text-slate-400">1.0 tITL Stake Verified</td>
+                            <td className="p-4 text-slate-400">0.1 tITL Stake Verified</td>
                           </tr>
                         ))}
                       </tbody>

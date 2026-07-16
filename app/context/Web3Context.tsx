@@ -966,9 +966,26 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const getContractInstance = async () => {
     if (!(window as any).ethereum) throw new Error("Wallet not identified")
 
+    // 1. Establish your standard MetaMask browser provider for signing transactions
     const walletProvider = new ethers.BrowserProvider((window as any).ethereum)
     const signer = await walletProvider.getSigner()
-    const testnetProvider = new ethers.JsonRpcProvider("https://evm-rpc.test-net.interlinklabs.ai/v1/rpc")
+
+    // 2. Retrieve your active auth token from localStorage
+    const accessToken = process.env.NEXT_PUBLIC_INTERLINK_ACCESS_TOKEN || localStorage.getItem('accessToken') || "";
+
+    // 3. Build an authorized Connection setting for background queries (like gas fees or views)
+    const connection = new ethers.FetchRequest("https://evm-rpc.test-net.interlinklabs.ai/v1/rpc");
+
+    if (accessToken) {
+      connection.setHeader("Authorization", `Bearer ${accessToken}`);
+    } else {
+      console.warn("⚠️ Warning: No accessToken found in localStorage. Gateway requests may fail with 401.");
+    }
+
+    // 4. Bind the token-authorized provider
+    const testnetProvider = new ethers.JsonRpcProvider(connection)
+
+    // 5. Connect the contract to your metamask signer
     const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI.abi, signer)
 
     return { contract, provider: testnetProvider }

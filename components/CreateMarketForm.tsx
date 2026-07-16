@@ -18,7 +18,7 @@ export default function CreateMarketForm() {
     // 1. Automatically convert local date/time to blockchain Unix seconds timestamp
     const marketEndTimeInSeconds = Math.floor(new Date(selectedDateFromForm).getTime() / 1000);
 
-    // 2. Broadcast transaction with dynamic EIP-1559 gas
+    // 2. Broadcast transaction safely using our EIP-1559 raw payload bypass engine
     const success = await createMarketOnChain(marketDescription, marketEndTimeInSeconds);
 
     if (success) {
@@ -38,7 +38,7 @@ export default function CreateMarketForm() {
           <label className="block text-slate-300 text-sm font-medium mb-2">Market Question / Description</label>
           <input
             type="text"
-            placeholder="e.g. Will Interlink network testnet gateway process over 10M transactions this week?"
+            placeholder="e.g. Will Interlink network testnet gateway process over 10M transactions this month?"
             value={marketDescription}
             onChange={(e) => setMarketDescription(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 placeholder-slate-600 transition"

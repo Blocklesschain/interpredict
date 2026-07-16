@@ -2,15 +2,15 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useWeb3 } from '../context/Web3Context'
-import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Image as ImageIcon, Cpu } from 'lucide-react'
+import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Cpu } from 'lucide-react'
 import { Logo } from '@/components/logo'
-import { LanguageSelector } from '@/components/LanguageSelector'
+import CreateMarketForm from "@/components/CreateMarketForm" // 🟢 Clean imported form layout component
 import Link from 'next/link'
 
 type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History' | 'DEC Members'
 
 export default function DAppPortal() {
-  const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, decMembers, locale, t } = useWeb3()
+  const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, joinDecOnChain, castVoteOnChain, placeBetOnChain, decMembers, t } = useWeb3()
   const [activeTab, setActiveTab] = useState<TabType>('MarketPlace')
   const [stakeAmount, setStakeAmount] = useState<string>('0.1')
   const [marketDesc, setMarketDesc] = useState('')
@@ -34,7 +34,8 @@ export default function DAppPortal() {
 
   useEffect(() => {
     if (walletAddress) {
-      const savedLogs = localStorage.getItem(`interpredict_logs_${walletAddress.toLowerCase()}`)
+      const storageKey = `interpredict_logs_${walletAddress.toLowerCase()}`
+      const savedLogs = localStorage.getItem(storageKey)
       if (savedLogs) {
         setPersistentLogs(JSON.parse(savedLogs))
       } else {
@@ -104,16 +105,6 @@ export default function DAppPortal() {
     setOutcomes(updated)
   }
 
-  const handleCreateMarketSubmit = async () => {
-    if (!marketDesc) return
-    const success = await createMarketOnChain(marketDesc)
-    if (success) {
-      setMarketDesc('')
-      setOutcomes(['YES', 'NO'])
-      setMarketImage(null)
-    }
-  }
-
   const handleJoinCommitteeSubmit = async () => {
     const success = await joinDecOnChain()
     if (success) {
@@ -135,8 +126,6 @@ export default function DAppPortal() {
     if (!walletAddress) return;
     try {
       setOracleRequested(true)
-      // Connect to context logic if needed:
-      // await requestOracleResolutionOnChain(marketId)
     } catch (err) {
       console.error(err)
     }
@@ -220,8 +209,7 @@ export default function DAppPortal() {
                 <button
                   key={tab}
                   onClick={() => handleTabSelect(tab)}
-                  className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-primary text-white' : 'text-slate-400 hover:bg-purple-950/40'
-                    }`}
+                  className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-primary text-white' : 'text-slate-400 hover:bg-purple-950/40'}`}
                 >
                   {getTabLabel(tab)}
                 </button>
@@ -246,8 +234,7 @@ export default function DAppPortal() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`flex items-center gap-2.5 px-4 py-3.5 rounded-xl font-semibold text-sm border transition-all ${activeTab === tab ? 'bg-primary text-white border-primary/50 shadow-md' : 'text-slate-400 border-transparent hover:bg-secondary/40'
-                  }`}
+                className={`flex items-center gap-2.5 px-4 py-3.5 rounded-xl font-semibold text-sm border transition-all ${activeTab === tab ? 'bg-primary text-white border-primary/50 shadow-md' : 'text-slate-400 border-transparent hover:bg-secondary/40'}`}
               >
                 <Icon className="size-4 shrink-0" />
                 <span>{getTabLabel(tab)}</span>
@@ -314,7 +301,6 @@ export default function DAppPortal() {
                     <span>Deadline: {endDate}</span>
 
                     {(() => {
-                      // ⏱️ Determine if current day has surpassed the defined target deadline
                       const deadlinePassed = new Date().getTime() >= new Date(endDate).getTime();
 
                       return (
@@ -322,10 +308,10 @@ export default function DAppPortal() {
                           onClick={() => triggerAutomatedOracle(0)}
                           disabled={!deadlinePassed || oracleRequested}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all border ${!deadlinePassed
-                            ? 'bg-slate-900/30 border-slate-800/80 text-slate-500 cursor-not-allowed' // 🔒 Grayed out & locked before timeline closes
+                            ? 'bg-slate-900/30 border-slate-800/80 text-slate-500 cursor-not-allowed'
                             : oracleRequested
                               ? 'bg-purple-950/20 border-purple-900/50 text-purple-400 cursor-not-allowed animate-pulse'
-                              : 'bg-primary/10 border-primary/30 text-primary hover:bg-primary hover:text-white' // 🚀 Active once deadline passes
+                              : 'bg-primary/10 border-primary/30 text-primary hover:bg-primary hover:text-white'
                             }`}
                           title={!deadlinePassed ? "Available once market deadline passes" : "Submit request to official oracle"}
                         >
@@ -389,107 +375,9 @@ export default function DAppPortal() {
 
             {/* TAB: MAKE MARKET */}
             {activeTab === 'Make Market' && (
-              <div className="space-y-4 w-full max-w-xl">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="text-xs font-bold text-slate-400 block mb-1.5">
-                      {t('marketStatement')}
-                    </label>
-                    <textarea
-                      placeholder="e.g., Will Bitcoin settle above $120,000 on the global macro index deadline?"
-                      value={marketDesc}
-                      onChange={(e) => setMarketDesc(e.target.value)}
-                      className="w-full h-24 bg-black/20 border border-purple-900/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary resize-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 block mb-1.5">
-                      {t('uploadImageLabel')}
-                    </label>
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className="h-24 bg-black/30 hover:bg-black/50 border border-dashed border-purple-900/50 hover:border-primary rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all p-2 relative overflow-hidden text-center"
-                    >
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleImageChange}
-                        accept="image/*"
-                        className="hidden"
-                      />
-                      {marketImage ? (
-                        <img src={marketImage} alt="Preview" className="size-full object-cover rounded-lg" />
-                      ) : (
-                        <>
-                          <Upload className="size-5 text-purple-400 mb-1" />
-                          <span className="text-[9px] text-slate-400 leading-tight">{t('uploadPlaceholder')}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-slate-400 block mb-1.5">
-                    {t('votingEndDate')}
-                  </label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full bg-black/20 border border-purple-900/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary text-slate-200"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-1.5">
-                    <label className="text-xs font-bold text-slate-400">
-                      {t('outcomesTitle')}
-                    </label>
-                    {outcomes.length < 4 && (
-                      <button
-                        type="button"
-                        onClick={addOutcomeChoice}
-                        className="text-[11px] text-primary hover:text-purple-400 font-semibold"
-                      >
-                        {t('addChoiceBtn')}
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {outcomes.map((outcome, idx) => (
-                      <div key={idx} className="flex gap-2 items-center">
-                        <div className="relative flex-1">
-                          <span className="absolute left-3 top-2.5 text-[10px] font-mono text-slate-500 font-bold uppercase">Option {idx + 1}</span>
-                          <input
-                            type="text"
-                            value={outcome}
-                            placeholder={idx === 0 ? "YES" : idx === 1 ? "NO" : `Choice ${idx + 1}`}
-                            onChange={(e) => handleOutcomeTextChange(idx, e.target.value)}
-                            className="w-full bg-black/20 border border-purple-900/50 rounded-xl pl-16 pr-3 py-2 text-sm focus:outline-none focus:border-primary font-mono text-slate-200"
-                          />
-                        </div>
-                        {outcomes.length > 2 && (
-                          <button
-                            type="button"
-                            onClick={() => removeOutcomeChoice(idx)}
-                            className="p-2 bg-red-950/20 hover:bg-red-900/30 border border-red-900/30 rounded-xl text-red-400 text-xs font-bold"
-                          >
-                            {t('removeChoiceBtn')}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <button onClick={handleCreateMarketSubmit} className="w-full py-3 bg-gradient-to-r from-primary to-purple-600 text-white text-xs font-bold rounded-xl shadow-md hover:opacity-95 transition-opacity">
-                  {walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
-                    ? t('teamBypass')
-                    : t('userPropose')}
-                </button>
+              <div className="w-full max-w-xl">
+                {/* 🟢 4. Swapped old single-argument code block with clean double-argument layout component */}
+                <CreateMarketForm />
               </div>
             )}
 
@@ -540,8 +428,7 @@ export default function DAppPortal() {
                         </div>
 
                         <div className="shrink-0 sm:text-right">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase border ${log.status === 'Success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                            }`}>
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase border ${log.status === 'Success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/10 border-rose-500/30 text-rose-400'}`}>
                             ● {log.status}
                           </span>
                         </div>

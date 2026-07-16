@@ -519,10 +519,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const [txStatus, setTxStatus] = useState<string | null>(null)
   const [historyLogs, setHistoryLogs] = useState<HistoryRecord[]>([])
   const [locale, setLocaleState] = useState<LocaleType>('en')
-  const [decMembers, setDecMembers] = useState<string[]>([
-    "0x9A54b9d038eF3c0076c54BD9d60705Da25A12bc4",
-    "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"
-  ])
+  const [decMembers, setDecMembers] = useState<string[]>([])
 
   useEffect(() => {
     const savedLocale = localStorage.getItem('interpredict_lang') as LocaleType
@@ -676,17 +673,21 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const getContractInstance = async () => {
     if (!(window as any).ethereum) throw new Error("Wallet not identified")
 
-    const walletProvider = new ethers.BrowserProvider((window as any).ethereum)
+    // Ensure we handle URL syntax exactly right for secure gateways
+    const rpcUrl = "https://evm-rpc.test-net.interlinklabs.ai/v1/rpc";
     const accessToken = process.env.NEXT_PUBLIC_INTERLINK_ACCESS_TOKEN || localStorage.getItem('accessToken') || "";
 
-    const connection = new ethers.FetchRequest("https://evm-rpc.test-net.interlinklabs.ai/v1/rpc");
+    const connection = new ethers.FetchRequest(rpcUrl);
+
     if (accessToken) {
       connection.setHeader("Authorization", `Bearer ${accessToken}`);
     }
 
-    const testnetProvider = new ethers.JsonRpcProvider(connection)
+    // Force ethers to handle the provider dynamically without silent re-fetches
+    const testnetProvider = new ethers.JsonRpcProvider(connection, undefined, {
+      staticNetwork: true // 🟢 Stops ethers from spamming the gateway with block height checks!
+    })
 
-    // 🟢 Dynamic contract wiring: Read views from authorized RPC provider, send transactions to wallet signer
     const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI.abi, testnetProvider)
 
     return { contract, provider: testnetProvider }

@@ -28,6 +28,7 @@ interface Web3ContextType {
   joinDecOnChain: () => Promise<boolean>
   castVoteOnChain: (marketId: number, support: boolean) => Promise<void>
   placeBetOnChain: (marketId: number, outcome: number, amount: string) => Promise<void>
+  claimPayoutOnChain: (marketId: number) => Promise<boolean>
 }
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
@@ -813,6 +814,21 @@ const CONTRACT_ABI = {
   ]
 }
 
+// 🆕 NEW: MetaMask/ethers errors often carry far more detail than err.message
+// alone (a code, raw revert data, an RPC-level reason) — this pulls all of
+// it together into one string so it shows up directly in the History tab
+// and status banner, without needing DevTools access at all.
+function formatTxError(err: any): string {
+  const parts: string[] = []
+  if (err?.message) parts.push(err.message)
+  if (err?.code !== undefined) parts.push(`code=${err.code}`)
+  if (err?.reason) parts.push(`reason=${err.reason}`)
+  if (err?.data && typeof err.data === 'string') parts.push(`data=${err.data}`)
+  if (err?.info?.error?.message) parts.push(`rpc=${err.info.error.message}`)
+  if (err?.info?.responseStatus) parts.push(`httpStatus=${err.info.responseStatus}`)
+  return parts.length > 0 ? parts.join(' | ') : String(err)
+}
+
 export function Web3Provider({ children }: { children: React.ReactNode }) {
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [txStatus, setTxStatus] = useState<string | null>(null)
@@ -1062,7 +1078,12 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
         throw new Error("Transaction execution failed on-chain.");
       }
     } catch (err: any) {
-      setTxStatus(`Deployment Cancelled: ${err.message}`)
+      const detail = formatTxError(err)
+      console.error('createMarketOnChain failed:', err)
+      setTxStatus(`Deployment Cancelled: ${detail}`)
+      if (walletAddress) {
+        saveLogToLocalStorage(walletAddress, txType, description, `Failed — ${detail}`, 'Failed')
+      }
       return false
     }
   }
@@ -1114,7 +1135,12 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
         throw new Error("Transaction reverted on-chain.");
       }
     } catch (err: any) {
-      setTxStatus(`Verification Cancelled: ${err.message}`)
+      const detail = formatTxError(err)
+      console.error('joinDecOnChain failed:', err)
+      setTxStatus(`Verification Cancelled: ${detail}`)
+      if (walletAddress) {
+        saveLogToLocalStorage(walletAddress, 'Committee Bond', 'Request to join DEC Committee', `Failed — ${detail}`, 'Failed')
+      }
       return false
     }
   }
@@ -1149,7 +1175,12 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
         saveLogToLocalStorage(walletAddress, 'Governance Vote', `Vote cast on Proposal ID #${marketId}`, `Success — ${ballotText}`, 'Success')
       }
     } catch (err: any) {
-      setTxStatus(`Voting Error: ${err.message}`)
+      const detail = formatTxError(err)
+      console.error('castVoteOnChain failed:', err)
+      setTxStatus(`Voting Error: ${detail}`)
+      if (walletAddress) {
+        saveLogToLocalStorage(walletAddress, 'Governance Vote', `Vote attempt on Proposal ID #${marketId}`, `Failed — ${detail}`, 'Failed')
+      }
     }
   }
 
@@ -1187,12 +1218,65 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
         saveLogToLocalStorage(walletAddress, 'Market Trade', `Wager placed on Pool #${marketId}`, `Success — Predicted ${targetSide} with ${amount} tITL`, 'Success')
       }
     } catch (err: any) {
-      setTxStatus(`Execution Error: ${err.message}`)
+      const detail = formatTxError(err)
+      console.error('placeBetOnChain failed:', err)
+      setTxStatus(`Execution Error: ${detail}`)
+      if (walletAddress) {
+        saveLogToLocalStorage(walletAddress, 'Market Trade', `Wager attempt on Pool #${marketId}`, `Failed — ${detail}`, 'Failed')
+      }
+    }
+  }
+
+  // 🆕 NEW: lets a wallet cash out winnings from a resolved market it
+  // participated in — calls the contract's existing claimPayout(), which was
+  // never wired up to any button in the UI before.
+  const claimPayoutOnChain = async (marketId: number): Promise<boolean> => {
+    try {
+      setTxStatus("Requesting payout claim...")
+      const { provider } = await getContractInstance()
+
+      const iface = new ethers.Interface(CONTRACT_ABI.abi);
+      const data = iface.encodeFunctionData("claimPayout", [marketId]);
+
+      const txHash = await (window as any).ethereum.request({
+        method: "eth_sendTransaction",
+        params: [{
+          from: walletAddress,
+          to: CONTRACT_ADDRESS,
+          data: data
+        }]
+      });
+
+      setTxStatus("Awaiting payout confirmation...")
+
+      let receipt = null;
+      while (!receipt) {
+        receipt = await provider.getTransactionReceipt(txHash);
+        if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      if (receipt && Number(receipt.status) === 1) {
+        setTxStatus("Payout claimed successfully!")
+        if (walletAddress) {
+          saveLogToLocalStorage(walletAddress, 'Market Trade', `Payout claimed on Pool #${marketId}`, 'Success — Winnings transferred to wallet', 'Success')
+        }
+        return true
+      } else {
+        throw new Error("Payout transaction failed on-chain.")
+      }
+    } catch (err: any) {
+      const detail = formatTxError(err)
+      console.error('claimPayoutOnChain failed:', err)
+      setTxStatus(`Claim Error: ${detail}`)
+      if (walletAddress) {
+        saveLogToLocalStorage(walletAddress, 'Market Trade', `Payout claim attempt on Pool #${marketId}`, `Failed — ${detail}`, 'Failed')
+      }
+      return false
     }
   }
 
   return (
-    <Web3Context.Provider value={{ walletAddress, decMembers, txStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain }}>
+    <Web3Context.Provider value={{ walletAddress, decMembers, txStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, claimPayoutOnChain }}>
       {children}
     </Web3Context.Provider>
   )

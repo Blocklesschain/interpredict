@@ -122,21 +122,27 @@ export async function getValidToken(address: string, signer: ethers.Signer): Pro
 
   // Bearer still good (60s safety buffer before its real 15-min expiry)
   if (state && now < state.accessExpiresAt - 60_000) {
+    console.log(`[interlinkAuth] Using cached token for ${address}, expires ${new Date(state.accessExpiresAt).toLocaleTimeString()}`)
     return state.accessToken
   }
 
   // Bearer expired/expiring, but refresh token (7-day life) still valid -> silent refresh
   if (state && now < state.refreshExpiresAt - 60_000) {
     try {
+      console.log(`[interlinkAuth] Access token expired for ${address} — refreshing silently...`)
       state = await refreshAccessToken(address, state)
+      console.log(`[interlinkAuth] Refreshed OK. New expiry: ${new Date(state.accessExpiresAt).toLocaleTimeString()}`)
       return state.accessToken
-    } catch {
+    } catch (err: any) {
+      console.warn(`[interlinkAuth] Silent refresh failed for ${address}: ${err.message} — falling back to full re-auth`)
       // refresh token rejected server-side (revoked, clock skew, etc.) -> fall through
     }
   }
 
   // No usable state, or refresh failed -> full challenge/verify, requires a signature
+  console.log(`[interlinkAuth] No valid session for ${address} — requesting wallet signature...`)
   state = await verifyChallenge(address, signer)
+  console.log(`[interlinkAuth] New session established. Access expires ${new Date(state.accessExpiresAt).toLocaleTimeString()}, refresh expires ${new Date(state.refreshExpiresAt).toLocaleDateString()}`)
   return state.accessToken
 }
 

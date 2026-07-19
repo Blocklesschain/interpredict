@@ -22,7 +22,7 @@ interface SmartMarket {
   creator: string
 }
 
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x8c69b2D0A1C89fd3C6aD64e1Be3536FAF63b55b6"
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x9530477f41bA8e6272251376389d09Dd490CF38e"
 
 export default function DAppPortal() {
   const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, t } = useWeb3()
@@ -96,6 +96,11 @@ export default function DAppPortal() {
           })
         })
         const countData = await marketCountRes.json()
+
+        // 🔧 NEW: surface RPC errors instead of silently skipping the update
+        if (countData?.error) {
+          throw new Error(`RPC error reading totalMarkets: ${countData.error.message || JSON.stringify(countData.error)}`)
+        }
 
         if (countData?.result && countData.result !== "0x") {
           const totalCount = Number(iface.decodeFunctionResult("totalMarkets", countData.result)[0])
@@ -178,8 +183,11 @@ export default function DAppPortal() {
         } else {
           setBlockchainDecList(isMember ? [walletAddress] : [])
         }
-      } catch (err) {
-        console.error("Scanning synchronization failure:", err)
+      } catch (err: any) {
+        console.error("Scanning synchronization failure:", err?.message || err)
+        // Reads failed for this wallet — most likely it isn't authorized on
+        // Interlink's auth gate yet, or its token/refresh flow failed. Check
+        // the console error above for the exact RPC response.
       }
     }
     scanBlockchainRegistry()

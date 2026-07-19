@@ -72,7 +72,7 @@ contract InterPredict {
     address public oracle;
 
     uint256 public constant MARKET_STAKE = 1 ether; // Native ITL Stake
-    uint256 public constant VOTING_DURATION = 1 days;
+    uint256 public constant VOTING_DURATION = 10 minutes;
 
     // 🧮 Dynamically Evaluated Platform Fee Structure (5.0% Total)
     uint256 public constant TOTAL_PLATFORM_FEE_BPS = 500; // 5.0% flat fee deducted from total winnings

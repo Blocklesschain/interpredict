@@ -15,33 +15,33 @@ interface MarketType {
   resolved: boolean
 }
 
-const CONTRACT_ADDRESS = process.env.PUBLIC_CONTRACT_ADDRESS! || "0x75763f550a398c4E08e9bdFc33B34a40B5d5eD1A";
-const CONTRACT_ABI = ["function marketCount() view returns (uint256)"]
-
 export default function HomePage() {
   const { t } = useWeb3()
   const [liveMarkets, setLiveMarkets] = useState<MarketType[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
+  // 🔧 FIXED: previously this required window.ethereum to even attempt a read
+  // (so it silently did nothing for visitors without a wallet), called a
+  // function name (`marketCount`) that doesn't exist on the contract
+  // (the real function is `totalMarkets`), and pointed at a hardcoded fallback
+  // address that wasn't the real deployed contract at all. It now just calls
+  // our own public API route, which works for every visitor regardless of
+  // wallet, and is backed by the real contract address + a real function name.
   useEffect(() => {
     async function syncExploreMarkets() {
-      if (typeof window === 'undefined' || !(window as any).ethereum) return
       try {
         setIsLoading(true)
-        const provider = new ethers.BrowserProvider((window as any).ethereum)
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider)
-        const totalCount = await contract.marketCount()
+        const res = await fetch('/api/markets')
+        if (!res.ok) throw new Error('Failed to load markets')
+        const { activeMarkets } = await res.json()
 
-        const fetched: MarketType[] = []
-        for (let i = 0; i < Number(totalCount); i++) {
-          fetched.push({
-            id: i,
-            description: `InterPredict Global Prediction Trading Pool Index #${i}`,
-            yesVotes: "0.00",
-            noVotes: "0.00",
-            resolved: false
-          })
-        }
+        const fetched: MarketType[] = activeMarkets.map((m: any) => ({
+          id: m.id,
+          description: m.question,
+          yesVotes: ethers.formatEther(m.totalYesPool),
+          noVotes: ethers.formatEther(m.totalNoPool),
+          resolved: false
+        }))
         setLiveMarkets(fetched)
       } catch (err) {
         console.error(err)

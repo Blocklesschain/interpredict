@@ -13,12 +13,11 @@ const config = {
     },
   },
   networks: {
-    interlinkTestnet: {
+    interlink_testnet: {
       url: "https://evm-rpc.test-net.interlinklabs.ai/v1/rpc",
-      // REPLACE the placeholder below with your secret PRIVATE KEY (not your public address)
-      accounts: ["830839d41dac6aa3d3d1860c0e5de43e8ce0801d28ace6d7a71c3ab0a92de4e9"],
+      accounts: [process.env.PRIVATE_KEY],
       httpHeaders: {
-        Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJpbnRlcmxpbmstd2FsbGV0IiwiZXhwIjoxNzg0MjEwNTM3LCJpYXQiOjE3ODQyMDk2MzcsImlzcyI6ImludGVybGluayIsImp0aSI6IjdkOTM5NDg4ODA1ZTk4YzE0Nzk5OGM2MyIsInN1YiI6IjB4NkU4MzIyNTJlQTRjNzgwNjhFRTEwOWQ5NTM3MjREMjc2MjQzMTk5MiIsIndhbGxldEFkZHJlc3MiOiIweDZFODMyMjUyZUE0Yzc4MDY4RUUxMDlkOTUzNzI0RDI3NjI0MzE5OTIifQ._SO5USpiC2GTNCQQb7rlfUOfUn4pw8JlxVI71s8kyhg"
+        Authorization: "Bearer " + process.env.INTERLINK_TOKEN
       }
     }
   }

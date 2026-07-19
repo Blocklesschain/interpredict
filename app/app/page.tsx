@@ -6,6 +6,7 @@ import { ethers } from 'ethers'
 import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Cpu } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import Link from 'next/link'
+import { getValidToken } from '@/lib/interlinkAuth'
 
 type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History' | 'DEC Members'
 
@@ -20,6 +21,8 @@ interface SmartMarket {
   winningOutcome: number
   creator: string
 }
+
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x8c69b2D0A1C89fd3C6aD64e1Be3536FAF63b55b6"
 
 export default function DAppPortal() {
   const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, t } = useWeb3()
@@ -46,15 +49,38 @@ export default function DAppPortal() {
   useEffect(() => {
     async function scanBlockchainRegistry() {
       try {
-        const localStorageToken = localStorage.getItem('accessToken') || ""
+        // 🔧 FIXED: logged-out visitors go through our own /api/markets route
+        // (server-side service wallet auth) instead of trying to hit the
+        // gated RPC directly with no token at all.
+        if (!walletAddress) {
+          const res = await fetch('/api/markets')
+          if (!res.ok) throw new Error('Failed to load public markets feed')
+          const { activeMarkets, pendingProposals } = await res.json()
+
+          const combined: SmartMarket[] = [...activeMarkets, ...pendingProposals]
+          setAllOnChainMarkets(combined)
+          setHasJoinedDEC(false)
+          setBlockchainDecList([])
+          return
+        }
+
+        // 🔧 FIXED: connected wallets authenticate their own RPC session via
+        // the challenge/verify/refresh flow instead of a token that was
+        // never being set.
+        const browserProvider = new ethers.BrowserProvider((window as any).ethereum)
+        const signer = await browserProvider.getSigner()
+        const accessToken = await getValidToken(walletAddress, signer)
+
         const rpcUrl = "https://evm-rpc.test-net.interlinklabs.ai/v1/rpc"
         const req = new Headers()
-        if (localStorageToken) req.append("Authorization", `Bearer ${localStorageToken}`)
+        req.append("Authorization", `Bearer ${accessToken}`)
+        req.append("Content-Type", "application/json")
 
         // Native Human-Readable ABI mapping descriptor for strict interface conversions
         const iface = new ethers.Interface([
           "function totalMarkets() view returns (uint256)",
           "function isDecMember(address) view returns (bool)",
+          "function getAllDecMembers() view returns (address[])",
           "function markets(uint256) view returns (uint256 id, string question, uint256 marketEndTime, uint256 votingEndTime, uint256 totalYesPool, uint256 totalNoPool, uint8 state, uint8 winningOutcome, address creator, bool creatorFeeClaimed, uint256 votesForActive, uint256 votesAgainstActive, bool oracleResolutionRequested)"
         ])
 
@@ -66,7 +92,7 @@ export default function DAppPortal() {
             jsonrpc: "2.0",
             id: 1,
             method: "eth_call",
-            params: [{ to: "0x9530477f41bA8e6272251376389d09Dd490CF38e", data: iface.encodeFunctionData("totalMarkets") }, "latest"]
+            params: [{ to: CONTRACT_ADDRESS, data: iface.encodeFunctionData("totalMarkets") }, "latest"]
           })
         })
         const countData = await marketCountRes.json()
@@ -83,7 +109,7 @@ export default function DAppPortal() {
                 jsonrpc: "2.0",
                 id: 2 + i,
                 method: "eth_call",
-                params: [{ to: "0x9530477f41bA8e6272251376389d09Dd490CF38e", data: iface.encodeFunctionData("markets", [i]) }, "latest"]
+                params: [{ to: CONTRACT_ADDRESS, data: iface.encodeFunctionData("markets", [i]) }, "latest"]
               })
             })
             const itemData = await marketItemRes.json()
@@ -91,7 +117,6 @@ export default function DAppPortal() {
             if (itemData?.result && itemData.result !== "0x") {
               // 🟢 AUTOMATIC UNPACKING: Real string text values parsed natively from memory arrays
               const decoded = iface.decodeFunctionResult("markets", itemData.result)
-              const isTeamAddress = walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
 
               tempMarkets.push({
                 id: Number(decoded[0]),
@@ -100,7 +125,10 @@ export default function DAppPortal() {
                 votingEndTime: Number(decoded[3]),
                 totalYesPool: decoded[4].toString(),
                 totalNoPool: decoded[5].toString(),
-                state: isTeamAddress ? 1 : Number(decoded[6]), // Auto-graduate if team wallet address, else retain contract evaluation
+                // 🔧 FIXED: removed the "auto-graduate if team wallet" override —
+                // this was forcing every market to show as Active whenever the
+                // team wallet was connected, hiding real pending proposals.
+                state: Number(decoded[6]),
                 winningOutcome: Number(decoded[7]),
                 creator: String(decoded[8])
               })
@@ -109,30 +137,46 @@ export default function DAppPortal() {
           setAllOnChainMarkets(tempMarkets)
         }
 
-        // 2. Validate current member matrix dynamically
-        if (walletAddress) {
-          const decCheckRes = await fetch(rpcUrl, {
+        // 2. Check the connected wallet's own DEC membership (controls the
+        // "Join DEC" vs "Market Proposals" tab and whether that tab shows at all)
+        const decCheckRes = await fetch(rpcUrl, {
+          method: "POST",
+          headers: req,
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 99,
+            method: "eth_call",
+            params: [{ to: CONTRACT_ADDRESS, data: iface.encodeFunctionData("isDecMember", [walletAddress]) }, "latest"]
+          })
+        })
+        const decCheckData = await decCheckRes.json()
+
+        let isMember = false
+        if (decCheckData?.result && decCheckData.result !== "0x") {
+          isMember = iface.decodeFunctionResult("isDecMember", decCheckData.result)[0]
+          setHasJoinedDEC(isMember)
+        }
+
+        // 3. 🆕 NEW: if the team wallet is connected, pull the FULL DEC member
+        // directory (needs the getAllDecMembers() function from the updated contract)
+        if (walletAddress.toLowerCase() === ADMIN_ADDRESS) {
+          const allMembersRes = await fetch(rpcUrl, {
             method: "POST",
             headers: req,
             body: JSON.stringify({
               jsonrpc: "2.0",
-              id: 99,
+              id: 100,
               method: "eth_call",
-              params: [{ to: "0x9530477f41bA8e6272251376389d09Dd490CF38e", data: iface.encodeFunctionData("isDecMember", [walletAddress]) }, "latest"]
+              params: [{ to: CONTRACT_ADDRESS, data: iface.encodeFunctionData("getAllDecMembers") }, "latest"]
             })
           })
-          const decCheckData = await decCheckRes.json()
-
-          if (decCheckData?.result && decCheckData.result !== "0x") {
-            const isMember = iface.decodeFunctionResult("isDecMember", decCheckData.result)[0]
-            if (isMember) {
-              setHasJoinedDEC(true)
-              setBlockchainDecList([walletAddress])
-            } else {
-              setHasJoinedDEC(false)
-              setBlockchainDecList([])
-            }
+          const allMembersData = await allMembersRes.json()
+          if (allMembersData?.result && allMembersData.result !== "0x") {
+            const members = iface.decodeFunctionResult("getAllDecMembers", allMembersData.result)[0]
+            setBlockchainDecList(Array.from(members as string[]))
           }
+        } else {
+          setBlockchainDecList(isMember ? [walletAddress] : [])
         }
       } catch (err) {
         console.error("Scanning synchronization failure:", err)

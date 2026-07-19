@@ -64,6 +64,8 @@ contract InterPredict {
         address indexed previousOracle,
         address indexed newOracle
     );
+    // 🆕 NEW: lets the frontend build a full DEC member directory
+    event DecMemberJoined(address indexed member, uint256 timestamp);
 
     // --- STATE VARIABLES ---
     address public immutable owner;
@@ -89,6 +91,9 @@ contract InterPredict {
     mapping(address => bool) public isDecMember;
     mapping(uint256 => mapping(address => bool)) public hasVotedOnCuration;
     mapping(address => uint256) public decRewardsClaimedTracker;
+
+    // 🆕 NEW: enumerable list of DEC members for the admin directory UI
+    address[] public decMemberList;
 
     // --- MODIFIERS ---
     modifier onlyOwner() {
@@ -372,6 +377,7 @@ contract InterPredict {
         // 1. Effects Step: Update all state variables FIRST (Stops Reentrancy!)
         isDecMember[msg.sender] = true;
         totalDecMembers++;
+        decMemberList.push(msg.sender); // 🆕 NEW: track member for the directory
 
         // 2. Interaction Step: Perform the external token transfer LAST
         address payable treasury = payable(
@@ -379,6 +385,13 @@ contract InterPredict {
         );
         (bool success, ) = treasury.call{value: msg.value}("");
         require(success, "Treasury transfer failed");
+
+        emit DecMemberJoined(msg.sender, block.timestamp); // 🆕 NEW
+    }
+
+    // 🆕 NEW: lets the frontend fetch the full DEC member directory in one call
+    function getAllDecMembers() external view returns (address[] memory) {
+        return decMemberList;
     }
 
     function claimDecRewards() external {

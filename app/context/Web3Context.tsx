@@ -29,6 +29,8 @@ interface Web3ContextType {
   castVoteOnChain: (marketId: number, support: boolean) => Promise<void>
   placeBetOnChain: (marketId: number, outcome: number, amount: string) => Promise<void>
   claimPayoutOnChain: (marketId: number) => Promise<boolean>
+  requestResolutionOnChain: (marketId: number) => Promise<boolean>
+  resolveMarketOnChain: (marketId: number, winningOutcome: number) => Promise<boolean>
 }
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
@@ -1275,8 +1277,106 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // 🆕 NEW: anyone (in practice, a voter, gated in the UI) pings a market for
+  // settlement once its trading window closes. Calls the contract's
+  // requestOracleResolution(), which flips oracleResolutionRequested = true so
+  // the team/oracle wallet can pick the winner in the Unresolved Markets tab.
+  const requestResolutionOnChain = async (marketId: number): Promise<boolean> => {
+    try {
+      setTxStatus("Requesting market resolution...")
+      const { provider } = await getContractInstance()
+
+      const iface = new ethers.Interface(CONTRACT_ABI.abi);
+      const data = iface.encodeFunctionData("requestOracleResolution", [marketId]);
+
+      const txHash = await (window as any).ethereum.request({
+        method: "eth_sendTransaction",
+        params: [{
+          from: walletAddress,
+          to: CONTRACT_ADDRESS,
+          data: data
+        }]
+      });
+
+      setTxStatus("Awaiting resolution request confirmation...")
+
+      let receipt = null;
+      while (!receipt) {
+        receipt = await provider.getTransactionReceipt(txHash);
+        if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      if (receipt && Number(receipt.status) === 1) {
+        setTxStatus("Resolution requested — awaiting team settlement.")
+        if (walletAddress) {
+          saveLogToLocalStorage(walletAddress, 'Governance Vote', `Resolution requested for Pool #${marketId}`, 'Success — team pinged to settle', 'Success')
+        }
+        return true
+      } else {
+        throw new Error("Resolution request failed on-chain.")
+      }
+    } catch (err: any) {
+      const detail = formatTxError(err)
+      console.error('requestResolutionOnChain failed:', err)
+      setTxStatus(`Resolution Request Error: ${detail}`)
+      if (walletAddress) {
+        saveLogToLocalStorage(walletAddress, 'Governance Vote', `Resolution request attempt on Pool #${marketId}`, `Failed — ${detail}`, 'Failed')
+      }
+      return false
+    }
+  }
+
+  // 🆕 NEW: oracle/team wallet settles a market by declaring the winning
+  // outcome (0 = YES, 1 = NO, 2 = DRAW). Calls the contract's onlyOracle
+  // resolveMarket(); after this, winners can claimPayout().
+  const resolveMarketOnChain = async (marketId: number, winningOutcome: number): Promise<boolean> => {
+    const outcomeLabel = winningOutcome === 0 ? 'YES' : winningOutcome === 1 ? 'NO' : 'DRAW';
+    try {
+      setTxStatus("Broadcasting market settlement...")
+      const { provider } = await getContractInstance()
+
+      const iface = new ethers.Interface(CONTRACT_ABI.abi);
+      const data = iface.encodeFunctionData("resolveMarket", [marketId, winningOutcome]);
+
+      const txHash = await (window as any).ethereum.request({
+        method: "eth_sendTransaction",
+        params: [{
+          from: walletAddress,
+          to: CONTRACT_ADDRESS,
+          data: data
+        }]
+      });
+
+      setTxStatus("Awaiting settlement confirmation...")
+
+      let receipt = null;
+      while (!receipt) {
+        receipt = await provider.getTransactionReceipt(txHash);
+        if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      if (receipt && Number(receipt.status) === 1) {
+        setTxStatus(`Market resolved — ${outcomeLabel} declared the winning outcome.`)
+        if (walletAddress) {
+          saveLogToLocalStorage(walletAddress, 'Governance Vote', `Pool #${marketId} resolved`, `Success — ${outcomeLabel} wins`, 'Success')
+        }
+        return true
+      } else {
+        throw new Error("Settlement transaction failed on-chain.")
+      }
+    } catch (err: any) {
+      const detail = formatTxError(err)
+      console.error('resolveMarketOnChain failed:', err)
+      setTxStatus(`Settlement Error: ${detail}`)
+      if (walletAddress) {
+        saveLogToLocalStorage(walletAddress, 'Governance Vote', `Settlement attempt on Pool #${marketId}`, `Failed — ${detail}`, 'Failed')
+      }
+      return false
+    }
+  }
+
   return (
-    <Web3Context.Provider value={{ walletAddress, decMembers, txStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, claimPayoutOnChain }}>
+    <Web3Context.Provider value={{ walletAddress, decMembers, txStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain }}>
       {children}
     </Web3Context.Provider>
   )

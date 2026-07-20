@@ -3,12 +3,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useWeb3 } from '../context/Web3Context'
 import { ethers } from 'ethers'
-import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Cpu, RefreshCw } from 'lucide-react'
+import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Cpu, RefreshCw, Gavel, CheckCircle2 } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import Link from 'next/link'
 import { getValidToken } from '@/lib/interlinkAuth'
 
-type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History' | 'DEC Members' | 'My Votes'
+type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History' | 'DEC Members' | 'My Votes' | 'Unresolved Markets' | 'Resolved Markets'
 
 interface SmartMarket {
   id: number
@@ -20,6 +20,7 @@ interface SmartMarket {
   state: number
   winningOutcome: number
   creator: string
+  oracleResolutionRequested: boolean
 }
 
 interface MyPosition {
@@ -29,12 +30,14 @@ interface MyPosition {
   winningOutcome: number
   yesAmount: string
   noAmount: string
+  marketEndTime: number
+  oracleResolutionRequested: boolean
 }
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x8c69b2D0A1C89fd3C6aD64e1Be3536FAF63b55b6"
 
 export default function DAppPortal() {
-  const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, claimPayoutOnChain, t } = useWeb3()
+  const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain, t } = useWeb3()
   const [activeTab, setActiveTab] = useState<TabType>('MarketPlace')
   const [stakeAmount, setStakeAmount] = useState<string>('0.1')
   const [marketDesc, setMarketDesc] = useState('')
@@ -55,6 +58,19 @@ export default function DAppPortal() {
   const [blockchainDecList, setBlockchainDecList] = useState<string[]>([])
   const [myPositions, setMyPositions] = useState<MyPosition[]>([])
   const [isScanning, setIsScanning] = useState<boolean>(false)
+
+  // 🆕 NEW: the contract's real oracle (settlement) wallet, fetched on-chain so
+  // the "Unresolved Markets" tab and winner-selection buttons are gated on the
+  // actual settler rather than a hard-coded address.
+  const [oracleAddress, setOracleAddress] = useState<string | null>(null)
+
+  // 🆕 NEW: a once-per-second ticking clock so market countdown timers update
+  // live without needing a page refresh.
+  const [nowSec, setNowSec] = useState<number>(() => Math.floor(Date.now() / 1000))
+  useEffect(() => {
+    const interval = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   // 📡 AUTOMATED CONTRACT DECODER SCANNER
   // 🔧 FIXED: extracted into a stable useCallback so it can be re-triggered
@@ -80,7 +96,12 @@ export default function DAppPortal() {
         if (!res.ok) throw new Error('Failed to load public markets feed')
         const { activeMarkets, pendingProposals } = await res.json()
 
-        const combined: SmartMarket[] = [...activeMarkets, ...pendingProposals]
+        // The public feed doesn't include the oracleResolutionRequested flag —
+        // default it to false; logged-out visitors can't resolve markets anyway.
+        const combined: SmartMarket[] = [...activeMarkets, ...pendingProposals].map((m: any) => ({
+          ...m,
+          oracleResolutionRequested: Boolean(m.oracleResolutionRequested)
+        }))
         setAllOnChainMarkets(combined)
         return
       }
@@ -100,6 +121,7 @@ export default function DAppPortal() {
       // Native Human-Readable ABI mapping descriptor for strict interface conversions
       const iface = new ethers.Interface([
         "function totalMarkets() view returns (uint256)",
+        "function oracle() view returns (address)",
         "function isDecMember(address) view returns (bool)",
         "function getAllDecMembers() view returns (address[])",
         "function markets(uint256) view returns (uint256 id, string question, uint256 marketEndTime, uint256 votingEndTime, uint256 totalYesPool, uint256 totalNoPool, uint8 state, uint8 winningOutcome, address creator, bool creatorFeeClaimed, uint256 votesForActive, uint256 votesAgainstActive, bool oracleResolutionRequested)",
@@ -149,11 +171,19 @@ export default function DAppPortal() {
               // team wallet was connected, hiding real pending proposals.
               state: Number(decoded[6]),
               winningOutcome: Number(decoded[7]),
-              creator: String(decoded[8])
+              creator: String(decoded[8]),
+              oracleResolutionRequested: Boolean(decoded[12])
             })
           }
         })
         setAllOnChainMarkets(tempMarkets)
+      }
+
+      // 1b. 🆕 NEW: read the contract's oracle (settlement) wallet so we can
+      // show the "Unresolved Markets" tab + resolve buttons only to the settler.
+      const oracleData = await rpcCall(98, iface.encodeFunctionData("oracle"))
+      if (oracleData?.result && oracleData.result !== "0x") {
+        setOracleAddress(String(iface.decodeFunctionResult("oracle", oracleData.result)[0]))
       }
 
       // 2. Check the connected wallet's own DEC membership (controls the
@@ -194,7 +224,9 @@ export default function DAppPortal() {
               marketState: m.state,
               winningOutcome: m.winningOutcome,
               yesAmount,
-              noAmount
+              noAmount,
+              marketEndTime: m.marketEndTime,
+              oracleResolutionRequested: m.oracleResolutionRequested
             } as MyPosition
           })
         )
@@ -221,14 +253,20 @@ export default function DAppPortal() {
     }
   }, [walletAddress, historyLogs])
 
+  // 🆕 NEW: is the connected wallet the contract's settlement oracle? Gates the
+  // "Unresolved Markets" tab and the YES/NO/DRAW winner-selection buttons.
+  const isOracle = !!walletAddress && !!oracleAddress && walletAddress.toLowerCase() === oracleAddress.toLowerCase()
+
   const getVisibleTabs = (): TabType[] => {
-    if (!walletAddress) return ['MarketPlace', 'Pending Markets']
+    if (!walletAddress) return ['MarketPlace', 'Pending Markets', 'Resolved Markets']
     const tabs: TabType[] = ['MarketPlace']
     if (hasJoinedDEC) tabs.push('Market Proposals')
     else tabs.push('Pending Markets')
     tabs.push('My Votes')
     tabs.push('Make Market')
     if (!hasJoinedDEC) tabs.push('Join DEC')
+    if (isOracle) tabs.push('Unresolved Markets')
+    tabs.push('Resolved Markets')
     tabs.push('History')
     if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) tabs.push('DEC Members')
     return tabs
@@ -282,6 +320,19 @@ export default function DAppPortal() {
     await claimPayoutOnChain(marketId)
   }
 
+  // 🆕 NEW: a voter pings an ended market for settlement, then refreshes so the
+  // "Awaiting team resolution" state (and the team's Unresolved tab) reflects it.
+  const handleRequestResolution = async (marketId: number) => {
+    const ok = await requestResolutionOnChain(marketId)
+    if (ok) scanBlockchainRegistry()
+  }
+
+  // 🆕 NEW: the oracle/team wallet declares the winning outcome (0=YES,1=NO,2=DRAW).
+  const handleResolveMarket = async (marketId: number, winningOutcome: number) => {
+    const ok = await resolveMarketOnChain(marketId, winningOutcome)
+    if (ok) scanBlockchainRegistry()
+  }
+
   const getTabLabel = (tab: TabType): string => {
     const translationMap: Record<TabType, string> = {
       'MarketPlace': t('marketPlace'),
@@ -291,7 +342,9 @@ export default function DAppPortal() {
       'Join DEC': t('joinDec'),
       'History': t('history'),
       'DEC Members': t('adminPanel'),
-      'My Votes': 'My Votes'
+      'My Votes': 'My Votes',
+      'Unresolved Markets': 'Unresolved Markets',
+      'Resolved Markets': 'Resolved Markets'
     }
     return translationMap[tab] || tab
   }
@@ -300,10 +353,42 @@ export default function DAppPortal() {
   // the contract never auto-transitions state on expiry, it just blocks new
   // buyShares() calls past marketEndTime. So we now split by real elapsed
   // time on the client, not just the raw enum value.
-  const nowSec = Math.floor(Date.now() / 1000)
   const activeMarkets = allOnChainMarkets.filter(m => m.state === 1 && m.marketEndTime > nowSec)
   const inactiveMarkets = allOnChainMarkets.filter(m => (m.state === 1 && m.marketEndTime <= nowSec) || m.state === 2)
   const pendingProposals = allOnChainMarkets.filter(m => m.state === 0)
+
+  // 🆕 NEW: markets whose trading has ended and were pinged for settlement, but
+  // aren't resolved yet — these are what the oracle picks a winner for.
+  const unresolvedMarkets = allOnChainMarkets.filter(m => m.state === 1 && m.marketEndTime <= nowSec && m.oracleResolutionRequested)
+  // 🆕 NEW: fully settled markets.
+  const resolvedMarkets = allOnChainMarkets.filter(m => m.state === 2)
+
+  // 🆕 NEW: split the connected wallet's positions into still-tradable vs ended.
+  const activePositions = myPositions.filter(p => p.marketState === 1 && p.marketEndTime > nowSec)
+  const endedPositions = myPositions.filter(p => p.marketState === 2 || (p.marketState === 1 && p.marketEndTime <= nowSec))
+
+  // 🆕 NEW: on-chain Outcome enum -> label (0 = YES, 1 = NO, 2 = DRAW).
+  const outcomeLabel = (outcome: number): string => (outcome === 0 ? 'YES' : outcome === 1 ? 'NO' : 'DRAW')
+
+  // 🆕 NEW: human-readable expiry date for a market's on-chain end time.
+  const formatExpiryDate = (endTimeSec: number): string =>
+    new Date(endTimeSec * 1000).toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    })
+
+  // 🆕 NEW: live countdown string (recomputed every second via `nowSec`).
+  const formatCountdown = (endTimeSec: number): string => {
+    let remaining = endTimeSec - nowSec
+    if (remaining <= 0) return 'Expired'
+    const days = Math.floor(remaining / 86400); remaining %= 86400
+    const hours = Math.floor(remaining / 3600); remaining %= 3600
+    const minutes = Math.floor(remaining / 60)
+    const seconds = remaining % 60
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return days > 0
+      ? `${days}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`
+      : `${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`
+  }
 
   return (
     <div className="min-h-screen bg-[#060117] text-slate-100 font-sans antialiased overflow-x-hidden pb-12">
@@ -312,7 +397,7 @@ export default function DAppPortal() {
         <div className="max-w-7xl mx-auto h-full flex justify-between items-center">
           <Link href="/" className="flex items-center gap-2.5 group">
             <Logo className="size-9 rounded-xl" />
-            <span className="font-heading text-lg font-bold tracking-tight text-white group-hover:text-primary transition-colors">InterPredict</span>
+            <span className="hidden sm:inline font-heading text-lg font-bold tracking-tight text-white group-hover:text-primary transition-colors">InterPredict</span>
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-4">
@@ -358,7 +443,7 @@ export default function DAppPortal() {
 
         <aside className="hidden lg:flex flex-col gap-1.5 lg:col-span-1">
           {visibleTabs.map((tab) => {
-            const Icon = { 'MarketPlace': Layers, 'Market Proposals': Hourglass, 'Pending Markets': Hourglass, 'Make Market': PlusCircle, 'Join DEC': Shield, 'History': History, 'DEC Members': Users, 'My Votes': Cpu }[tab]
+            const Icon = { 'MarketPlace': Layers, 'Market Proposals': Hourglass, 'Pending Markets': Hourglass, 'Make Market': PlusCircle, 'Join DEC': Shield, 'History': History, 'DEC Members': Users, 'My Votes': Cpu, 'Unresolved Markets': Gavel, 'Resolved Markets': CheckCircle2 }[tab]
             return (
               <button key={tab} onClick={() => setActiveTab(tab)} className={`flex items-center gap-2.5 px-4 py-3.5 rounded-xl font-semibold text-sm border transition-all ${activeTab === tab ? 'bg-primary text-white border-primary/50 shadow-md' : 'text-slate-400 border-transparent hover:bg-secondary/40'}`}>
                 <Icon className="size-4 shrink-0" /><span>{getTabLabel(tab)}</span>
@@ -397,7 +482,12 @@ export default function DAppPortal() {
                             <span className="px-2 py-0.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded text-[10px] font-bold tracking-wider uppercase">Live Pool #{market.id}</span>
                             <span className="text-[11px] text-slate-400 font-mono">{t('statusActive')}</span>
                           </div>
-                          <h4 className="text-sm sm:text-base font-bold text-slate-200 mb-4 leading-snug pr-14">{market.question}</h4>
+                          <h4 className="text-sm sm:text-base font-bold text-slate-200 mb-3 leading-snug pr-14">{market.question}</h4>
+                          {/* 🆕 NEW: per-market expiry date + live countdown timer */}
+                          <div className="mb-4 flex flex-col gap-1 text-[10px] font-mono">
+                            <span className="text-slate-400">Expires: <span className="text-slate-300">{formatExpiryDate(market.marketEndTime)}</span></span>
+                            <span className="text-purple-300">⏳ {formatCountdown(market.marketEndTime)}</span>
+                          </div>
                           <div className="mb-4">
                             <label className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block mb-1">{t('wagerTitle')}</label>
                             <input type="number" value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} className="w-full bg-black/20 border border-purple-900/40 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none" />
@@ -426,7 +516,12 @@ export default function DAppPortal() {
                             <span className="px-2 py-0.5 bg-slate-500/10 border border-slate-500/20 text-slate-400 rounded text-[10px] font-bold tracking-wider uppercase">Pool #{market.id}</span>
                             <span className="text-[11px] text-slate-500 font-mono">{market.state === 2 ? 'Resolved' : 'Trading Closed'}</span>
                           </div>
-                          <h4 className="text-sm sm:text-base font-bold text-slate-300 leading-snug">{market.question}</h4>
+                          <h4 className="text-sm sm:text-base font-bold text-slate-300 leading-snug mb-2">{market.question}</h4>
+                          {/* 🆕 NEW: expiry date shown for closed/resolved markets too */}
+                          <div className="flex flex-col gap-1 text-[10px] font-mono">
+                            <span className="text-slate-500">Expired: <span className="text-slate-400">{formatExpiryDate(market.marketEndTime)}</span></span>
+                            <span className="text-slate-500">⏳ {formatCountdown(market.marketEndTime)}</span>
+                          </div>
                         </div>
                       ))
                     )}
@@ -537,39 +632,149 @@ export default function DAppPortal() {
               </div>
             )}
 
-            {/* TAB: MY VOTES — 🆕 NEW: shows the connected wallet's own positions
-                across every market it has ever bought shares in, with a Cash Out
-                button once a market resolves. There is currently no on-chain way
-                to cancel/withdraw a position before resolution, so no delete
-                action is offered — that would need a new contract function. */}
+            {/* TAB: MY VOTES — 🆕 NEW: the connected wallet's own positions, now
+                split into Active (still-tradable, with a live countdown) and
+                Ended (past their end time or resolved). Ended positions expose the
+                voter-driven "Resolve Market" ping and, once settled, Cash Out. */}
             {activeTab === 'My Votes' && (
-              <div className="space-y-4 w-full">
-                <p className="text-[10px] text-slate-500 mb-2">Positions can be cashed out once a market resolves. Withdrawing a position before resolution isn't currently supported.</p>
+              <div className="space-y-8 w-full">
+                <p className="text-[10px] text-slate-500">Positions can be cashed out once a market resolves. Withdrawing a position before resolution isn't currently supported.</p>
+
                 {myPositions.length === 0 ? (
                   <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">You haven't placed any predictions yet.</div>
                 ) : (
-                  myPositions.map((pos) => {
-                    const isResolved = pos.marketState === 2
-                    const wonYes = isResolved && (pos.winningOutcome === 0 || pos.winningOutcome === 2) && BigInt(pos.yesAmount) > BigInt(0)
-                    const wonNo = isResolved && (pos.winningOutcome === 1 || pos.winningOutcome === 2) && BigInt(pos.noAmount) > BigInt(0)
-                    const canCashOut = wonYes || wonNo
-                    return (
-                      <div key={pos.marketId} className="bg-secondary/30 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-xs font-mono text-primary font-bold">Pool #{pos.marketId}</span>
-                          <span className="text-[11px] font-mono text-slate-400">{isResolved ? 'Resolved' : 'Open'}</span>
-                        </div>
-                        <p className="text-sm font-semibold mb-3 text-slate-200">{pos.question}</p>
-                        <div className="flex gap-4 text-[11px] font-mono text-slate-400 mb-3">
-                          <span>YES: {ethers.formatEther(pos.yesAmount)} tITL</span>
-                          <span>NO: {ethers.formatEther(pos.noAmount)} tITL</span>
-                        </div>
-                        {canCashOut && (
-                          <button onClick={() => handleCashOut(pos.marketId)} className="w-full py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg uppercase">Cash Out</button>
+                  <>
+                    {/* ACTIVE POSITIONS */}
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Active</h3>
+                      <div className="space-y-4">
+                        {activePositions.length === 0 ? (
+                          <div className="p-6 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No active positions.</div>
+                        ) : (
+                          activePositions.map((pos) => (
+                            <div key={pos.marketId} className="bg-secondary/30 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl">
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-xs font-mono text-primary font-bold">Pool #{pos.marketId}</span>
+                                <span className="text-[11px] font-mono text-emerald-400">Open</span>
+                              </div>
+                              <p className="text-sm font-semibold mb-3 text-slate-200">{pos.question}</p>
+                              <div className="flex gap-4 text-[11px] font-mono text-slate-400 mb-2">
+                                <span>YES: {ethers.formatEther(pos.yesAmount)} tITL</span>
+                                <span>NO: {ethers.formatEther(pos.noAmount)} tITL</span>
+                              </div>
+                              <div className="flex flex-col gap-1 text-[10px] font-mono">
+                                <span className="text-slate-400">Expires: <span className="text-slate-300">{formatExpiryDate(pos.marketEndTime)}</span></span>
+                                <span className="text-purple-300">⏳ {formatCountdown(pos.marketEndTime)}</span>
+                              </div>
+                            </div>
+                          ))
                         )}
                       </div>
-                    )
-                  })
+                    </div>
+
+                    {/* ENDED POSITIONS */}
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Ended</h3>
+                      <div className="space-y-4">
+                        {endedPositions.length === 0 ? (
+                          <div className="p-6 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No ended positions.</div>
+                        ) : (
+                          endedPositions.map((pos) => {
+                            const isResolved = pos.marketState === 2
+                            const wonYes = isResolved && (pos.winningOutcome === 0 || pos.winningOutcome === 2) && BigInt(pos.yesAmount) > BigInt(0)
+                            const wonNo = isResolved && (pos.winningOutcome === 1 || pos.winningOutcome === 2) && BigInt(pos.noAmount) > BigInt(0)
+                            const canCashOut = wonYes || wonNo
+                            return (
+                              <div key={pos.marketId} className="bg-secondary/20 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl opacity-95">
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="text-xs font-mono text-primary font-bold">Pool #{pos.marketId}</span>
+                                  <span className="text-[11px] font-mono text-slate-400">{isResolved ? `Resolved · ${outcomeLabel(pos.winningOutcome)} won` : 'Trading Closed'}</span>
+                                </div>
+                                <p className="text-sm font-semibold mb-3 text-slate-200">{pos.question}</p>
+                                <div className="flex gap-4 text-[11px] font-mono text-slate-400 mb-2">
+                                  <span>YES: {ethers.formatEther(pos.yesAmount)} tITL</span>
+                                  <span>NO: {ethers.formatEther(pos.noAmount)} tITL</span>
+                                </div>
+                                <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(pos.marketEndTime)}</p>
+                                {isResolved ? (
+                                  canCashOut ? (
+                                    <button onClick={() => handleCashOut(pos.marketId)} className="w-full py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg uppercase">Cash Out</button>
+                                  ) : (
+                                    <p className="text-[11px] font-mono text-rose-400">No payout — your side didn't win.</p>
+                                  )
+                                ) : pos.oracleResolutionRequested ? (
+                                  <p className="text-[11px] font-mono text-yellow-400">⏳ Awaiting team resolution</p>
+                                ) : (
+                                  <button onClick={() => handleRequestResolution(pos.marketId)} className="w-full py-2.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-lg uppercase">Resolve Market</button>
+                                )}
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* TAB: UNRESOLVED MARKETS — 🆕 NEW: oracle/team-only settlement queue.
+                Lists ended markets that voters have pinged for resolution; the
+                oracle declares the winning outcome (YES/NO/DRAW) via resolveMarket. */}
+            {activeTab === 'Unresolved Markets' && isOracle && (
+              <div className="space-y-4 w-full">
+                <p className="text-[10px] text-slate-500 mb-2">Markets voters have pinged for settlement. Choose the winning outcome — winners can then cash out, losing bets are forfeited.</p>
+                {unresolvedMarkets.length === 0 ? (
+                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No markets awaiting resolution.</div>
+                ) : (
+                  unresolvedMarkets.map((market) => (
+                    <div key={market.id} className="bg-secondary/30 border border-yellow-500/20 rounded-xl p-4 sm:p-5 w-full max-w-xl">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs font-mono text-primary font-bold">Pool #{market.id}</span>
+                        <span className="text-[11px] font-mono text-yellow-400">Awaiting Settlement</span>
+                      </div>
+                      <p className="text-sm font-semibold mb-3 text-slate-200">{market.question}</p>
+                      <div className="flex gap-4 text-[11px] font-mono text-slate-400 mb-2">
+                        <span>YES pool: {ethers.formatEther(market.totalYesPool)} tITL</span>
+                        <span>NO pool: {ethers.formatEther(market.totalNoPool)} tITL</span>
+                      </div>
+                      <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(market.marketEndTime)}</p>
+                      <p className="text-[11px] font-semibold text-slate-300 mb-2">Which option wins?</p>
+                      <div className="grid grid-cols-3 gap-3">
+                        <button onClick={() => handleResolveMarket(market.id, 0)} className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg uppercase">YES</button>
+                        <button onClick={() => handleResolveMarket(market.id, 1)} className="py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg uppercase">NO</button>
+                        <button onClick={() => handleResolveMarket(market.id, 2)} className="py-2.5 bg-slate-600 hover:bg-slate-500 text-white text-xs font-bold rounded-lg uppercase">Draw</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* TAB: RESOLVED MARKETS — 🆕 NEW: settled markets with their winning
+                outcome. Winners can cash out here as well. */}
+            {activeTab === 'Resolved Markets' && (
+              <div className="space-y-4 w-full">
+                {resolvedMarkets.length === 0 ? (
+                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No markets have been resolved yet.</div>
+                ) : (
+                  resolvedMarkets.map((market) => (
+                    <div key={market.id} className="bg-secondary/20 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs font-mono text-primary font-bold">Pool #{market.id}</span>
+                        <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-[10px] font-bold tracking-wider uppercase">{outcomeLabel(market.winningOutcome)} Won</span>
+                      </div>
+                      <p className="text-sm font-semibold mb-3 text-slate-200">{market.question}</p>
+                      <div className="flex gap-4 text-[11px] font-mono text-slate-400 mb-2">
+                        <span>YES pool: {ethers.formatEther(market.totalYesPool)} tITL</span>
+                        <span>NO pool: {ethers.formatEther(market.totalNoPool)} tITL</span>
+                      </div>
+                      <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(market.marketEndTime)}</p>
+                      {walletAddress && (
+                        <button onClick={() => handleCashOut(market.id)} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg uppercase">Cash Out (winners only)</button>
+                      )}
+                    </div>
+                  ))
                 )}
               </div>
             )}
@@ -634,7 +839,6 @@ export default function DAppPortal() {
           </div>
 
           {txStatus && <div className="mt-6 p-4 bg-purple-950/40 border border-purple-500/20 rounded-xl text-xs text-purple-300 font-mono animate-pulse">{txStatus}</div>}
-          <div className="mt-6 p-4 bg-purple-950/40 border border-purple-500/20 rounded-xl text-xs text-purple-300 font-mono text-center font-semibold">{t('walletSuccessMessage')}</div>
         </section>
       </div>
     </div>

@@ -56,6 +56,14 @@ export default function DAppPortal() {
   const [myPositions, setMyPositions] = useState<MyPosition[]>([])
   const [isScanning, setIsScanning] = useState<boolean>(false)
 
+  // 🆕 NEW: a once-per-second ticking clock so market countdown timers update
+  // live without needing a page refresh.
+  const [nowSec, setNowSec] = useState<number>(() => Math.floor(Date.now() / 1000))
+  useEffect(() => {
+    const interval = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000)
+    return () => clearInterval(interval)
+  }, [])
+
   // 📡 AUTOMATED CONTRACT DECODER SCANNER
   // 🔧 FIXED: extracted into a stable useCallback so it can be re-triggered
   // manually (Refresh button) instead of only on mount/dependency change.
@@ -300,10 +308,29 @@ export default function DAppPortal() {
   // the contract never auto-transitions state on expiry, it just blocks new
   // buyShares() calls past marketEndTime. So we now split by real elapsed
   // time on the client, not just the raw enum value.
-  const nowSec = Math.floor(Date.now() / 1000)
   const activeMarkets = allOnChainMarkets.filter(m => m.state === 1 && m.marketEndTime > nowSec)
   const inactiveMarkets = allOnChainMarkets.filter(m => (m.state === 1 && m.marketEndTime <= nowSec) || m.state === 2)
   const pendingProposals = allOnChainMarkets.filter(m => m.state === 0)
+
+  // 🆕 NEW: human-readable expiry date for a market's on-chain end time.
+  const formatExpiryDate = (endTimeSec: number): string =>
+    new Date(endTimeSec * 1000).toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    })
+
+  // 🆕 NEW: live countdown string (recomputed every second via `nowSec`).
+  const formatCountdown = (endTimeSec: number): string => {
+    let remaining = endTimeSec - nowSec
+    if (remaining <= 0) return 'Expired'
+    const days = Math.floor(remaining / 86400); remaining %= 86400
+    const hours = Math.floor(remaining / 3600); remaining %= 3600
+    const minutes = Math.floor(remaining / 60)
+    const seconds = remaining % 60
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return days > 0
+      ? `${days}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`
+      : `${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`
+  }
 
   return (
     <div className="min-h-screen bg-[#060117] text-slate-100 font-sans antialiased overflow-x-hidden pb-12">
@@ -312,7 +339,7 @@ export default function DAppPortal() {
         <div className="max-w-7xl mx-auto h-full flex justify-between items-center">
           <Link href="/" className="flex items-center gap-2.5 group">
             <Logo className="size-9 rounded-xl" />
-            <span className="font-heading text-lg font-bold tracking-tight text-white group-hover:text-primary transition-colors">InterPredict</span>
+            <span className="hidden sm:inline font-heading text-lg font-bold tracking-tight text-white group-hover:text-primary transition-colors">InterPredict</span>
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-4">
@@ -397,7 +424,12 @@ export default function DAppPortal() {
                             <span className="px-2 py-0.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded text-[10px] font-bold tracking-wider uppercase">Live Pool #{market.id}</span>
                             <span className="text-[11px] text-slate-400 font-mono">{t('statusActive')}</span>
                           </div>
-                          <h4 className="text-sm sm:text-base font-bold text-slate-200 mb-4 leading-snug pr-14">{market.question}</h4>
+                          <h4 className="text-sm sm:text-base font-bold text-slate-200 mb-3 leading-snug pr-14">{market.question}</h4>
+                          {/* 🆕 NEW: per-market expiry date + live countdown timer */}
+                          <div className="mb-4 flex flex-col gap-1 text-[10px] font-mono">
+                            <span className="text-slate-400">Expires: <span className="text-slate-300">{formatExpiryDate(market.marketEndTime)}</span></span>
+                            <span className="text-purple-300">⏳ {formatCountdown(market.marketEndTime)}</span>
+                          </div>
                           <div className="mb-4">
                             <label className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block mb-1">{t('wagerTitle')}</label>
                             <input type="number" value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} className="w-full bg-black/20 border border-purple-900/40 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none" />
@@ -426,7 +458,12 @@ export default function DAppPortal() {
                             <span className="px-2 py-0.5 bg-slate-500/10 border border-slate-500/20 text-slate-400 rounded text-[10px] font-bold tracking-wider uppercase">Pool #{market.id}</span>
                             <span className="text-[11px] text-slate-500 font-mono">{market.state === 2 ? 'Resolved' : 'Trading Closed'}</span>
                           </div>
-                          <h4 className="text-sm sm:text-base font-bold text-slate-300 leading-snug">{market.question}</h4>
+                          <h4 className="text-sm sm:text-base font-bold text-slate-300 leading-snug mb-2">{market.question}</h4>
+                          {/* 🆕 NEW: expiry date shown for closed/resolved markets too */}
+                          <div className="flex flex-col gap-1 text-[10px] font-mono">
+                            <span className="text-slate-500">Expired: <span className="text-slate-400">{formatExpiryDate(market.marketEndTime)}</span></span>
+                            <span className="text-slate-500">⏳ {formatCountdown(market.marketEndTime)}</span>
+                          </div>
                         </div>
                       ))
                     )}
@@ -634,7 +671,6 @@ export default function DAppPortal() {
           </div>
 
           {txStatus && <div className="mt-6 p-4 bg-purple-950/40 border border-purple-500/20 rounded-xl text-xs text-purple-300 font-mono animate-pulse">{txStatus}</div>}
-          <div className="mt-6 p-4 bg-purple-950/40 border border-purple-500/20 rounded-xl text-xs text-purple-300 font-mono text-center font-semibold">{t('walletSuccessMessage')}</div>
         </section>
       </div>
     </div>

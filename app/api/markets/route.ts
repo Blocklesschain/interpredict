@@ -59,13 +59,18 @@ export async function GET() {
         totalNoPool: decoded[5].toString(),
         state: Number(decoded[6]), // 0 = Proposed, 1 = Active, 2 = Resolved
         winningOutcome: Number(decoded[7]),
-        creator: String(decoded[8])
+        creator: String(decoded[8]),
+        oracleResolutionRequested: Boolean(decoded[12])
       })
     }
 
     const payload = {
+      // All markets for proper filtering on the client side
+      allMarkets: markets,
+      // Categorized for convenience
       activeMarkets: markets.filter(m => m.state === 1),
       pendingProposals: markets.filter(m => m.state === 0),
+      resolvedMarkets: markets.filter(m => m.state === 2),
       fetchedAt: new Date().toISOString()
     }
 

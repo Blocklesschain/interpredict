@@ -17,6 +17,7 @@ export interface HistoryRecord {
 interface Web3ContextType {
   walletAddress: string | null
   txStatus: string | null
+  setTxStatus: (status: string | null) => void
   historyLogs: HistoryRecord[]
   decMembers: string[]
   locale: 'en' | 'zh' | 'es' | 'fr'
@@ -1376,7 +1377,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <Web3Context.Provider value={{ walletAddress, decMembers, txStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain }}>
+    <Web3Context.Provider value={{ walletAddress, decMembers, txStatus, setTxStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain }}>
       {children}
     </Web3Context.Provider>
   )

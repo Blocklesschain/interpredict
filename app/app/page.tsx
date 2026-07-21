@@ -37,7 +37,7 @@ interface MyPosition {
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x8c69b2D0A1C89fd3C6aD64e1Be3536FAF63b55b6"
 
 export default function DAppPortal() {
-  const { walletAddress, connectWallet, disconnectWallet, txStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain, t } = useWeb3()
+  const { walletAddress, connectWallet, disconnectWallet, txStatus, setTxStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain, t } = useWeb3()
   const [activeTab, setActiveTab] = useState<TabType>('MarketPlace')
   const [stakeAmount, setStakeAmount] = useState<string>('0.1')
   const [marketDesc, setMarketDesc] = useState('')
@@ -95,15 +95,13 @@ export default function DAppPortal() {
       if (!walletAddress) {
         const res = await fetch('/api/markets')
         if (!res.ok) throw new Error('Failed to load public markets feed')
-        const { activeMarkets, pendingProposals } = await res.json()
+        const { allMarkets } = await res.json()
 
-        // The public feed doesn't include the oracleResolutionRequested flag —
-        // default it to false; logged-out visitors can't resolve markets anyway.
-        const combined: SmartMarket[] = [...activeMarkets, ...pendingProposals].map((m: any) => ({
+        // The data now includes oracleResolutionRequested from the API
+        setAllOnChainMarkets(allMarkets.map((m: any) => ({
           ...m,
           oracleResolutionRequested: Boolean(m.oracleResolutionRequested)
-        }))
-        setAllOnChainMarkets(combined)
+        })))
         return
       }
 
@@ -213,28 +211,49 @@ export default function DAppPortal() {
       if (tempMarkets.length > 0) {
         const positionResults = await Promise.all(
           tempMarkets.map(async (m) => {
-            const [yesRes, noRes] = await Promise.all([
-              rpcCall(1000 + m.id, iface.encodeFunctionData("yesShares", [m.id, walletAddress])),
-              rpcCall(2000 + m.id, iface.encodeFunctionData("noShares", [m.id, walletAddress]))
-            ])
-            const yesAmount = yesRes?.result && yesRes.result !== "0x" ? iface.decodeFunctionResult("yesShares", yesRes.result)[0].toString() : "0"
-            const noAmount = noRes?.result && noRes.result !== "0x" ? iface.decodeFunctionResult("noShares", noRes.result)[0].toString() : "0"
-            return {
-              marketId: m.id,
-              question: m.question,
-              marketState: m.state,
-              winningOutcome: m.winningOutcome,
-              yesAmount,
-              noAmount,
-              marketEndTime: m.marketEndTime,
-              oracleResolutionRequested: m.oracleResolutionRequested
-            } as MyPosition
+            try {
+              const [yesRes, noRes] = await Promise.all([
+                rpcCall(1000 + m.id, iface.encodeFunctionData("yesShares", [m.id, walletAddress])),
+                rpcCall(2000 + m.id, iface.encodeFunctionData("noShares", [m.id, walletAddress]))
+              ])
+              if (yesRes?.error) {
+                console.warn(`Failed to fetch yesShares for market ${m.id}:`, yesRes.error)
+              }
+              if (noRes?.error) {
+                console.warn(`Failed to fetch noShares for market ${m.id}:`, noRes.error)
+              }
+              const yesAmount = yesRes?.result && yesRes.result !== "0x" ? iface.decodeFunctionResult("yesShares", yesRes.result)[0].toString() : "0"
+              const noAmount = noRes?.result && noRes.result !== "0x" ? iface.decodeFunctionResult("noShares", noRes.result)[0].toString() : "0"
+              return {
+                marketId: m.id,
+                question: m.question,
+                marketState: m.state,
+                winningOutcome: m.winningOutcome,
+                yesAmount,
+                noAmount,
+                marketEndTime: m.marketEndTime,
+                oracleResolutionRequested: m.oracleResolutionRequested
+              } as MyPosition
+            } catch (e: any) {
+              console.warn(`Failed to fetch positions for market ${m.id}:`, e.message)
+              return {
+                marketId: m.id,
+                question: m.question,
+                marketState: m.state,
+                winningOutcome: m.winningOutcome,
+                yesAmount: "0",
+                noAmount: "0",
+                marketEndTime: m.marketEndTime,
+                oracleResolutionRequested: m.oracleResolutionRequested
+              } as MyPosition
+            }
           })
         )
         setMyPositions(positionResults.filter(p => BigInt(p.yesAmount) > BigInt(0) || BigInt(p.noAmount) > BigInt(0)))
       }
     } catch (err: any) {
       console.error("Scanning synchronization failure:", err?.message || err)
+      setTxStatus(`Sync Error: ${err?.message || 'Failed to connect to network'}`)
       // Reads failed for this wallet — most likely it isn't authorized on
       // Interlink's auth gate yet, or its token/refresh flow failed. Check
       // the console error above for the exact RPC response.
@@ -329,12 +348,18 @@ export default function DAppPortal() {
   }
 
   const handleJoinCommitteeSubmit = async () => {
-    await joinDecOnChain()
+    const success = await joinDecOnChain()
+    if (success) {
+      setHasJoinedDEC(true) // Optimistic update
+      localStorage.setItem(`interpredict_dec_joined_${walletAddress?.toLowerCase()}`, 'true')
+      scanBlockchainRegistry() // Refresh to get updated DEC status
+    }
   }
 
   const executeTradeAction = async (marketId: number, outcomeIndex: number) => {
     if (!walletAddress) return connectWallet()
     await placeBetOnChain(marketId, outcomeIndex, stakeAmount)
+    scanBlockchainRegistry() // Refresh positions after trade
   }
 
   const handleCashOut = async (marketId: number) => {
@@ -381,6 +406,8 @@ export default function DAppPortal() {
   // 🆕 NEW: markets whose trading has ended and were pinged for settlement, but
   // aren't resolved yet — these are what the oracle picks a winner for.
   const unresolvedMarkets = allOnChainMarkets.filter(m => m.state === 1 && m.marketEndTime <= nowSec && m.oracleResolutionRequested)
+  // 🆕 NEW: ended markets where user can request resolution (trading closed, no resolution yet)
+  const endedMarketsNeedingResolution = allOnChainMarkets.filter(m => m.state === 1 && m.marketEndTime <= nowSec && !m.oracleResolutionRequested)
   // 🆕 NEW: fully settled markets.
   const resolvedMarkets = allOnChainMarkets.filter(m => m.state === 2)
 

@@ -265,7 +265,8 @@ export default function DAppPortal() {
     tabs.push('My Votes')
     tabs.push('Make Market')
     if (!hasJoinedDEC) tabs.push('Join DEC')
-    if (isOracle) tabs.push('Unresolved Markets')
+    // Unresolved Markets tab always visible when wallet connected (data will show based on isOracle)
+    tabs.push('Unresolved Markets')
     tabs.push('Resolved Markets')
     tabs.push('History')
     if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) tabs.push('DEC Members')
@@ -721,32 +722,38 @@ export default function DAppPortal() {
             {/* TAB: UNRESOLVED MARKETS — 🆕 NEW: oracle/team-only settlement queue.
                 Lists ended markets that voters have pinged for resolution; the
                 oracle declares the winning outcome (YES/NO/DRAW) via resolveMarket. */}
-            {activeTab === 'Unresolved Markets' && isOracle && (
+            {activeTab === 'Unresolved Markets' && (
               <div className="space-y-4 w-full">
-                <p className="text-[10px] text-slate-500 mb-2">Markets voters have pinged for settlement. Choose the winning outcome — winners can then cash out, losing bets are forfeited.</p>
-                {unresolvedMarkets.length === 0 ? (
+                {!isOracle && (
+                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">Only the oracle wallet can resolve markets. Connect as the team wallet to see unresolved markets.</div>
+                )}
+                {isOracle && unresolvedMarkets.length === 0 && (
                   <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No markets awaiting resolution.</div>
-                ) : (
-                  unresolvedMarkets.map((market) => (
-                    <div key={market.id} className="bg-secondary/30 border border-yellow-500/20 rounded-xl p-4 sm:p-5 w-full max-w-xl">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs font-mono text-primary font-bold">Pool #{market.id}</span>
-                        <span className="text-[11px] font-mono text-yellow-400">Awaiting Settlement</span>
+                )}
+                {isOracle && unresolvedMarkets.length > 0 && (
+                  <>
+                    <p className="text-[10px] text-slate-500 mb-2">Markets voters have pinged for settlement. Choose the winning outcome — winners can then cash out, losing bets are forfeited.</p>
+                    {unresolvedMarkets.map((market) => (
+                      <div key={market.id} className="bg-secondary/30 border border-yellow-500/20 rounded-xl p-4 sm:p-5 w-full max-w-xl">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-mono text-primary font-bold">Pool #{market.id}</span>
+                          <span className="text-[11px] font-mono text-yellow-400">Awaiting Settlement</span>
+                        </div>
+                        <p className="text-sm font-semibold mb-3 text-slate-200">{market.question}</p>
+                        <div className="flex gap-4 text-[11px] font-mono text-slate-400 mb-2">
+                          <span>YES pool: {ethers.formatEther(market.totalYesPool)} tITL</span>
+                          <span>NO pool: {ethers.formatEther(market.totalNoPool)} tITL</span>
+                        </div>
+                        <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(market.marketEndTime)}</p>
+                        <p className="text-[11px] font-semibold text-slate-300 mb-2">Which option wins?</p>
+                        <div className="grid grid-cols-3 gap-3">
+                          <button onClick={() => handleResolveMarket(market.id, 0)} className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg uppercase">YES</button>
+                          <button onClick={() => handleResolveMarket(market.id, 1)} className="py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg uppercase">NO</button>
+                          <button onClick={() => handleResolveMarket(market.id, 2)} className="py-2.5 bg-slate-600 hover:bg-slate-500 text-white text-xs font-bold rounded-lg uppercase">Draw</button>
+                        </div>
                       </div>
-                      <p className="text-sm font-semibold mb-3 text-slate-200">{market.question}</p>
-                      <div className="flex gap-4 text-[11px] font-mono text-slate-400 mb-2">
-                        <span>YES pool: {ethers.formatEther(market.totalYesPool)} tITL</span>
-                        <span>NO pool: {ethers.formatEther(market.totalNoPool)} tITL</span>
-                      </div>
-                      <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(market.marketEndTime)}</p>
-                      <p className="text-[11px] font-semibold text-slate-300 mb-2">Which option wins?</p>
-                      <div className="grid grid-cols-3 gap-3">
-                        <button onClick={() => handleResolveMarket(market.id, 0)} className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg uppercase">YES</button>
-                        <button onClick={() => handleResolveMarket(market.id, 1)} className="py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg uppercase">NO</button>
-                        <button onClick={() => handleResolveMarket(market.id, 2)} className="py-2.5 bg-slate-600 hover:bg-slate-500 text-white text-xs font-bold rounded-lg uppercase">Draw</button>
-                      </div>
-                    </div>
-                  ))
+                    ))}
+                  </>
                 )}
               </div>
             )}

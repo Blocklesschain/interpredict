@@ -197,7 +197,7 @@ export default function DAppPortal() {
       }
 
       // 3. If the team wallet is connected, pull the FULL DEC member directory
-      if (walletAddress.toLowerCase() === ADMIN_ADDRESS) {
+      if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
         const allMembersData = await rpcCall(100, iface.encodeFunctionData("getAllDecMembers"))
         if (allMembersData?.result && allMembersData.result !== "0x") {
           const members = iface.decodeFunctionResult("getAllDecMembers", allMembersData.result)[0]
@@ -242,7 +242,7 @@ export default function DAppPortal() {
     }
   }, [walletAddress])
 
-  useEffect(() => {
+            useEffect(() => {
     scanBlockchainRegistry()
   }, [scanBlockchainRegistry, historyLogs])
 
@@ -253,9 +253,24 @@ export default function DAppPortal() {
     }
   }, [walletAddress, historyLogs])
 
+  // 🆕 NEW: check localStorage for DEC membership as fallback when RPC fails
+  useEffect(() => {
+    if (walletAddress) {
+      const decKey = `interpredict_dec_joined_${walletAddress.toLowerCase()}`
+      const localJoined = localStorage.getItem(decKey)
+      if (localJoined === 'true') {
+        setHasJoinedDEC(true)
+      }
+    }
+  }, [walletAddress])
+
   // 🆕 NEW: is the connected wallet the contract's settlement oracle? Gates the
   // "Unresolved Markets" tab and the YES/NO/DRAW winner-selection buttons.
-  const isOracle = !!walletAddress && !!oracleAddress && walletAddress.toLowerCase() === oracleAddress.toLowerCase()
+  // Fallback: if RPC fails but wallet matches ADMIN (team), treat as oracle
+  const isOracle = !!walletAddress && (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase() || (!!oracleAddress && walletAddress.toLowerCase() === oracleAddress.toLowerCase()))
+
+  // 🆕 NEW: fallback for DEC membership - if RPC fails but wallet has local record
+  const isDecMember = hasJoinedDEC || (walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase())
 
   const getVisibleTabs = (): TabType[] => {
     if (!walletAddress) return ['MarketPlace', 'Pending Markets', 'Resolved Markets']

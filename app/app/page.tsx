@@ -44,6 +44,7 @@ export default function DAppPortal() {
 
   const [outcomes, setOutcomes] = useState<string[]>(['YES', 'NO'])
   const [endDate, setEndDate] = useState<string>('2026-12-31')
+  const [endTime, setEndTime] = useState<string>('23:59')
   const [marketImage, setMarketImage] = useState<string | null>(null)
 
   const [hasJoinedDEC, setHasJoinedDEC] = useState<boolean>(false)
@@ -313,8 +314,12 @@ export default function DAppPortal() {
   }
 
   const handleCreateMarketSubmit = async () => {
-    if (!marketDesc || !endDate) return
-    const marketEndTimeInSeconds = Math.floor(new Date(endDate).getTime() / 1000)
+    if (!marketDesc || !endDate || !endTime) return
+    // Combine date and time for precise market end timestamp
+    const [hours, minutes] = endTime.split(':').map(Number)
+    const endDateTime = new Date(endDate)
+    endDateTime.setHours(hours, minutes, 0, 0)
+    const marketEndTimeInSeconds = Math.floor(endDateTime.getTime() / 1000)
     const success = await createMarketOnChain(marketDesc, marketEndTimeInSeconds)
     if (success) {
       setMarketDesc('')
@@ -609,9 +614,15 @@ export default function DAppPortal() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-slate-400 block mb-1.5">{t('votingEndDate')}</label>
-                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-black/20 border border-purple-900/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary text-slate-200" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 block mb-1.5">{t('votingEndDate')}</label>
+                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-black/20 border border-purple-900/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary text-slate-200" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 block mb-1.5">Time</label>
+                    <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-black/20 border border-purple-900/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary text-slate-200" />
+                  </div>
                 </div>
 
                 <div>

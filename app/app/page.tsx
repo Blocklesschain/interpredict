@@ -267,9 +267,9 @@ export default function DAppPortal() {
     }
   }, [walletAddress])
 
-            useEffect(() => {
+  useEffect(() => {
     scanBlockchainRegistry()
-  }, [scanBlockchainRegistry, historyLogs])
+  }, [scanBlockchainRegistry]) // Only re-scan when walletAddress changes or callback updates
 
   useEffect(() => {
     if (walletAddress) {

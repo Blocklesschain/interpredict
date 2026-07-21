@@ -43,7 +43,12 @@ export default function DAppPortal() {
   const [marketDesc, setMarketDesc] = useState('')
 
   const [outcomes, setOutcomes] = useState<string[]>(['YES', 'NO'])
-  const [endDate, setEndDate] = useState<string>('2026-12-31')
+  // Set default end date to at least 2 hours in the future (contract requires marketEndTime > now + 10min voting)
+  const [endDate, setEndDate] = useState<string>(() => {
+    const d = new Date()
+    d.setHours(d.getHours() + 2)
+    return d.toISOString().split('T')[0]
+  })
   const [endTime, setEndTime] = useState<string>('23:59')
   const [marketImage, setMarketImage] = useState<string | null>(null)
 
@@ -338,7 +343,19 @@ export default function DAppPortal() {
     const [hours, minutes] = endTime.split(':').map(Number)
     const endDateTime = new Date(endDate)
     endDateTime.setHours(hours, minutes, 0, 0)
-    const marketEndTimeInSeconds = Math.floor(endDateTime.getTime() / 1000)
+
+    // Ensure marketEndTime is at least 15 minutes in the future (contract requires +10min voting buffer)
+    const now = Math.floor(Date.now() / 1000)
+    const minRequiredTime = now + 15 * 60 // 15 minutes in seconds
+    let marketEndTimeInSeconds = Math.floor(endDateTime.getTime() / 1000)
+
+    // If user selected a time too close to now, automatically extend to 1 hour from now
+    if (marketEndTimeInSeconds < minRequiredTime) {
+      const extendedTime = new Date(now * 1000)
+      extendedTime.setHours(extendedTime.getHours() + 1)
+      marketEndTimeInSeconds = Math.floor(extendedTime.getTime() / 1000)
+    }
+
     const success = await createMarketOnChain(marketDesc, marketEndTimeInSeconds)
     if (success) {
       setMarketDesc('')

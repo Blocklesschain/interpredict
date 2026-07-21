@@ -94,19 +94,31 @@ export default function DAppPortal() {
     setIsScanning(true)
 
     try {
-      // 🔧 FIXED: logged-out visitors go through our own /api/markets route
-      // (server-side service wallet auth) instead of trying to hit the
-      // gated RPC directly with no token at all.
-      if (!walletAddress) {
-        const res = await fetch('/api/markets')
-        if (!res.ok) throw new Error('Failed to load public markets feed')
-        const { allMarkets } = await res.json()
+      // 🔧 FIXED: logged-out visitors AND fallback for logged-in users go through
+      // our own /api/markets route (server-side service wallet auth) instead of
+      // trying to hit the gated RPC directly, which often fails due to auth issues.
+      const shouldUsePublicAPI = !walletAddress || typeof window === 'undefined' || !(window as any).ethereum
 
-        // The data now includes oracleResolutionRequested from the API
-        setAllOnChainMarkets(allMarkets.map((m: any) => ({
-          ...m,
-          oracleResolutionRequested: Boolean(m.oracleResolutionRequested)
-        })))
+      if (shouldUsePublicAPI) {
+        const [marketsRes, decRes] = await Promise.all([
+          fetch('/api/markets'),
+          walletAddress ? fetch(`/api/dec-membership?address=${walletAddress}`) : Promise.resolve(null)
+        ])
+
+        if (marketsRes.ok) {
+          const data = await marketsRes.json()
+          const mappedMarkets = (data.allMarkets || []).map((m: any) => ({
+            ...m,
+            oracleResolutionRequested: Boolean(m.oracleResolutionRequested)
+          }))
+          setAllOnChainMarkets(mappedMarkets)
+        }
+
+        if (decRes && decRes.ok) {
+          const decData = await decRes.json()
+          if (decData.isDecMember) setHasJoinedDEC(true)
+          if (decData.allDecMembers?.length) setBlockchainDecList(decData.allDecMembers)
+        }
         return
       }
 

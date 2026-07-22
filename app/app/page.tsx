@@ -162,150 +162,114 @@ export default function DAppPortal() {
         "function noShares(uint256,address) view returns (uint256)"
       ])
 
-      const rpcCall = (id: number, data: string) =>
-        fetch(rpcUrl, {
-          method: "POST",
-          headers: req,
-          body: JSON.stringify({ jsonrpc: "2.0", id, method: "eth_call", params: [{ to: CONTRACT_ADDRESS, data }, "latest"] })
-        }).then(r => r.json())
+      // 🔧 FIXED (rate limits): the full market list already comes from the
+      // reliable /api/markets base fetch above, so we DON'T re-read every
+      // market over the user's rate-limited RPC anymore (that fired 2N+4
+      // parallel eth_calls and tripped "Rate limit exceeded"). We now only
+      // batch the few wallet-specific reads — oracle, membership, and
+      // per-market shares — into as few JSON-RPC BATCH requests as possible,
+      // with retry/backoff. Everything here is BEST-EFFORT: any failure keeps
+      // the base MarketPlace list intact (no empty list, no scary banner).
+      const sleep = (ms: number) => new Promise(res => setTimeout(res, ms))
 
-      // 1. Fetch count
-      const countData = await rpcCall(1, iface.encodeFunctionData("totalMarkets"))
-
-      // 🔧 surface RPC errors instead of silently skipping the update
-      if (countData?.error) {
-        throw new Error(`RPC error reading totalMarkets: ${countData.error.message || JSON.stringify(countData.error)}`)
-      }
-
-      let tempMarkets: SmartMarket[] = []
-      let rpcMarketsComplete = false
-
-      if (countData?.result && countData.result !== "0x") {
-        const totalCount = Number(iface.decodeFunctionResult("totalMarkets", countData.result)[0])
-
-
-        // 🔧 FIXED: fetch all markets in PARALLEL instead of one-at-a-time in
-        // a sequential for-loop — this was the main source of the ~30s delay
-        // before markets appeared for a newly connected wallet.
-        const marketResults = await Promise.all(
-          Array.from({ length: totalCount }, (_, i) => rpcCall(2 + i, iface.encodeFunctionData("markets", [i])))
-        )
-
-        marketResults.forEach((itemData) => {
-          if (itemData?.result && itemData.result !== "0x") {
-            const decoded = iface.decodeFunctionResult("markets", itemData.result)
-            tempMarkets.push({
-              id: Number(decoded[0]),
-              question: String(decoded[1]),
-              marketEndTime: Number(decoded[2]),
-              votingEndTime: Number(decoded[3]),
-              totalYesPool: decoded[4].toString(),
-              totalNoPool: decoded[5].toString(),
-              // 🔧 FIXED: removed the "auto-graduate if team wallet" override —
-              // this was forcing every market to show as Active whenever the
-              // team wallet was connected, hiding real pending proposals.
-              state: Number(decoded[6]),
-              winningOutcome: Number(decoded[7]),
-              creator: String(decoded[8]),
-              oracleResolutionRequested: Boolean(decoded[12])
-            })
+      const batchRpcCall = async (calls: { id: number; data: string }[]): Promise<Map<number, any>> => {
+        const out = new Map<number, any>()
+        if (calls.length === 0) return out
+        const body = JSON.stringify(calls.map(c => ({
+          jsonrpc: "2.0", id: c.id, method: "eth_call",
+          params: [{ to: CONTRACT_ADDRESS, data: c.data }, "latest"]
+        })))
+        for (let attempt = 0; attempt < 4; attempt++) {
+          try {
+            const res = await fetch(rpcUrl, { method: "POST", headers: req, body })
+            if (res.status === 429) { await sleep(700 * (attempt + 1)); continue }
+            const json = await res.json()
+            const arr = Array.isArray(json) ? json : [json]
+            let rateLimited = false
+            for (const item of arr) {
+              if (item?.error && /rate limit/i.test(item.error.message || "")) rateLimited = true
+              if (item?.id !== undefined) out.set(item.id, item)
+            }
+            if (rateLimited && attempt < 3) { out.clear(); await sleep(700 * (attempt + 1)); continue }
+            return out
+          } catch {
+            await sleep(500 * (attempt + 1))
           }
-        })
-        // 🔧 FIXED (#1): only let the client-RPC result REPLACE the reliable
-        // API base list when it's actually complete (every market decoded).
-        // A partial parallel read must never shrink the MarketPlace.
-        rpcMarketsComplete = tempMarkets.length === totalCount && totalCount > 0
-        if (rpcMarketsComplete) {
-          setAllOnChainMarkets(tempMarkets)
         }
+        return out
       }
 
-      // Positions are computed against whichever market set is authoritative:
-      // the fresh full RPC read if complete, otherwise the API base list.
-      const marketsForPositions = rpcMarketsComplete ? tempMarkets : baseMarkets
+      // Positions are computed against the authoritative API base list.
+      const marketsForPositions = baseMarkets
 
+      // 1. Batch the top-level wallet reads: oracle + membership (+ directory).
+      const topCalls = [
+        { id: 98, data: iface.encodeFunctionData("oracle") },
+        { id: 99, data: iface.encodeFunctionData("isDecMember", [walletAddress]) },
+      ]
+      if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
+        topCalls.push({ id: 100, data: iface.encodeFunctionData("getAllDecMembers") })
+      }
+      const topRes = await batchRpcCall(topCalls)
 
-      // 1b. 🆕 NEW: read the contract's oracle (settlement) wallet so we can
-      // show the "Unresolved Markets" tab + resolve buttons only to the settler.
-      const oracleData = await rpcCall(98, iface.encodeFunctionData("oracle"))
+      // 1b. contract oracle (settlement wallet) — gates the resolve buttons.
+      const oracleData = topRes.get(98)
       if (oracleData?.result && oracleData.result !== "0x") {
         setOracleAddress(String(iface.decodeFunctionResult("oracle", oracleData.result)[0]))
       }
 
-      // 2. Check the connected wallet's own DEC membership (controls the
-      // "Join DEC" vs "Market Proposals" tab and whether that tab shows at all)
-      const decCheckData = await rpcCall(99, iface.encodeFunctionData("isDecMember", [walletAddress]))
-
+      // 2. connected wallet's DEC membership.
+      const decCheckData = topRes.get(99)
       let isMember = false
       if (decCheckData?.result && decCheckData.result !== "0x") {
         isMember = iface.decodeFunctionResult("isDecMember", decCheckData.result)[0]
         setHasJoinedDEC(isMember)
       }
 
-      // 3. If the team wallet is connected, pull the FULL DEC member directory
+      // 3. team wallet → full DEC member directory.
       if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
-        const allMembersData = await rpcCall(100, iface.encodeFunctionData("getAllDecMembers"))
+        const allMembersData = topRes.get(100)
         if (allMembersData?.result && allMembersData.result !== "0x") {
           const members = iface.decodeFunctionResult("getAllDecMembers", allMembersData.result)[0]
           setBlockchainDecList(Array.from(members as string[]))
         }
-      } else {
-        setBlockchainDecList(isMember ? [walletAddress] : [])
+      } else if (isMember) {
+        setBlockchainDecList([walletAddress])
       }
 
-      // 4. 🆕 NEW: fetch this wallet's own positions (yes/no shares) across
-      // every market, in parallel, to power the "My Votes" tab.
+      // 4. Batch ALL yes/no share reads into a single request for "My Votes".
       if (marketsForPositions.length > 0) {
-        const positionResults = await Promise.all(
-          marketsForPositions.map(async (m) => {
-
-            try {
-              const [yesRes, noRes] = await Promise.all([
-                rpcCall(1000 + m.id, iface.encodeFunctionData("yesShares", [m.id, walletAddress])),
-                rpcCall(2000 + m.id, iface.encodeFunctionData("noShares", [m.id, walletAddress]))
-              ])
-              if (yesRes?.error) {
-                console.warn(`Failed to fetch yesShares for market ${m.id}:`, yesRes.error)
-              }
-              if (noRes?.error) {
-                console.warn(`Failed to fetch noShares for market ${m.id}:`, noRes.error)
-              }
-              const yesAmount = yesRes?.result && yesRes.result !== "0x" ? iface.decodeFunctionResult("yesShares", yesRes.result)[0].toString() : "0"
-              const noAmount = noRes?.result && noRes.result !== "0x" ? iface.decodeFunctionResult("noShares", noRes.result)[0].toString() : "0"
-              return {
-                marketId: m.id,
-                question: m.question,
-                marketState: m.state,
-                winningOutcome: m.winningOutcome,
-                yesAmount,
-                noAmount,
-                marketEndTime: m.marketEndTime,
-                oracleResolutionRequested: m.oracleResolutionRequested
-              } as MyPosition
-            } catch (e: any) {
-              console.warn(`Failed to fetch positions for market ${m.id}:`, e.message)
-              return {
-                marketId: m.id,
-                question: m.question,
-                marketState: m.state,
-                winningOutcome: m.winningOutcome,
-                yesAmount: "0",
-                noAmount: "0",
-                marketEndTime: m.marketEndTime,
-                oracleResolutionRequested: m.oracleResolutionRequested
-              } as MyPosition
-            }
-          })
-        )
+        const shareCalls: { id: number; data: string }[] = []
+        marketsForPositions.forEach((m) => {
+          shareCalls.push({ id: 1000000 + m.id, data: iface.encodeFunctionData("yesShares", [m.id, walletAddress]) })
+          shareCalls.push({ id: 2000000 + m.id, data: iface.encodeFunctionData("noShares", [m.id, walletAddress]) })
+        })
+        const shareRes = await batchRpcCall(shareCalls)
+        const positionResults: MyPosition[] = marketsForPositions.map((m) => {
+          const yesRes = shareRes.get(1000000 + m.id)
+          const noRes = shareRes.get(2000000 + m.id)
+          const yesAmount = yesRes?.result && yesRes.result !== "0x" ? iface.decodeFunctionResult("yesShares", yesRes.result)[0].toString() : "0"
+          const noAmount = noRes?.result && noRes.result !== "0x" ? iface.decodeFunctionResult("noShares", noRes.result)[0].toString() : "0"
+          return {
+            marketId: m.id,
+            question: m.question,
+            marketState: m.state,
+            winningOutcome: m.winningOutcome,
+            yesAmount,
+            noAmount,
+            marketEndTime: m.marketEndTime,
+            oracleResolutionRequested: m.oracleResolutionRequested
+          } as MyPosition
+        })
         setMyPositions(positionResults.filter(p => BigInt(p.yesAmount) > BigInt(0) || BigInt(p.noAmount) > BigInt(0)))
       }
     } catch (err: any) {
-      console.error("Scanning synchronization failure:", err?.message || err)
-      setTxStatus(`Sync Error: ${err?.message || 'Failed to connect to network'}`)
-      // Reads failed for this wallet — most likely it isn't authorized on
-      // Interlink's auth gate yet, or its token/refresh flow failed. Check
-      // the console error above for the exact RPC response.
+      // 🔧 FIXED: enrichment failures (usually Interlink RPC rate limiting) are
+      // now NON-FATAL. The MarketPlace still shows the reliable /api/markets
+      // base list, so we log quietly instead of surfacing an alarming banner.
+      console.warn("On-chain enrichment skipped:", err?.message || err)
     } finally {
+
       setIsScanning(false)
     }
   }, [walletAddress])

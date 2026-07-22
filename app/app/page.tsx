@@ -137,20 +137,6 @@ export default function DAppPortal() {
         return
       }
 
-      // 🔧 FIXED: connected wallets authenticate their own RPC session via
-      // the challenge/verify/refresh flow instead of a token that was
-      // never being set. Everything below is BEST-EFFORT enrichment — any
-      // failure here is caught and MUST NOT wipe the base market list above.
-      const browserProvider = new ethers.BrowserProvider((window as any).ethereum)
-
-      const signer = await browserProvider.getSigner()
-      const accessToken = await getValidToken(walletAddress, signer)
-
-      const rpcUrl = "https://evm-rpc.test-net.interlinklabs.ai/v1/rpc"
-      const req = new Headers()
-      req.append("Authorization", `Bearer ${accessToken}`)
-      req.append("Content-Type", "application/json")
-
       // Native Human-Readable ABI mapping descriptor for strict interface conversions
       const iface = new ethers.Interface([
         "function totalMarkets() view returns (uint256)",
@@ -162,136 +148,92 @@ export default function DAppPortal() {
         "function noShares(uint256,address) view returns (uint256)"
       ])
 
-      // 🔧 FIXED (rate limits): the full market list already comes from the
-      // reliable /api/markets base fetch above, so we DON'T re-read every
-      // market over the user's rate-limited RPC anymore (that fired 2N+4
-      // parallel eth_calls and tripped "Rate limit exceeded"). We now only
-      // batch the few wallet-specific reads — oracle, membership, and
-      // per-market shares — into as few JSON-RPC BATCH requests as possible,
-      // with retry/backoff. Everything here is BEST-EFFORT: any failure keeps
-      // the base MarketPlace list intact (no empty list, no scary banner).
-      const sleep = (ms: number) => new Promise(res => setTimeout(res, ms))
-
-      const batchRpcCall = async (calls: { id: number; data: string }[]): Promise<Map<number, any>> => {
-        const out = new Map<number, any>()
-        if (calls.length === 0) return out
-        const body = JSON.stringify(calls.map(c => ({
-          jsonrpc: "2.0", id: c.id, method: "eth_call",
-          params: [{ to: CONTRACT_ADDRESS, data: c.data }, "latest"]
-        })))
-        for (let attempt = 0; attempt < 4; attempt++) {
-          try {
-            const res = await fetch(rpcUrl, { method: "POST", headers: req, body })
-            if (res.status === 429) { await sleep(700 * (attempt + 1)); continue }
-            const json = await res.json()
-            const arr = Array.isArray(json) ? json : [json]
-            let rateLimited = false
-            for (const item of arr) {
-              if (item?.error && /rate limit/i.test(item.error.message || "")) rateLimited = true
-              if (item?.id !== undefined) out.set(item.id, item)
-            }
-            if (rateLimited && attempt < 3) { out.clear(); await sleep(700 * (attempt + 1)); continue }
-            return out
-          } catch {
-            await sleep(500 * (attempt + 1))
-          }
+      // 🔧 FIXED (markets truly not loading): read on-chain state through
+      // MetaMask's OWN provider via window.ethereum `eth_call`. This is the
+      // EXACT same channel that already successfully SENDS transactions
+      // (create market, join DEC, vote, resolve, cash out). It therefore does
+      // NOT depend on the Bearer-token / service-token auth gate that returns
+      // "Forbidden" (server /api/markets) or "Rate limit exceeded" (our direct
+      // fetch). Reads run sequentially to be gentle on the endpoint. All
+      // best-effort: any failure keeps the base list and never shows a banner.
+      const ethCall = async (data: string): Promise<string | null> => {
+        try {
+          const result: string = await (window as any).ethereum.request({
+            method: 'eth_call',
+            params: [{ to: CONTRACT_ADDRESS, data }, 'latest']
+          })
+          return result && result !== '0x' ? result : null
+        } catch (e) {
+          console.warn('eth_call via wallet provider failed:', e)
+          return null
         }
-        return out
       }
 
-      // 1. Batch the top-level reads: market count + oracle + membership (+ directory).
-      const topCalls = [
-        { id: 1, data: iface.encodeFunctionData("totalMarkets") },
-        { id: 98, data: iface.encodeFunctionData("oracle") },
-        { id: 99, data: iface.encodeFunctionData("isDecMember", [walletAddress]) },
-      ]
-      if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
-        topCalls.push({ id: 100, data: iface.encodeFunctionData("getAllDecMembers") })
-      }
-      const topRes = await batchRpcCall(topCalls)
-
-      // 1a. 🔧 FIXED (markets not showing): read the market list DIRECTLY over
-      // the user's own (working) RPC session. The server /api/markets route can
-      // return "Forbidden" when its service token is unauthorized, which left
-      // the MarketPlace empty even though markets exist on-chain. This is
-      // batched into a single request so it stays within rate limits, and only
-      // replaces the API base list when the full set decodes successfully.
+      // 1. Market list — total count, then each market, straight from chain.
       let marketsForPositions = baseMarkets
-      const countData = topRes.get(1)
-      if (countData?.result && countData.result !== "0x") {
-        const totalCount = Number(iface.decodeFunctionResult("totalMarkets", countData.result)[0])
-        if (totalCount > 0) {
-          const marketRes = await batchRpcCall(
-            Array.from({ length: totalCount }, (_, i) => ({ id: 300 + i, data: iface.encodeFunctionData("markets", [i]) }))
-          )
-          const tempMarkets: SmartMarket[] = []
-          for (let i = 0; i < totalCount; i++) {
-            const itemData = marketRes.get(300 + i)
-            if (itemData?.result && itemData.result !== "0x") {
-              const decoded = iface.decodeFunctionResult("markets", itemData.result)
-              tempMarkets.push({
-                id: Number(decoded[0]),
-                question: String(decoded[1]),
-                marketEndTime: Number(decoded[2]),
-                votingEndTime: Number(decoded[3]),
-                totalYesPool: decoded[4].toString(),
-                totalNoPool: decoded[5].toString(),
-                state: Number(decoded[6]),
-                winningOutcome: Number(decoded[7]),
-                creator: String(decoded[8]),
-                oracleResolutionRequested: Boolean(decoded[12])
-              })
-            }
+      const countHex = await ethCall(iface.encodeFunctionData("totalMarkets"))
+      if (countHex) {
+        const totalCount = Number(iface.decodeFunctionResult("totalMarkets", countHex)[0])
+        const tempMarkets: SmartMarket[] = []
+        for (let i = 0; i < totalCount; i++) {
+          const raw = await ethCall(iface.encodeFunctionData("markets", [i]))
+          if (raw) {
+            const decoded = iface.decodeFunctionResult("markets", raw)
+            tempMarkets.push({
+              id: Number(decoded[0]),
+              question: String(decoded[1]),
+              marketEndTime: Number(decoded[2]),
+              votingEndTime: Number(decoded[3]),
+              totalYesPool: decoded[4].toString(),
+              totalNoPool: decoded[5].toString(),
+              state: Number(decoded[6]),
+              winningOutcome: Number(decoded[7]),
+              creator: String(decoded[8]),
+              oracleResolutionRequested: Boolean(decoded[12])
+            })
           }
-          // Only replace the base list when the client read is fully complete —
-          // a partial read must never shrink the MarketPlace.
-          if (tempMarkets.length === totalCount) {
-            setAllOnChainMarkets(tempMarkets)
-            marketsForPositions = tempMarkets
-          }
+        }
+        // Replace the list whenever we read at least one market successfully.
+        if (tempMarkets.length > 0) {
+          setAllOnChainMarkets(tempMarkets)
+          marketsForPositions = tempMarkets
         }
       }
 
-      // 1b. contract oracle (settlement wallet) — gates the resolve buttons.
-
-      const oracleData = topRes.get(98)
-      if (oracleData?.result && oracleData.result !== "0x") {
-        setOracleAddress(String(iface.decodeFunctionResult("oracle", oracleData.result)[0]))
+      // 2. Oracle (settlement wallet) — gates the resolve buttons.
+      const oracleHex = await ethCall(iface.encodeFunctionData("oracle"))
+      if (oracleHex) {
+        setOracleAddress(String(iface.decodeFunctionResult("oracle", oracleHex)[0]))
       }
 
-      // 2. connected wallet's DEC membership.
-      const decCheckData = topRes.get(99)
+      // 3. This wallet's DEC membership.
       let isMember = false
-      if (decCheckData?.result && decCheckData.result !== "0x") {
-        isMember = iface.decodeFunctionResult("isDecMember", decCheckData.result)[0]
+      const decHex = await ethCall(iface.encodeFunctionData("isDecMember", [walletAddress]))
+      if (decHex) {
+        isMember = iface.decodeFunctionResult("isDecMember", decHex)[0]
         setHasJoinedDEC(isMember)
       }
 
-      // 3. team wallet → full DEC member directory.
+      // 4. Team wallet → full DEC member directory.
       if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
-        const allMembersData = topRes.get(100)
-        if (allMembersData?.result && allMembersData.result !== "0x") {
-          const members = iface.decodeFunctionResult("getAllDecMembers", allMembersData.result)[0]
+        const membersHex = await ethCall(iface.encodeFunctionData("getAllDecMembers"))
+        if (membersHex) {
+          const members = iface.decodeFunctionResult("getAllDecMembers", membersHex)[0]
           setBlockchainDecList(Array.from(members as string[]))
         }
       } else if (isMember) {
         setBlockchainDecList([walletAddress])
       }
 
-      // 4. Batch ALL yes/no share reads into a single request for "My Votes".
+      // 5. This wallet's yes/no shares per market, to power "My Votes".
       if (marketsForPositions.length > 0) {
-        const shareCalls: { id: number; data: string }[] = []
-        marketsForPositions.forEach((m) => {
-          shareCalls.push({ id: 1000000 + m.id, data: iface.encodeFunctionData("yesShares", [m.id, walletAddress]) })
-          shareCalls.push({ id: 2000000 + m.id, data: iface.encodeFunctionData("noShares", [m.id, walletAddress]) })
-        })
-        const shareRes = await batchRpcCall(shareCalls)
-        const positionResults: MyPosition[] = marketsForPositions.map((m) => {
-          const yesRes = shareRes.get(1000000 + m.id)
-          const noRes = shareRes.get(2000000 + m.id)
-          const yesAmount = yesRes?.result && yesRes.result !== "0x" ? iface.decodeFunctionResult("yesShares", yesRes.result)[0].toString() : "0"
-          const noAmount = noRes?.result && noRes.result !== "0x" ? iface.decodeFunctionResult("noShares", noRes.result)[0].toString() : "0"
-          return {
+        const positionResults: MyPosition[] = []
+        for (const m of marketsForPositions) {
+          const yesHex = await ethCall(iface.encodeFunctionData("yesShares", [m.id, walletAddress]))
+          const noHex = await ethCall(iface.encodeFunctionData("noShares", [m.id, walletAddress]))
+          const yesAmount = yesHex ? iface.decodeFunctionResult("yesShares", yesHex)[0].toString() : "0"
+          const noAmount = noHex ? iface.decodeFunctionResult("noShares", noHex)[0].toString() : "0"
+          positionResults.push({
             marketId: m.id,
             question: m.question,
             marketState: m.state,
@@ -300,10 +242,11 @@ export default function DAppPortal() {
             noAmount,
             marketEndTime: m.marketEndTime,
             oracleResolutionRequested: m.oracleResolutionRequested
-          } as MyPosition
-        })
+          })
+        }
         setMyPositions(positionResults.filter(p => BigInt(p.yesAmount) > BigInt(0) || BigInt(p.noAmount) > BigInt(0)))
       }
+
     } catch (err: any) {
       // 🔧 FIXED: enrichment failures (usually Interlink RPC rate limiting) are
       // now NON-FATAL. The MarketPlace still shows the reliable /api/markets

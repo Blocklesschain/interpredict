@@ -21,7 +21,10 @@ interface SmartMarket {
   winningOutcome: number
   creator: string
   oracleResolutionRequested: boolean
+  votesForActive?: number
+  votesAgainstActive?: number
 }
+
 
 interface MyPosition {
   marketId: number
@@ -37,7 +40,8 @@ interface MyPosition {
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x8c69b2D0A1C89fd3C6aD64e1Be3536FAF63b55b6"
 
 export default function DAppPortal() {
-  const { walletAddress, connectWallet, disconnectWallet, txStatus, setTxStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain, t } = useWeb3()
+  const { walletAddress, connectWallet, disconnectWallet, txStatus, setTxStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, initializeMarketOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain, t } = useWeb3()
+
   const [activeTab, setActiveTab] = useState<TabType>('MarketPlace')
   const [stakeAmount, setStakeAmount] = useState<string>('0.1')
   const [marketDesc, setMarketDesc] = useState('')
@@ -82,50 +86,63 @@ export default function DAppPortal() {
   // 🔧 FIXED: extracted into a stable useCallback so it can be re-triggered
   // manually (Refresh button) instead of only on mount/dependency change.
   const scanBlockchainRegistry = useCallback(async () => {
-    // 🔧 FIXED: reset immediately (before any async work) so switching
-    // wallets never leaves the previous wallet's stale markets/DEC-membership
-    // on screen while the new wallet's reads are still in flight. This was
-    // the root cause behind votes appearing to be allowed for non-members,
-    // and expired/foreign data briefly showing as current.
-    setAllOnChainMarkets([])
+    // 🔧 FIXED: only reset WALLET-SPECIFIC state (membership + positions) on a
+    // (re)scan. The market list itself is GLOBAL — clearing it up-front caused
+    // the "sometimes all, sometimes a few" flicker, because a slow/partial RPC
+    // read would leave the wiped list showing fewer markets than actually exist.
     setHasJoinedDEC(false)
-    setBlockchainDecList([])
     setMyPositions([])
     setIsScanning(true)
 
     try {
-      // 🔧 FIXED: logged-out visitors AND fallback for logged-in users go through
-      // our own /api/markets route (server-side service wallet auth) instead of
-      // trying to hit the gated RPC directly, which often fails due to auth issues.
-      const shouldUsePublicAPI = !walletAddress || typeof window === 'undefined' || !(window as any).ethereum
-
-      if (shouldUsePublicAPI) {
-        const [marketsRes, decRes] = await Promise.all([
-          fetch('/api/markets'),
-          walletAddress ? fetch(`/api/dec-membership?address=${walletAddress}`) : Promise.resolve(null)
-        ])
-
+      // 🔧 FIXED (#1): ALWAYS load the authoritative full market list from our
+      // own /api/markets route first (server-side service-wallet auth, fetched
+      // sequentially so it never silently drops markets like the parallel
+      // client-RPC path could). This guarantees the MarketPlace shows every
+      // market every time, regardless of the connected wallet's RPC health.
+      let baseMarkets: SmartMarket[] = []
+      try {
+        const marketsRes = await fetch('/api/markets', { cache: 'no-store' })
         if (marketsRes.ok) {
           const data = await marketsRes.json()
-          const mappedMarkets = (data.allMarkets || []).map((m: any) => ({
+          baseMarkets = (data.allMarkets || []).map((m: any) => ({
             ...m,
             oracleResolutionRequested: Boolean(m.oracleResolutionRequested)
           }))
-          setAllOnChainMarkets(mappedMarkets)
+          setAllOnChainMarkets(baseMarkets)
         }
+      } catch (e) {
+        console.warn('Base market fetch via /api/markets failed:', e)
+      }
 
-        if (decRes && decRes.ok) {
-          const decData = await decRes.json()
-          if (decData.isDecMember) setHasJoinedDEC(true)
-          if (decData.allDecMembers?.length) setBlockchainDecList(decData.allDecMembers)
+      // DEC membership (+ admin directory) via the API too — reliable even when
+      // the user's own RPC session is flaky.
+      if (walletAddress) {
+        try {
+          const decRes = await fetch(`/api/dec-membership?address=${walletAddress}`, { cache: 'no-store' })
+          if (decRes && decRes.ok) {
+            const decData = await decRes.json()
+            if (decData.isDecMember) setHasJoinedDEC(true)
+            if (decData.allDecMembers?.length) setBlockchainDecList(decData.allDecMembers)
+          }
+        } catch (e) {
+          console.warn('DEC membership API fetch failed:', e)
         }
+      }
+
+      // Logged-out (or no injected wallet) visitors stop here — the base list is
+      // all they need, and there are no wallet-specific positions to load.
+      const shouldUsePublicAPI = !walletAddress || typeof window === 'undefined' || !(window as any).ethereum
+      if (shouldUsePublicAPI) {
         return
       }
 
       // 🔧 FIXED: connected wallets authenticate their own RPC session via
       // the challenge/verify/refresh flow instead of a token that was
-      // never being set.
+      // never being set. Everything below is BEST-EFFORT enrichment — any
+      // failure here is caught and MUST NOT wipe the base market list above.
       const browserProvider = new ethers.BrowserProvider((window as any).ethereum)
+
       const signer = await browserProvider.getSigner()
       const accessToken = await getValidToken(walletAddress, signer)
 
@@ -161,9 +178,11 @@ export default function DAppPortal() {
       }
 
       let tempMarkets: SmartMarket[] = []
+      let rpcMarketsComplete = false
 
       if (countData?.result && countData.result !== "0x") {
         const totalCount = Number(iface.decodeFunctionResult("totalMarkets", countData.result)[0])
+
 
         // 🔧 FIXED: fetch all markets in PARALLEL instead of one-at-a-time in
         // a sequential for-loop — this was the main source of the ~30s delay
@@ -192,8 +211,19 @@ export default function DAppPortal() {
             })
           }
         })
-        setAllOnChainMarkets(tempMarkets)
+        // 🔧 FIXED (#1): only let the client-RPC result REPLACE the reliable
+        // API base list when it's actually complete (every market decoded).
+        // A partial parallel read must never shrink the MarketPlace.
+        rpcMarketsComplete = tempMarkets.length === totalCount && totalCount > 0
+        if (rpcMarketsComplete) {
+          setAllOnChainMarkets(tempMarkets)
+        }
       }
+
+      // Positions are computed against whichever market set is authoritative:
+      // the fresh full RPC read if complete, otherwise the API base list.
+      const marketsForPositions = rpcMarketsComplete ? tempMarkets : baseMarkets
+
 
       // 1b. 🆕 NEW: read the contract's oracle (settlement) wallet so we can
       // show the "Unresolved Markets" tab + resolve buttons only to the settler.
@@ -225,9 +255,10 @@ export default function DAppPortal() {
 
       // 4. 🆕 NEW: fetch this wallet's own positions (yes/no shares) across
       // every market, in parallel, to power the "My Votes" tab.
-      if (tempMarkets.length > 0) {
+      if (marketsForPositions.length > 0) {
         const positionResults = await Promise.all(
-          tempMarkets.map(async (m) => {
+          marketsForPositions.map(async (m) => {
+
             try {
               const [yesRes, noRes] = await Promise.all([
                 rpcCall(1000 + m.id, iface.encodeFunctionData("yesShares", [m.id, walletAddress])),
@@ -387,13 +418,51 @@ export default function DAppPortal() {
 
   const executeTradeAction = async (marketId: number, outcomeIndex: number) => {
     if (!walletAddress) return connectWallet()
-    await placeBetOnChain(marketId, outcomeIndex, stakeAmount)
+    const ok = await placeBetOnChain(marketId, outcomeIndex, stakeAmount)
+    if (ok) {
+      // 🆕 FIX #2: optimistically reflect the new position in "My Votes"
+      // IMMEDIATELY (before the slower full re-scan finishes) and jump the user
+      // to that tab, so a voted market shows up the instant the trade confirms.
+      const mkt = allOnChainMarkets.find(m => m.id === marketId)
+      let addWei = BigInt(0)
+      try { addWei = ethers.parseEther(stakeAmount || '0') } catch { }
+      setMyPositions((prev) => {
+        const existing = prev.find(p => p.marketId === marketId)
+        if (existing) {
+          return prev.map(p => p.marketId === marketId ? {
+            ...p,
+            yesAmount: outcomeIndex === 0 ? (BigInt(p.yesAmount) + addWei).toString() : p.yesAmount,
+            noAmount: outcomeIndex === 1 ? (BigInt(p.noAmount) + addWei).toString() : p.noAmount
+          } : p)
+        }
+        return [...prev, {
+          marketId,
+          question: mkt?.question || `Pool #${marketId}`,
+          marketState: mkt?.state ?? 1,
+          winningOutcome: mkt?.winningOutcome ?? 0,
+          yesAmount: outcomeIndex === 0 ? addWei.toString() : '0',
+          noAmount: outcomeIndex === 1 ? addWei.toString() : '0',
+          marketEndTime: mkt?.marketEndTime ?? 0,
+          oracleResolutionRequested: mkt?.oracleResolutionRequested ?? false
+        }]
+      })
+      setActiveTab('My Votes')
+    }
     scanBlockchainRegistry() // Refresh positions after trade
   }
 
   const handleCashOut = async (marketId: number) => {
-    await claimPayoutOnChain(marketId)
+    const ok = await claimPayoutOnChain(marketId)
+    if (ok) scanBlockchainRegistry() // 🆕 FIX #9: refresh balances/positions after payout
   }
+
+  // 🆕 FIX #4: finalize a proposal once its curation window closes — graduates
+  // it to the MarketPlace or rejects it (90% stake refunded to the creator).
+  const handleFinalizeProposal = async (marketId: number) => {
+    const ok = await initializeMarketOnChain(marketId)
+    if (ok) scanBlockchainRegistry()
+  }
+
 
   // 🆕 NEW: a voter pings an ended market for settlement, then refreshes so the
   // "Awaiting team resolution" state (and the team's Unresolved tab) reflects it.
@@ -636,21 +705,39 @@ export default function DAppPortal() {
                   <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No outstanding market proposals to vote on at this time.</div>
                 ) : (
                   pendingProposals.map((market) => (
-                    <div key={market.id} className="bg-secondary/30 border border-purple-500/20 rounded-xl p-4 sm:p-5 w-full max-w-xl">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs font-mono text-primary font-bold">Proposal #{market.id}</span>
-                        <span className="text-[11px] font-mono text-yellow-400">Curation Active</span>
-                      </div>
-                      <p className="text-sm font-semibold mb-4 text-slate-200">{market.question}</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <button onClick={() => castVoteOnChain(market.id, true)} className="py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg">Vote FOR (Graduate)</button>
-                        <button onClick={() => castVoteOnChain(market.id, false)} className="py-2.5 bg-rose-600 text-white text-xs font-bold rounded-lg">Vote AGAINST (Reject)</button>
-                      </div>
-                    </div>
+                    (() => {
+                      const votingOpen = market.votingEndTime > 0 && nowSec < market.votingEndTime
+                      return (
+                        <div key={market.id} className="bg-secondary/30 border border-purple-500/20 rounded-xl p-4 sm:p-5 w-full max-w-xl">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs font-mono text-primary font-bold">Proposal #{market.id}</span>
+                            <span className="text-[11px] font-mono text-yellow-400">{votingOpen ? 'Curation Active' : 'Curation Ended'}</span>
+                          </div>
+                          <p className="text-sm font-semibold mb-3 text-slate-200">{market.question}</p>
+                          {market.votingEndTime > 0 && (
+                            <p className="text-[10px] font-mono text-purple-300 mb-3">
+                              {votingOpen ? <>⏳ Voting closes in {formatCountdown(market.votingEndTime)}</> : <>Voting closed {formatExpiryDate(market.votingEndTime)}</>}
+                            </p>
+                          )}
+                          {votingOpen ? (
+                            <div className="grid grid-cols-2 gap-3">
+                              <button onClick={() => castVoteOnChain(market.id, true)} className="py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg">Vote FOR (Graduate)</button>
+                              <button onClick={() => castVoteOnChain(market.id, false)} className="py-2.5 bg-rose-600 text-white text-xs font-bold rounded-lg">Vote AGAINST (Reject)</button>
+                            </div>
+                          ) : (
+                            // 🆕 FIX #4: after the curation window closes, anyone can finalize —
+                            // the contract graduates it to the MarketPlace (votes FOR win) or
+                            // rejects it (refunding 90% of the 1 tITL stake to the creator).
+                            <button onClick={() => handleFinalizeProposal(market.id)} className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg uppercase">Finalize (Graduate / Reject)</button>
+                          )}
+                        </div>
+                      )
+                    })()
                   ))
                 )}
               </div>
             )}
+
 
             {/* TAB: MAKE MARKET */}
             {activeTab === 'Make Market' && (
@@ -757,7 +844,7 @@ export default function DAppPortal() {
 
                     {/* ENDED POSITIONS */}
                     <div>
-                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Ended</h3>
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Inactive</h3>
                       <div className="space-y-4">
                         {endedPositions.length === 0 ? (
                           <div className="p-6 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No ended positions.</div>
@@ -806,39 +893,59 @@ export default function DAppPortal() {
                 oracle declares the winning outcome (YES/NO/DRAW) via resolveMarket. */}
             {activeTab === 'Unresolved Markets' && (
               <div className="space-y-4 w-full">
-                {!isOracle && (
-                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">Only the oracle wallet can resolve markets. Connect as the team wallet to see unresolved markets.</div>
-                )}
-                {isOracle && unresolvedMarkets.length === 0 && (
-                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No markets awaiting resolution.</div>
-                )}
-                {isOracle && unresolvedMarkets.length > 0 && (
-                  <>
-                    <p className="text-[10px] text-slate-500 mb-2">Markets voters have pinged for settlement. Choose the winning outcome — winners can then cash out, losing bets are forfeited.</p>
-                    {unresolvedMarkets.map((market) => (
-                      <div key={market.id} className="bg-secondary/30 border border-yellow-500/20 rounded-xl p-4 sm:p-5 w-full max-w-xl">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-xs font-mono text-primary font-bold">Pool #{market.id}</span>
-                          <span className="text-[11px] font-mono text-yellow-400">Awaiting Settlement</span>
+                {(() => {
+                  // 🆕 FIX #7/#8: every market whose trading window has closed but that
+                  // hasn't been settled yet lands here automatically. VOTERS see a
+                  // "Resolve Market" button that pings the team; the TEAM/ORACLE sees
+                  // the winner-selection buttons (YES/NO/DRAW) and settles it.
+                  const expiredUnresolved = allOnChainMarkets.filter(m => m.state === 1 && m.marketEndTime <= nowSec)
+                  if (!walletAddress) {
+                    return <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">Connect your wallet to view markets awaiting resolution.</div>
+                  }
+                  if (expiredUnresolved.length === 0) {
+                    return <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No markets awaiting resolution.</div>
+                  }
+                  return (
+                    <>
+                      <p className="text-[10px] text-slate-500 mb-2">
+                        {isOracle
+                          ? 'Ended markets awaiting settlement. Choose the winning outcome — winners can then cash out, losing bets are forfeited.'
+                          : 'These markets have ended and need settlement. Tap “Resolve Market” to ping the team to declare the winning outcome.'}
+                      </p>
+                      {expiredUnresolved.map((market) => (
+                        <div key={market.id} className="bg-secondary/30 border border-yellow-500/20 rounded-xl p-4 sm:p-5 w-full max-w-xl">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs font-mono text-primary font-bold">Pool #{market.id}</span>
+                            <span className="text-[11px] font-mono text-yellow-400">{market.oracleResolutionRequested ? 'Awaiting Settlement' : 'Ended — Needs Resolution'}</span>
+                          </div>
+                          <p className="text-sm font-semibold mb-3 text-slate-200">{market.question}</p>
+                          <div className="flex gap-4 text-[11px] font-mono text-slate-400 mb-2">
+                            <span>YES pool: {ethers.formatEther(market.totalYesPool)} tITL</span>
+                            <span>NO pool: {ethers.formatEther(market.totalNoPool)} tITL</span>
+                          </div>
+                          <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(market.marketEndTime)}</p>
+                          {isOracle ? (
+                            <>
+                              <p className="text-[11px] font-semibold text-slate-300 mb-2">Which option wins?</p>
+                              <div className="grid grid-cols-3 gap-3">
+                                <button onClick={() => handleResolveMarket(market.id, 0)} className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg uppercase">YES</button>
+                                <button onClick={() => handleResolveMarket(market.id, 1)} className="py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg uppercase">NO</button>
+                                <button onClick={() => handleResolveMarket(market.id, 2)} className="py-2.5 bg-slate-600 hover:bg-slate-500 text-white text-xs font-bold rounded-lg uppercase">Draw</button>
+                              </div>
+                            </>
+                          ) : market.oracleResolutionRequested ? (
+                            <p className="text-[11px] font-mono text-yellow-400">⏳ Awaiting team resolution</p>
+                          ) : (
+                            <button onClick={() => handleRequestResolution(market.id)} className="w-full py-2.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-lg uppercase">Resolve Market</button>
+                          )}
                         </div>
-                        <p className="text-sm font-semibold mb-3 text-slate-200">{market.question}</p>
-                        <div className="flex gap-4 text-[11px] font-mono text-slate-400 mb-2">
-                          <span>YES pool: {ethers.formatEther(market.totalYesPool)} tITL</span>
-                          <span>NO pool: {ethers.formatEther(market.totalNoPool)} tITL</span>
-                        </div>
-                        <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(market.marketEndTime)}</p>
-                        <p className="text-[11px] font-semibold text-slate-300 mb-2">Which option wins?</p>
-                        <div className="grid grid-cols-3 gap-3">
-                          <button onClick={() => handleResolveMarket(market.id, 0)} className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg uppercase">YES</button>
-                          <button onClick={() => handleResolveMarket(market.id, 1)} className="py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg uppercase">NO</button>
-                          <button onClick={() => handleResolveMarket(market.id, 2)} className="py-2.5 bg-slate-600 hover:bg-slate-500 text-white text-xs font-bold rounded-lg uppercase">Draw</button>
-                        </div>
-                      </div>
-                    ))}
-                  </>
-                )}
+                      ))}
+                    </>
+                  )
+                })()}
               </div>
             )}
+
 
             {/* TAB: RESOLVED MARKETS — 🆕 NEW: settled markets with their winning
                 outcome. Winners can cash out here as well. */}

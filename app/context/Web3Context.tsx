@@ -28,11 +28,13 @@ interface Web3ContextType {
   createMarketOnChain: (description: string, marketEndTime: number) => Promise<boolean>
   joinDecOnChain: () => Promise<boolean>
   castVoteOnChain: (marketId: number, support: boolean) => Promise<void>
-  placeBetOnChain: (marketId: number, outcome: number, amount: string) => Promise<void>
+  placeBetOnChain: (marketId: number, outcome: number, amount: string) => Promise<boolean>
+  initializeMarketOnChain: (marketId: number) => Promise<boolean>
   claimPayoutOnChain: (marketId: number) => Promise<boolean>
   requestResolutionOnChain: (marketId: number) => Promise<boolean>
   resolveMarketOnChain: (marketId: number, winningOutcome: number) => Promise<boolean>
 }
+
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
 
@@ -1187,7 +1189,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const placeBetOnChain = async (marketId: number, outcome: number, amount: string) => {
+  const placeBetOnChain = async (marketId: number, outcome: number, amount: string): Promise<boolean> => {
     const targetSide = outcome === 0 ? 'YES' : 'NO';
     const isYes = outcome === 0;
 
@@ -1217,8 +1219,13 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
         if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
       }
 
-      if (walletAddress) {
-        saveLogToLocalStorage(walletAddress, 'Market Trade', `Wager placed on Pool #${marketId}`, `Success — Predicted ${targetSide} with ${amount} tITL`, 'Success')
+      if (receipt && Number(receipt.status) === 1) {
+        if (walletAddress) {
+          saveLogToLocalStorage(walletAddress, 'Market Trade', `Wager placed on Pool #${marketId}`, `Success — Predicted ${targetSide} with ${amount} tITL`, 'Success')
+        }
+        return true
+      } else {
+        throw new Error("Trade transaction failed on-chain.")
       }
     } catch (err: any) {
       const detail = formatTxError(err)
@@ -1227,8 +1234,60 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       if (walletAddress) {
         saveLogToLocalStorage(walletAddress, 'Market Trade', `Wager attempt on Pool #${marketId}`, `Failed — ${detail}`, 'Failed')
       }
+      return false
     }
   }
+
+  // 🆕 NEW: finalize a community proposal after its curation voting window
+  // closes. Calls the contract's initializeMarket(), which either graduates
+  // the market to the MarketPlace (votes FOR >= votes AGAINST and > 0) or
+  // rejects it — refunding 90% of the 1 tITL stake to the creator and routing
+  // the 10% penalty to the team treasury. Callable by anyone (no access gate).
+  const initializeMarketOnChain = async (marketId: number): Promise<boolean> => {
+    try {
+      setTxStatus("Finalizing proposal curation result...")
+      const { provider } = await getContractInstance()
+
+      const iface = new ethers.Interface(CONTRACT_ABI.abi);
+      const data = iface.encodeFunctionData("initializeMarket", [marketId]);
+
+      const txHash = await (window as any).ethereum.request({
+        method: "eth_sendTransaction",
+        params: [{
+          from: walletAddress,
+          to: CONTRACT_ADDRESS,
+          data: data
+        }]
+      });
+
+      setTxStatus("Awaiting finalization confirmation...")
+
+      let receipt = null;
+      while (!receipt) {
+        receipt = await provider.getTransactionReceipt(txHash);
+        if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      if (receipt && Number(receipt.status) === 1) {
+        setTxStatus("Proposal finalized — graduated or refunded per curation vote.")
+        if (walletAddress) {
+          saveLogToLocalStorage(walletAddress, 'Governance Vote', `Proposal #${marketId} finalized`, 'Success — graduated to MarketPlace or refunded to creator', 'Success')
+        }
+        return true
+      } else {
+        throw new Error("Finalization transaction failed on-chain.")
+      }
+    } catch (err: any) {
+      const detail = formatTxError(err)
+      console.error('initializeMarketOnChain failed:', err)
+      setTxStatus(`Finalization Error: ${detail}`)
+      if (walletAddress) {
+        saveLogToLocalStorage(walletAddress, 'Governance Vote', `Finalization attempt on Proposal #${marketId}`, `Failed — ${detail}`, 'Failed')
+      }
+      return false
+    }
+  }
+
 
   // 🆕 NEW: lets a wallet cash out winnings from a resolved market it
   // participated in — calls the contract's existing claimPayout(), which was
@@ -1377,7 +1436,8 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <Web3Context.Provider value={{ walletAddress, decMembers, txStatus, setTxStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain }}>
+    <Web3Context.Provider value={{ walletAddress, decMembers, txStatus, setTxStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, initializeMarketOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain }}>
+
       {children}
     </Web3Context.Provider>
   )

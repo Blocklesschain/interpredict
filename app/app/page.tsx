@@ -84,6 +84,14 @@ export default function DAppPortal() {
   const [decPoolTotal, setDecPoolTotal] = useState<string>('0')
   const [decMemberCount, setDecMemberCount] = useState<number>(0)
 
+  // 🆕 NEW: track markets whose payout THIS wallet has already claimed. The
+  // deployed contract exposes no per-user/per-market "claimed" view (only a
+  // PayoutClaimed event), so we persist claimed marketIds in localStorage
+  // (keyed per wallet) and reflect a "Claimed" badge instead of a Cash Out
+  // button once a payout succeeds.
+  const [claimedMarkets, setClaimedMarkets] = useState<number[]>([])
+
+
 
   // 🆕 NEW: a once-per-second ticking clock so market countdown timers update
   // live without needing a page refresh.
@@ -320,6 +328,23 @@ export default function DAppPortal() {
     }
   }, [walletAddress])
 
+  // 🆕 NEW: load this wallet's already-claimed payout markets from localStorage
+  // so the Resolved Markets tab shows "Claimed" instead of a Cash Out button
+  // for payouts already withdrawn (the contract has no per-user claimed view).
+  useEffect(() => {
+    if (walletAddress) {
+      const saved = localStorage.getItem(`interpredict_claimed_${walletAddress.toLowerCase()}`)
+      if (saved) {
+        try { setClaimedMarkets(JSON.parse(saved)) } catch { setClaimedMarkets([]) }
+      } else {
+        setClaimedMarkets([])
+      }
+    } else {
+      setClaimedMarkets([])
+    }
+  }, [walletAddress])
+
+
   // 🆕 NEW: is the connected wallet the contract's settlement oracle? Gates the
   // "Unresolved Markets" tab and the YES/NO/DRAW winner-selection buttons.
   // Fallback: if RPC fails but wallet matches ADMIN (team), treat as oracle
@@ -443,8 +468,21 @@ export default function DAppPortal() {
 
   const handleCashOut = async (marketId: number) => {
     const ok = await claimPayoutOnChain(marketId)
-    if (ok) scanBlockchainRegistry() // 🆕 FIX #9: refresh balances/positions after payout
+    if (ok) {
+      // 🆕 NEW: mark this market as claimed for the connected wallet and persist
+      // to localStorage, so the Resolved Markets tab shows "Claimed" instead of
+      // the Cash Out button (the contract has no per-user claimed view to read).
+      if (walletAddress) {
+        setClaimedMarkets((prev) => {
+          const updated = prev.includes(marketId) ? prev : [...prev, marketId]
+          localStorage.setItem(`interpredict_claimed_${walletAddress.toLowerCase()}`, JSON.stringify(updated))
+          return updated
+        })
+      }
+      scanBlockchainRegistry() // 🆕 FIX #9: refresh balances/positions after payout
+    }
   }
+
 
   // 🆕 FIX #4: finalize a proposal once its curation window closes — graduates
   // it to the MarketPlace or rejects it (90% stake refunded to the creator).
@@ -868,12 +906,17 @@ export default function DAppPortal() {
                                 </div>
                                 <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(pos.marketEndTime)}</p>
                                 {isResolved ? (
-                                  canCashOut ? (
+                                  claimedMarkets.includes(pos.marketId) ? (
+                                    <div className="w-full py-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-lg uppercase flex items-center justify-center gap-1.5">
+                                      <CheckCircle2 className="size-3.5" /> Claimed
+                                    </div>
+                                  ) : canCashOut ? (
                                     <button onClick={() => handleCashOut(pos.marketId)} className="w-full py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg uppercase">Cash Out</button>
                                   ) : (
                                     <p className="text-[11px] font-mono text-rose-400">No payout — your side didn't win.</p>
                                   )
                                 ) : pos.oracleResolutionRequested ? (
+
                                   <p className="text-[11px] font-mono text-yellow-400">⏳ Awaiting team resolution</p>
                                 ) : (
                                   <button onClick={() => handleRequestResolution(pos.marketId)} className="w-full py-2.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-lg uppercase">Resolve Market</button>
@@ -968,8 +1011,15 @@ export default function DAppPortal() {
                       </div>
                       <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(market.marketEndTime)}</p>
                       {walletAddress && (
-                        <button onClick={() => handleCashOut(market.id)} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg uppercase">Cash Out (winners only)</button>
+                        claimedMarkets.includes(market.id) ? (
+                          <div className="w-full py-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-lg uppercase flex items-center justify-center gap-1.5">
+                            <CheckCircle2 className="size-3.5" /> Claimed
+                          </div>
+                        ) : (
+                          <button onClick={() => handleCashOut(market.id)} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg uppercase">Cash Out (winners only)</button>
+                        )
                       )}
+
                     </div>
                   ))
                 )}

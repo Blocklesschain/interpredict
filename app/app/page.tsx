@@ -199,11 +199,9 @@ export default function DAppPortal() {
         return out
       }
 
-      // Positions are computed against the authoritative API base list.
-      const marketsForPositions = baseMarkets
-
-      // 1. Batch the top-level wallet reads: oracle + membership (+ directory).
+      // 1. Batch the top-level reads: market count + oracle + membership (+ directory).
       const topCalls = [
+        { id: 1, data: iface.encodeFunctionData("totalMarkets") },
         { id: 98, data: iface.encodeFunctionData("oracle") },
         { id: 99, data: iface.encodeFunctionData("isDecMember", [walletAddress]) },
       ]
@@ -212,7 +210,50 @@ export default function DAppPortal() {
       }
       const topRes = await batchRpcCall(topCalls)
 
+      // 1a. 🔧 FIXED (markets not showing): read the market list DIRECTLY over
+      // the user's own (working) RPC session. The server /api/markets route can
+      // return "Forbidden" when its service token is unauthorized, which left
+      // the MarketPlace empty even though markets exist on-chain. This is
+      // batched into a single request so it stays within rate limits, and only
+      // replaces the API base list when the full set decodes successfully.
+      let marketsForPositions = baseMarkets
+      const countData = topRes.get(1)
+      if (countData?.result && countData.result !== "0x") {
+        const totalCount = Number(iface.decodeFunctionResult("totalMarkets", countData.result)[0])
+        if (totalCount > 0) {
+          const marketRes = await batchRpcCall(
+            Array.from({ length: totalCount }, (_, i) => ({ id: 300 + i, data: iface.encodeFunctionData("markets", [i]) }))
+          )
+          const tempMarkets: SmartMarket[] = []
+          for (let i = 0; i < totalCount; i++) {
+            const itemData = marketRes.get(300 + i)
+            if (itemData?.result && itemData.result !== "0x") {
+              const decoded = iface.decodeFunctionResult("markets", itemData.result)
+              tempMarkets.push({
+                id: Number(decoded[0]),
+                question: String(decoded[1]),
+                marketEndTime: Number(decoded[2]),
+                votingEndTime: Number(decoded[3]),
+                totalYesPool: decoded[4].toString(),
+                totalNoPool: decoded[5].toString(),
+                state: Number(decoded[6]),
+                winningOutcome: Number(decoded[7]),
+                creator: String(decoded[8]),
+                oracleResolutionRequested: Boolean(decoded[12])
+              })
+            }
+          }
+          // Only replace the base list when the client read is fully complete —
+          // a partial read must never shrink the MarketPlace.
+          if (tempMarkets.length === totalCount) {
+            setAllOnChainMarkets(tempMarkets)
+            marketsForPositions = tempMarkets
+          }
+        }
+      }
+
       // 1b. contract oracle (settlement wallet) — gates the resolve buttons.
+
       const oracleData = topRes.get(98)
       if (oracleData?.result && oracleData.result !== "0x") {
         setOracleAddress(String(iface.decodeFunctionResult("oracle", oracleData.result)[0]))

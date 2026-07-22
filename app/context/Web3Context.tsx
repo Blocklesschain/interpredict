@@ -33,7 +33,9 @@ interface Web3ContextType {
   claimPayoutOnChain: (marketId: number) => Promise<boolean>
   requestResolutionOnChain: (marketId: number) => Promise<boolean>
   resolveMarketOnChain: (marketId: number, winningOutcome: number) => Promise<boolean>
+  claimDecRewardsOnChain: () => Promise<boolean>
 }
+
 
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
@@ -1435,8 +1437,59 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // 🆕 NEW: DEC Committee member claims their equal share of the DEC Pool.
+  // The pool accrues the 2% DEC portion of the 5% platform fee on every
+  // claimPayout, plus any other revenue routed on-chain. Calls the contract's
+  // claimDecRewards(), which computes decPool / totalDecMembers and pays out
+  // the caller's outstanding share (tracked via decRewardsClaimedTracker).
+  const claimDecRewardsOnChain = async (): Promise<boolean> => {
+    try {
+      setTxStatus("Requesting DEC rewards claim...")
+      const { provider } = await getContractInstance()
+
+      const iface = new ethers.Interface(CONTRACT_ABI.abi);
+      const data = iface.encodeFunctionData("claimDecRewards");
+
+      const txHash = await (window as any).ethereum.request({
+        method: "eth_sendTransaction",
+        params: [{
+          from: walletAddress,
+          to: CONTRACT_ADDRESS,
+          data: data
+        }]
+      });
+
+      setTxStatus("Awaiting DEC rewards confirmation...")
+
+      let receipt = null;
+      while (!receipt) {
+        receipt = await provider.getTransactionReceipt(txHash);
+        if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      if (receipt && Number(receipt.status) === 1) {
+        setTxStatus("DEC rewards claimed successfully!")
+        if (walletAddress) {
+          saveLogToLocalStorage(walletAddress, 'Committee Bond', 'DEC rewards claimed', 'Success — Committee share transferred to wallet', 'Success')
+        }
+        return true
+      } else {
+        throw new Error("DEC rewards transaction failed on-chain.")
+      }
+    } catch (err: any) {
+      const detail = formatTxError(err)
+      console.error('claimDecRewardsOnChain failed:', err)
+      setTxStatus(`DEC Rewards Error: ${detail}`)
+      if (walletAddress) {
+        saveLogToLocalStorage(walletAddress, 'Committee Bond', 'DEC rewards claim attempt', `Failed — ${detail}`, 'Failed')
+      }
+      return false
+    }
+  }
+
   return (
-    <Web3Context.Provider value={{ walletAddress, decMembers, txStatus, setTxStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, initializeMarketOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain }}>
+    <Web3Context.Provider value={{ walletAddress, decMembers, txStatus, setTxStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, initializeMarketOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain, claimDecRewardsOnChain }}>
+
 
       {children}
     </Web3Context.Provider>

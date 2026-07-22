@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useWeb3 } from '../context/Web3Context'
 import { ethers } from 'ethers'
-import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Cpu, RefreshCw, Gavel, CheckCircle2 } from 'lucide-react'
+import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Cpu, RefreshCw, Gavel, CheckCircle2, Coins } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import Link from 'next/link'
 import { getValidToken } from '@/lib/interlinkAuth'
 
-type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History' | 'DEC Members' | 'My Votes' | 'Unresolved Markets' | 'Resolved Markets'
+type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History' | 'DEC Members' | 'My Votes' | 'Unresolved Markets' | 'Resolved Markets' | 'DEC Rewards'
+
 
 interface SmartMarket {
   id: number
@@ -40,7 +41,8 @@ interface MyPosition {
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x8c69b2D0A1C89fd3C6aD64e1Be3536FAF63b55b6"
 
 export default function DAppPortal() {
-  const { walletAddress, connectWallet, disconnectWallet, txStatus, setTxStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, initializeMarketOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain, t } = useWeb3()
+  const { walletAddress, connectWallet, disconnectWallet, txStatus, setTxStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, initializeMarketOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain, claimDecRewardsOnChain, t } = useWeb3()
+
 
   const [activeTab, setActiveTab] = useState<TabType>('MarketPlace')
   const [stakeAmount, setStakeAmount] = useState<string>('0.1')
@@ -73,6 +75,15 @@ export default function DAppPortal() {
   // the "Unresolved Markets" tab and winner-selection buttons are gated on the
   // actual settler rather than a hard-coded address.
   const [oracleAddress, setOracleAddress] = useState<string | null>(null)
+
+  // 🆕 NEW: DEC Rewards — the connected DEC member's claimable share of the DEC
+  // Pool. `decRewardsClaimable` is computed on-chain as (decPool / totalDecMembers)
+  // minus what this member has already claimed (decRewardsClaimedTracker). Values
+  // are wei strings.
+  const [decRewardsClaimable, setDecRewardsClaimable] = useState<string>('0')
+  const [decPoolTotal, setDecPoolTotal] = useState<string>('0')
+  const [decMemberCount, setDecMemberCount] = useState<number>(0)
+
 
   // 🆕 NEW: a once-per-second ticking clock so market countdown timers update
   // live without needing a page refresh.
@@ -145,8 +156,12 @@ export default function DAppPortal() {
         "function getAllDecMembers() view returns (address[])",
         "function markets(uint256) view returns (uint256 id, string question, uint256 marketEndTime, uint256 votingEndTime, uint256 totalYesPool, uint256 totalNoPool, uint8 state, uint8 winningOutcome, address creator, bool creatorFeeClaimed, uint256 votesForActive, uint256 votesAgainstActive, bool oracleResolutionRequested)",
         "function yesShares(uint256,address) view returns (uint256)",
-        "function noShares(uint256,address) view returns (uint256)"
+        "function noShares(uint256,address) view returns (uint256)",
+        "function decPool() view returns (uint256)",
+        "function totalDecMembers() view returns (uint256)",
+        "function decRewardsClaimedTracker(address) view returns (uint256)"
       ])
+
 
       // 🔧 FIXED (markets truly not loading): read on-chain state through
       // MetaMask's OWN provider via window.ethereum `eth_call`. This is the
@@ -225,7 +240,32 @@ export default function DAppPortal() {
         setBlockchainDecList([walletAddress])
       }
 
+      // 4b. 🆕 NEW: DEC Rewards — for a committee member, compute their claimable
+      // share of the DEC Pool: (decPool / totalDecMembers) − alreadyClaimed.
+      if (isMember) {
+        const poolHex = await ethCall(iface.encodeFunctionData("decPool"))
+        const membersHex = await ethCall(iface.encodeFunctionData("totalDecMembers"))
+        const claimedHex = await ethCall(iface.encodeFunctionData("decRewardsClaimedTracker", [walletAddress]))
+        const pool = poolHex ? BigInt(iface.decodeFunctionResult("decPool", poolHex)[0].toString()) : BigInt(0)
+        const members = membersHex ? BigInt(iface.decodeFunctionResult("totalDecMembers", membersHex)[0].toString()) : BigInt(0)
+        const alreadyClaimed = claimedHex ? BigInt(iface.decodeFunctionResult("decRewardsClaimedTracker", claimedHex)[0].toString()) : BigInt(0)
+        setDecPoolTotal(pool.toString())
+        setDecMemberCount(Number(members))
+        if (members > BigInt(0)) {
+          const sharePerMember = pool / members
+          const claimable = sharePerMember > alreadyClaimed ? sharePerMember - alreadyClaimed : BigInt(0)
+          setDecRewardsClaimable(claimable.toString())
+        } else {
+          setDecRewardsClaimable('0')
+        }
+      } else {
+        setDecRewardsClaimable('0')
+        setDecPoolTotal('0')
+        setDecMemberCount(0)
+      }
+
       // 5. This wallet's yes/no shares per market, to power "My Votes".
+
       if (marketsForPositions.length > 0) {
         const positionResults: MyPosition[] = []
         for (const m of marketsForPositions) {
@@ -295,7 +335,9 @@ export default function DAppPortal() {
     else tabs.push('Pending Markets')
     tabs.push('My Votes')
     tabs.push('Make Market')
+    if (hasJoinedDEC) tabs.push('DEC Rewards')
     if (!hasJoinedDEC) tabs.push('Join DEC')
+
     // Unresolved Markets tab always visible when wallet connected (data will show based on isOracle)
     tabs.push('Unresolved Markets')
     tabs.push('Resolved Markets')
@@ -425,6 +467,14 @@ export default function DAppPortal() {
     if (ok) scanBlockchainRegistry()
   }
 
+  // 🆕 NEW: a DEC member claims their equal share of the DEC Pool (revenue from
+  // the 2% platform fee split equally among all committee members).
+  const handleClaimDecRewards = async () => {
+    const ok = await claimDecRewardsOnChain()
+    if (ok) scanBlockchainRegistry()
+  }
+
+
   const getTabLabel = (tab: TabType): string => {
     const translationMap: Record<TabType, string> = {
       'MarketPlace': t('marketPlace'),
@@ -436,9 +486,11 @@ export default function DAppPortal() {
       'DEC Members': t('adminPanel'),
       'My Votes': 'My Votes',
       'Unresolved Markets': 'Unresolved Markets',
-      'Resolved Markets': 'Resolved Markets'
+      'Resolved Markets': 'Resolved Markets',
+      'DEC Rewards': 'DEC Rewards'
     }
     return translationMap[tab] || tab
+
   }
 
   // 🔧 NEW: an on-chain "Active" state doesn't mean trading is still open —
@@ -537,7 +589,8 @@ export default function DAppPortal() {
 
         <aside className="hidden lg:flex flex-col gap-1.5 lg:col-span-1">
           {visibleTabs.map((tab) => {
-            const Icon = { 'MarketPlace': Layers, 'Market Proposals': Hourglass, 'Pending Markets': Hourglass, 'Make Market': PlusCircle, 'Join DEC': Shield, 'History': History, 'DEC Members': Users, 'My Votes': Cpu, 'Unresolved Markets': Gavel, 'Resolved Markets': CheckCircle2 }[tab]
+            const Icon = { 'MarketPlace': Layers, 'Market Proposals': Hourglass, 'Pending Markets': Hourglass, 'Make Market': PlusCircle, 'Join DEC': Shield, 'History': History, 'DEC Members': Users, 'My Votes': Cpu, 'Unresolved Markets': Gavel, 'Resolved Markets': CheckCircle2, 'DEC Rewards': Coins }[tab]
+
             return (
               <button key={tab} onClick={() => setActiveTab(tab)} className={`flex items-center gap-2.5 px-4 py-3.5 rounded-xl font-semibold text-sm border transition-all ${activeTab === tab ? 'bg-primary text-white border-primary/50 shadow-md' : 'text-slate-400 border-transparent hover:bg-secondary/40'}`}>
                 <Icon className="size-4 shrink-0" /><span>{getTabLabel(tab)}</span>
@@ -980,9 +1033,54 @@ export default function DAppPortal() {
               </div>
             )}
 
+            {/* TAB: DEC REWARDS — 🆕 NEW: DEC committee members claim their equal
+                share of the DEC Pool. The pool accrues the 2% DEC portion of the
+                5% platform fee on every winner cash-out; it's split equally among
+                all committee members, and each member can claim their outstanding
+                share here. */}
+            {activeTab === 'DEC Rewards' && hasJoinedDEC && (
+              <div className="space-y-6 w-full max-w-xl">
+                <div className="p-6 bg-gradient-to-br from-purple-950/30 to-indigo-950/20 border border-purple-900/30 rounded-2xl">
+                  <div className="flex items-center gap-2.5 mb-4">
+                    <Coins className="size-6 text-primary" />
+                    <h3 className="text-sm font-bold text-slate-100">DEC Committee Rewards</h3>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed mb-5">
+                    Platform revenue routed to the DEC Pool (the committee&apos;s share of the 5% platform fee on every winning cash-out) is split <span className="text-purple-300 font-semibold">equally</span> among all committee members. Claim your outstanding share below.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+                    <div className="bg-black/30 border border-purple-950/60 rounded-xl p-3">
+                      <p className="text-[9px] font-mono uppercase tracking-wider text-slate-500 mb-1">DEC Pool</p>
+                      <p className="text-sm font-bold text-slate-200 font-mono">{ethers.formatEther(decPoolTotal)} tITL</p>
+                    </div>
+                    <div className="bg-black/30 border border-purple-950/60 rounded-xl p-3">
+                      <p className="text-[9px] font-mono uppercase tracking-wider text-slate-500 mb-1">Members</p>
+                      <p className="text-sm font-bold text-slate-200 font-mono">{decMemberCount}</p>
+                    </div>
+                    <div className="bg-black/30 border border-emerald-900/50 rounded-xl p-3">
+                      <p className="text-[9px] font-mono uppercase tracking-wider text-emerald-500 mb-1">Your Claimable</p>
+                      <p className="text-sm font-bold text-emerald-400 font-mono">{ethers.formatEther(decRewardsClaimable)} tITL</p>
+                    </div>
+                  </div>
+
+                  {BigInt(decRewardsClaimable || '0') > BigInt(0) ? (
+                    <button onClick={handleClaimDecRewards} className="w-full py-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-xs font-bold rounded-xl uppercase shadow-md">
+                      Claim {ethers.formatEther(decRewardsClaimable)} tITL
+                    </button>
+                  ) : (
+                    <div className="p-4 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">
+                      No rewards available to claim yet. Rewards accrue as markets settle and winners cash out.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
           </div>
 
           {txStatus && <div className="mt-6 p-4 bg-purple-950/40 border border-purple-500/20 rounded-xl text-xs text-purple-300 font-mono animate-pulse">{txStatus}</div>}
+
         </section>
       </div>
     </div>

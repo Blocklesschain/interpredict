@@ -6,7 +6,18 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "npm run test:unit",
+    "test:unit": "tsx --test \"lib/**/*.test.ts\"",
+    "protocol:compile": "npm --prefix interpredict-deploy run compile",
+    "protocol:test": "npm --prefix interpredict-deploy test",
+    "protocol:abi:check": "npm --prefix interpredict-deploy run abi:check",
+    "protocol:size:check": "npm --prefix interpredict-deploy run size:check",
+    "protocol:storage:check": "npm --prefix interpredict-deploy run storage:check",
+    "validate:app": "npm run lint && npm run typecheck && npm run test:unit && npm run build",
+    "validate:protocol": "npm --prefix interpredict-deploy run validate",
+    "validate": "npm run validate:app && npm run validate:protocol"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -27,9 +38,11 @@
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.6",
     "postcss": "8.5.16",
     "tailwindcss": "^4.3.2",
+    "tsx": "^4.23.1",
     "typescript": "5.7.3"
-  },
-  "packageManager": "pnpm@10.34.5+sha512.a4ee05f2f73658255bd6a89859c065a45c28a57daefae2c893a168ee2b73168c37b91e83e57ea67654ad03f03031746430e8bce38e362e042605fb8abc80192e"
+  }
 }

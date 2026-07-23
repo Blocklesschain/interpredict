@@ -52,6 +52,10 @@ export default function RootLayout({
         <Script id="theme-init" strategy="beforeInteractive">{`
           try {
             var t = localStorage.getItem('theme') || localStorage.getItem('interpredict-theme');
+            var l = localStorage.getItem('interpredict-locale') || localStorage.getItem('interpredict_lang') || 'en';
+            if (['en', 'zh', 'es', 'fr'].indexOf(l) !== -1) {
+              document.documentElement.lang = l;
+            }
             if (t === 'dark' || !t) {
               document.documentElement.classList.add('dark');
               localStorage.setItem('theme', 'dark');

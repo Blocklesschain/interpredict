@@ -1,5 +1,8 @@
+"use client"
+
 import { Send } from "lucide-react"
 import { Logo } from "@/components/logo"
+import { useWeb3 } from "@/app/context/Web3Context"
 
 const X_URL = "https://x.com/interpredict"
 const TELEGRAM_URL = "https://t.me/interpredict"
@@ -21,28 +24,28 @@ const socials = [
   },
 ]
 
-const groups = [
-  {
-    title: "Community",
-    links: [
-      { label: "Documentation", href: "/documentation" },
-      { label: "Governance Forum", href: "/governance-forum" },
-      { label: "Whitepaper", href: "/whitepaper" },
-    ],
-  },
-  {
-    title: "Project",
-    links: [
-      { label: "Terms of Service", href: "/terms-of-service" },
-      { label: "Privacy Policy", href: "/privacy-policy" },
-      { label: "Risk Disclosure", href: "/risk-disclosure" },
-    ],
-  },
-]
-
 export function Footer() {
+  const { t } = useWeb3()
+  const groups = [
+    {
+      title: "Community",
+      links: [
+        { label: t('documentation'), href: "/documentation" },
+        { label: t('governanceForum'), href: "/governance-forum" },
+        { label: t('navWhitepaper'), href: "/whitepaper" },
+      ],
+    },
+    {
+      title: "Project",
+      links: [
+        { label: t('terms'), href: "/terms-of-service" },
+        { label: t('privacy'), href: "/privacy-policy" },
+        { label: t('risk'), href: "/risk-disclosure" },
+      ],
+    },
+  ]
   return (
-    <footer className="relative border-t border-border bg-white/45 py-16 backdrop-blur-sm">
+    <footer className="relative border-t border-border bg-secondary/30 py-16 backdrop-blur-sm">
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
         <div className="grid gap-10 lg:grid-cols-[1.6fr_repeat(2,1fr)]">
           <div>
@@ -94,10 +97,10 @@ export function Footer() {
 
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border pt-8 sm:flex-row">
           <p className="text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} InterPredict. All rights reserved.
+            &copy; {new Date().getFullYear()} {t('footerRights')}
           </p>
           <p className="text-xs text-muted-foreground">
-            Create the Market. Predict the Future. Earn from the Outcome.
+            {t('footerTagline')}
           </p>
         </div>
       </div>

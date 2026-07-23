@@ -1,91 +1,220 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useWeb3 } from './context/Web3Context'
-import { Navbar } from '@/components/navbar'
-import { ArrowRight, Layers, ShieldCheck, Coins, Gavel, CheckCircle2, TrendingUp, RefreshCw } from 'lucide-react'
+import {
+  ArrowRight,
+  BadgeCheck,
+  Gavel,
+  Layers3,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  WalletCards,
+} from 'lucide-react'
 import Link from 'next/link'
-import { ethers } from 'ethers'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useWeb3 } from './context/Web3Context'
+import { Footer } from '@/components/footer'
+import { Navbar } from '@/components/navbar'
+import {
+  EmptyState,
+  MarketSummaryCard,
+  inputClass,
+  primaryButton,
+  secondaryButton,
+} from '@/components/protocol/ProtocolUI'
+import {
+  categoryLabel,
+  isActiveTradeMarket,
+  isInactiveTradeMarket,
+  type ProtocolMarket,
+} from '@/lib/interpredictProtocol'
 
-interface MarketType {
-  id: number
-  description: string
-  yesVotes: string
-  noVotes: string
-  resolved: boolean
+type MarketsResponse = {
+  markets: ProtocolMarket[]
+  nextCursor?: string | null
+  protocolPaused?: boolean
+  settlementToken?: {
+    address: string
+    symbol: string
+    decimals: number
+    proposalFee: string
+    proposalSeed: string
+    minimumTrade: string
+  }
+  error?: string
 }
+type MarketView = 'active' | 'inactive'
+type SortMode = 'newest' | 'ending' | 'liquidity' | 'volume'
 
 export default function HomePage() {
-  const { t } = useWeb3()
-  const [liveMarkets, setLiveMarkets] = useState<MarketType[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const { t, token } = useWeb3()
+  const [markets, setMarkets] = useState<ProtocolMarket[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [protocolPaused, setProtocolPaused] = useState(false)
+  const [indexedToken, setIndexedToken] = useState<{
+    symbol: string
+    decimals: number
+  } | null>(null)
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000))
+  const [view, setView] = useState<MarketView>('active')
+  const [category, setCategory] = useState('All')
+  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<SortMode>('newest')
+  const requestRef = useRef<AbortController | null>(null)
 
-  // 🔧 FIXED: previously this required window.ethereum to even attempt a read
-  // (so it silently did nothing for visitors without a wallet), called a
-  // function name (`marketCount`) that doesn't exist on the contract
-  // (the real function is `totalMarkets`), and pointed at a hardcoded fallback
-  // address that wasn't the real deployed contract at all. It now just calls
-  // our own public API route, which works for every visitor regardless of
-  // wallet, and is backed by the real contract address + a real function name.
-  useEffect(() => {
-    async function syncExploreMarkets() {
-      try {
-        setIsLoading(true)
-        const res = await fetch('/api/markets')
-        if (!res.ok) throw new Error('Failed to load markets')
-        const { activeMarkets } = await res.json()
-
-        const fetched: MarketType[] = activeMarkets.map((m: any) => ({
-          id: m.id,
-          description: m.question,
-          yesVotes: ethers.formatEther(m.totalYesPool),
-          noVotes: ethers.formatEther(m.totalNoPool),
-          resolved: false
-        }))
-        setLiveMarkets(fetched)
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setIsLoading(false)
+  const loadPage = useCallback(async (cursor: string, append: boolean) => {
+    requestRef.current?.abort()
+    const controller = new AbortController()
+    requestRef.current = controller
+    setLoading(true)
+    setError('')
+    try {
+      const response = await fetch(
+        `/api/markets?cursor=${encodeURIComponent(cursor)}&limit=50`,
+        { cache: 'no-store', signal: controller.signal },
+      )
+      const body = (await response.json()) as MarketsResponse
+      if (!response.ok) throw new Error(body.error || 'Market sync failed')
+      if (!Array.isArray(body.markets)) {
+        throw new Error('Market index returned an invalid response')
+      }
+      setMarkets(previous => {
+        const indexed = new Map(
+          (append ? previous : []).map(market => [market.id, market]),
+        )
+        for (const market of body.markets) indexed.set(market.id, market)
+        return [...indexed.values()].sort((left, right) => right.id - left.id)
+      })
+      setNextCursor(body.nextCursor ?? null)
+      setProtocolPaused(Boolean(body.protocolPaused))
+      if (body.settlementToken) {
+        setIndexedToken({
+          symbol: body.settlementToken.symbol,
+          decimals: body.settlementToken.decimals,
+        })
+      }
+    } catch (caught) {
+      if ((caught as { name?: string }).name === 'AbortError') return
+      setError(caught instanceof Error ? caught.message : 'Market sync failed')
+    } finally {
+      if (requestRef.current === controller) {
+        requestRef.current = null
+        setLoading(false)
       }
     }
-    syncExploreMarkets()
   }, [])
 
+  const refresh = useCallback(
+    () => loadPage('0', false),
+    [loadPage],
+  )
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void refresh(), 0)
+    return () => {
+      window.clearTimeout(timer)
+      requestRef.current?.abort()
+    }
+  }, [refresh])
+
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setNow(Math.floor(Date.now() / 1000)),
+      15_000,
+    )
+    return () => window.clearInterval(timer)
+  }, [])
+  const active = markets.filter(
+    market => !protocolPaused && isActiveTradeMarket(market, now),
+  )
+  const inactive = markets.filter(
+    market =>
+      isInactiveTradeMarket(market, now) ||
+      (protocolPaused && market.state === 5),
+  )
+  const publicMarkets = [...active, ...inactive]
+  const categories = [
+    'All',
+    ...new Set(publicMarkets.map(market => categoryLabel(market))),
+  ]
+
+  const visible = useMemo(() => {
+    const source = view === 'active' ? active : inactive
+    const query = search.trim().toLowerCase()
+    const filtered = source.filter(
+      market =>
+        (category === 'All' || categoryLabel(market) === category) &&
+        (!query ||
+          market.question.toLowerCase().includes(query) ||
+          market.description.toLowerCase().includes(query)),
+    )
+    return [...filtered].sort((a, b) => {
+      if (sort === 'ending') return a.tradingEndTime - b.tradingEndTime
+      if (sort === 'volume')
+        return Number(BigInt(b.marketVolume) - BigInt(a.marketVolume))
+      if (sort === 'liquidity') {
+        const liquidity = (market: ProtocolMarket) =>
+          market.balances.reduce((sum, value) => sum + BigInt(value || '0'), 0n)
+        return Number(liquidity(b) - liquidity(a))
+      }
+      return b.id - a.id
+    })
+  }, [active, category, inactive, search, sort, view])
+
+  const openMarket = (market: ProtocolMarket) => {
+    window.location.href = `/app?market=${market.id}`
+  }
+
+  const architecture = [
+    [
+      Layers3,
+      t('architectureProposal'),
+      t('architectureProposalBody'),
+    ],
+    [
+      BadgeCheck,
+      t('architectureGovernance'),
+      t('architectureGovernanceBody'),
+    ],
+    [WalletCards, t('architectureTrade'), t('architectureTradeBody')],
+    [Gavel, t('architectureResolve'), t('architectureResolveBody')],
+    [Sparkles, t('architectureClaim'), t('architectureClaimBody')],
+  ] as const
+
+  const ecosystem = [
+    [Layers3, t('ecosystemCardOne'), t('ecosystemCardOneBody')],
+    [ShieldCheck, t('ecosystemCardTwo'), t('ecosystemCardTwoBody')],
+    [Gavel, t('ecosystemCardThree'), t('ecosystemCardThreeBody')],
+  ] as const
+
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans antialiased selection:bg-primary/20 overflow-x-hidden">
+    <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <Navbar />
 
-      {/* --- HERO SECTION --- */}
-      <section className="relative pt-32 pb-16 md:pt-44 md:pb-28 overflow-hidden px-4">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(98,0,238,0.06),transparent_50%)]" />
-        <div className="max-w-5xl mx-auto text-center relative z-10">
-          <h1 className="text-3xl sm:text-5xl md:text-5xl font-heading font-extrabold tracking-tight leading-[1.2] mb-6 max-w-4xl mx-auto">
-            <span className="bg-gradient-to-r from-[#d946ef] via-[#ef4444] to-[#f59e0b] bg-clip-text text-transparent">
-              InterPredict
-            </span>{" "}
-            <span className="text-slate-600 font-light">—</span>{" "}
-            <span className="bg-gradient-to-r from-[#f59e0b] via-[#fef08a] to-[#eab308] bg-clip-text text-transparent">
-              {t('titleSuffix')}
-            </span>
+      <section className="light-leaks relative overflow-hidden px-4 pb-24 pt-40 sm:pt-48">
+        <div className="cosmic-grid pointer-events-none absolute inset-0 -z-10 opacity-40" />
+        <div className="mx-auto max-w-5xl text-center">
+          <div className="glass mx-auto inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.18em]">
+            <ShieldCheck className="size-4 text-primary" aria-hidden="true" />
+            {t('heroEyebrow')}
+          </div>
+          <h1 className="mx-auto mt-7 max-w-4xl text-balance font-heading text-5xl font-black leading-[1.02] tracking-tight sm:text-7xl">
+            {t('heroTitleLead')}{' '}
+            <span className="gradient-text">{t('heroTitleAccent')}</span>
           </h1>
-
-          <p className="text-muted-foreground text-base sm:text-lg max-w-3xl mx-auto leading-relaxed mb-10">
-            {t('tagline')}
+          <p className="mx-auto mt-7 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
+            {t('exploreMarketsSub')} {t('heroBody')}
           </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center w-full max-w-md mx-auto sm:max-w-none">
-            <Link
-              href="/app"
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-primary hover:bg-primary/95 text-primary-foreground font-bold rounded-full transition-all shadow-lg shadow-primary/20 text-sm tracking-wide"
-            >
-              <span>{t('launchBtn')}</span>
-              <ArrowRight className="size-4" />
+          <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
+            <Link href="/app" className={`${primaryButton} h-12 rounded-full px-7`}>
+              {t('launchBtn')}
+              <ArrowRight className="size-4" aria-hidden="true" />
             </Link>
-
             <a
               href="#architecture"
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-secondary/80 hover:bg-secondary text-foreground font-semibold rounded-full border border-border transition-colors text-sm"
+              className={`${secondaryButton} h-12 rounded-full px-7`}
             >
               {t('howItWorksBtn')}
             </a>
@@ -93,151 +222,223 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* --- EXPLORE LIVE MARKETS SECTION --- */}
-      <section id="markets" className="py-20 border-t border-border bg-secondary/20 px-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-12 gap-4">
+      <section id="markets" className="scroll-mt-24 border-t border-border px-4 py-20">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-8 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
             <div>
-              <h2 className="text-2xl sm:text-4xl font-heading font-bold tracking-tight">{t('exploreMarketsTitle')}</h2>
-              <p className="text-muted-foreground text-sm mt-1">{t('exploreMarketsSub')}</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-primary">
+                {t('liveProtocolData')}
+              </p>
+              <h2 className="mt-2 text-3xl font-bold sm:text-4xl">
+                {t('exploreMarketsTitle')}
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {t('exploreMarketsSub')}
+              </p>
             </div>
-            <Link href="/app" className="text-sm font-bold text-primary hover:underline flex items-center gap-1.5 transition-all">
-              <span>{t('tradeRealtimeBtn')}</span>
-              <ArrowRight className="size-3.5" />
-            </Link>
             <button
-              onClick={() => { window.location.href = '/'; localStorage.removeItem('interpredict_connected'); }}
-              className="text-sm font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1.5 transition-all"
-              title="Hard refresh"
+              type="button"
+              onClick={() => void refresh()}
+              disabled={loading}
+              className={secondaryButton}
             >
-              <RefreshCw className="size-3.5" />
-              <span>Refresh</span>
+              {t('refresh')}
             </button>
           </div>
 
-          {isLoading ? (
-            <p className="text-sm font-mono text-primary animate-pulse">Syncing smart contract registries...</p>
-          ) : liveMarkets.length === 0 ? (
-            <div className="border border-dashed border-border rounded-2xl p-8 sm:p-12 text-center max-w-xl mx-auto bg-background/50 backdrop-blur-sm shadow-sm">
-              <TrendingUp className="size-8 mx-auto text-muted-foreground mb-3" />
+          <div className="protocol-panel mb-7 grid gap-4 p-4 md:grid-cols-[minmax(0,1fr)_auto]">
+            <label className="relative block">
+              <span className="sr-only">{t('searchMarkets')}</span>
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <input
+                value={search}
+                onChange={event => setSearch(event.target.value)}
+                placeholder={t('searchMarkets')}
+                className={`${inputClass} pl-10`}
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm font-semibold">
+              <span>{t('sortBy')}</span>
+              <select
+                value={sort}
+                onChange={event => setSort(event.target.value as SortMode)}
+                className={inputClass}
+              >
+                <option value="newest">{t('newest')}</option>
+                <option value="ending">{t('endingSoon')}</option>
+                <option value="liquidity">{t('liquidity')}</option>
+                <option value="volume">{t('volume')}</option>
+              </select>
+            </label>
+          </div>
 
-              <p className="text-sm font-semibold text-foreground">
-                {t('noActiveMarkets')}
-              </p>
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
+            <div
+              role="tablist"
+              aria-label={t('marketActivity')}
+              className="flex gap-2"
+            >
+              {([
+                ['active', `${t('activeTrades')} (${active.length})`],
+                ['inactive', `${t('inactiveTrades')} (${inactive.length})`],
+              ] as const).map(([id, label]) => (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={view === id}
+                  key={id}
+                  onClick={() => setView(id)}
+                  className={`focus-ring rounded-full px-4 py-2 text-sm font-bold ${
+                    view === id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'border border-border'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
+              {categories.map(item => (
+                <button
+                  type="button"
+                  key={item}
+                  onClick={() => setCategory(item)}
+                  className={`focus-ring whitespace-nowrap rounded-full px-3 py-1.5 text-xs ${
+                    category === item
+                      ? 'bg-[#FFD700] font-bold text-black'
+                      : 'border border-border'
+                  }`}
+                >
+                  {item === 'All' ? t('all') : item}
+                </button>
+              ))}
+            </div>
+          </div>
 
-              <p className="text-xs text-muted-foreground mt-1 mb-6 max-w-xs mx-auto">
-                {t('noActivePoolsDesc')}
-              </p>
-
-              <Link href="/app" className="px-5 py-2.5 bg-primary text-primary-foreground text-xs font-bold rounded-full inline-block transition-colors hover:bg-primary/90">
-                {t('createFirstMarketBtn')}
-              </Link>
+          {loading && !markets.length ? (
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3" aria-live="polite">
+              {[0, 1, 2].map(item => (
+                <div
+                  key={item}
+                  className="protocol-panel h-[430px] animate-pulse bg-secondary/35"
+                />
+              ))}
+              <span className="sr-only">{t('loadingMarkets')}</span>
+            </div>
+          ) : error && !markets.length ? (
+            <div role="alert" className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-8 text-center">
+              <p className="text-sm text-rose-200">{error}</p>
+              <button
+                type="button"
+                onClick={() => void refresh()}
+                className={`${primaryButton} mt-4`}
+              >
+                {t('retry')}
+              </button>
+            </div>
+          ) : visible.length ? (
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {visible.map(market => (
+                <MarketSummaryCard
+                  key={market.id}
+                  market={market}
+                  decimals={indexedToken?.decimals ?? token.decimals}
+                  symbol={indexedToken?.symbol ?? token.symbol}
+                  onOpen={openMarket}
+                  paused={protocolPaused || Boolean(market.marketPaused)}
+                />
+              ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {liveMarkets.map((market) => (
-                <div key={market.id} className="bg-background border border-border rounded-2xl p-6 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <div className="flex justify-between mb-4 items-center">
-                      <span className="text-[10px] font-mono bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded font-bold uppercase tracking-wider">Index #{market.id}</span>
-                      <span className="text-[11px] text-emerald-400 font-medium font-mono">● Active</span>
-                    </div>
-                    <p className="text-sm font-bold text-foreground leading-snug mb-4">{market.description}</p>
-                  </div>
-                  <div className="border-t border-border pt-4 mt-2 flex justify-between text-[11px] font-mono text-muted-foreground">
-                    <span>YES: {market.yesVotes} ITL</span>
-                    <span>NO: {market.noVotes} ITL</span>
-                  </div>
-                </div>
-              ))}
+            <EmptyState>{t('noMarkets')}</EmptyState>
+          )}
+          {error && markets.length > 0 && (
+            <p
+              role="alert"
+              className="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200"
+            >
+              {error}
+            </p>
+          )}
+          {nextCursor && (
+            <div className="mt-8 text-center">
+              <button
+                type="button"
+                onClick={() => void loadPage(nextCursor, true)}
+                disabled={loading}
+                className={secondaryButton}
+              >
+                {loading ? t('loadingMarkets') : t('loadMore')}
+              </button>
             </div>
           )}
         </div>
       </section>
 
-      {/* --- PROTOCOL ARCHITECTURE WORKFLOW --- */}
-      <section id="architecture" className="py-24 border-t border-border px-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <span className="text-xs font-bold text-primary uppercase tracking-widest bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
-              {t('infraBadge')} {/* 🔄 Localized */}
-            </span>
-            <h2 className="text-3xl sm:text-5xl font-heading font-bold tracking-tight mt-4">
-              {t('howItWorksBtn')} {/* 🔄 Localized */}
-            </h2>
-            <p className="text-muted-foreground text-sm sm:text-base mt-2">
-              {t('infraSub')} {/* 🔄 Localized */}
+      <section
+        id="architecture"
+        className="relative scroll-mt-24 border-t border-border bg-secondary/15 px-4 py-24"
+      >
+        <div className="mx-auto max-w-7xl">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-xs font-bold uppercase tracking-widest text-primary">
+              {t('architectureEyebrow')}
             </p>
+            <h2 className="mt-3 text-3xl font-bold sm:text-5xl">
+              {t('architectureTitle')}
+            </h2>
+            <p className="mt-4 text-muted-foreground">{t('architectureSub')}</p>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
-            {/* 🔄 Card 01 Localized */}
-            <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
-              <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">01</div>
-              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><Layers className="size-4 text-primary" /><span>{t('step1Title')}</span></h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">{t('step1Desc')}</p>
-            </div>
-            {/* 🔄 Card 02 Localized */}
-            <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
-              <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">02</div>
-              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><Coins className="size-4 text-primary" /><span>{t('step2Title')}</span></h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">{t('step2Desc')}</p>
-            </div>
-            {/* 🔄 Card 03 Localized */}
-            <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
-              <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">03</div>
-              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><Gavel className="size-4 text-primary" /><span>{t('step3Title')}</span></h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">{t('step3Desc')}</p>
-            </div>
-            {/* 🔄 Card 04 Localized */}
-            <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
-              <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">04</div>
-              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><CheckCircle2 className="size-4 text-primary" /><span>{t('step4Title')}</span></h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">{t('step4Desc')}</p>
-            </div>
-            {/* 🔄 Card 05 Localized */}
-            <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
-              <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">05</div>
-              <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><ShieldCheck className="size-4 text-primary" /><span>{t('step5Title')}</span></h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">{t('step5Desc')}</p>
-            </div>
+          <div className="mt-14 grid gap-5 md:grid-cols-2 xl:grid-cols-5">
+            {architecture.map(([Icon, title, body], index) => (
+              <article
+                key={title}
+                className="protocol-panel animate-enter p-5 transition hover:-translate-y-1 hover:border-primary/30"
+                style={{ animationDelay: `${index * 70}ms` }}
+              >
+                <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Icon className="size-5" aria-hidden="true" />
+                </div>
+                <h3 className="mt-4 font-bold">{title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {body}
+                </p>
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* --- FOOTER COMPONENT --- */}
-      <footer className="border-t border-border bg-secondary/30 py-12 text-xs text-muted-foreground px-4">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="flex flex-col gap-3 text-center md:text-left">
-            <p className="font-semibold text-slate-400">{t('footerRights')}</p> {/* 🔄 Localized Copyright */}
-            <div className="flex flex-wrap justify-center md:justify-start gap-x-5 gap-y-2">
-              <Link href="/whitepaper" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">{t('navWhitepaper')}</Link>
-              <Link href="/documentation" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">{t('docDocumentation')}</Link>
-              <Link href="/governance-forum" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">{t('docForum')}</Link>
-              <Link href="/terms-of-service" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">{t('docTerms')}</Link>
-              <Link href="/privacy-policy" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">{t('docPrivacy')}</Link>
-              <Link href="/risk-disclosure" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">{t('docRisk')}</Link>
-            </div>
+      <section id="ecosystem" className="scroll-mt-24 border-t border-border px-4 py-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="max-w-3xl">
+            <p className="text-xs font-bold uppercase tracking-widest text-primary">
+              {t('ecosystemEyebrow')}
+            </p>
+            <h2 className="mt-3 text-3xl font-bold sm:text-5xl">
+              {t('ecosystemTitle')}
+            </h2>
+            <p className="mt-4 text-muted-foreground">{t('ecosystemSub')}</p>
           </div>
-
-          <div className="flex items-center gap-5 shrink-0 bg-background/40 px-5 py-3 rounded-full border border-border shadow-inner">
-            <a href="https://twitter.com/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-semibold text-slate-300">
-              <svg className="size-4 fill-current" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
-              <span>Twitter</span>
-            </a>
-            <span className="w-px h-3.5 bg-border" />
-            <a href="https://t.me/InterPredict" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-1.5 font-semibold text-slate-300">
-              <svg className="size-4 fill-current" viewBox="0 0 24 24"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.18 1.897-.961 6.505-1.359 8.641-.168.9-.501 1.201-.82 1.23-.703.064-1.237-.465-1.917-.912-1.065-.7-1.666-1.134-2.698-1.814-1.194-.786-.42-1.218.26-1.926.178-.184 3.279-3.008 3.339-3.264.008-.033.014-.154-.059-.219-.073-.064-.18-.042-.258-.025-.111.024-1.884 1.196-5.319 3.518-.503.346-.959.516-1.367.507-.45-.01-1.317-.254-1.961-.464-.79-.258-1.418-.394-1.363-.833.028-.23.347-.465.955-.705 3.733-1.623 6.222-2.694 7.467-3.213 3.543-1.479 4.28-1.736 4.761-1.745.106-.002.344.025.497.15.13.105.166.248.178.349.012.106.027.34-.01.597z" /></svg>
-              <span>Telegram</span>
-            </a>
-            <span className="w-px h-3.5 bg-border" />
-            <a href="https://interlinklabs.ai" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors flex items-center gap-2 font-semibold text-slate-300">
-              <img src="/images/interlink.png" alt="Interlink Logo" className="size-4 object-contain rounded-sm" />
-              <span>Interlink</span>
-            </a>
+          <div className="mt-12 grid gap-6 md:grid-cols-3">
+            {ecosystem.map(([Icon, title, body]) => (
+              <article key={title} className="glass rounded-2xl p-7">
+                <Icon className="size-7 text-primary" aria-hidden="true" />
+                <h3 className="mt-5 text-xl font-bold">{title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                  {body}
+                </p>
+              </article>
+            ))}
           </div>
         </div>
-      </footer>
-    </div>
+      </section>
+
+      <Footer />
+    </main>
   )
 }

@@ -1,1138 +1,793 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { useWeb3 } from '../context/Web3Context'
+import {
+  Award,
+  Factory,
+  History,
+  LayoutGrid,
+  PlusCircle,
+  Shield,
+  Vote,
+  WalletCards,
+} from 'lucide-react'
 import { ethers } from 'ethers'
-import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Home, Menu, X, LogOut, ArrowRight, Users, Upload, Cpu, RefreshCw, Gavel, CheckCircle2, Coins } from 'lucide-react'
-import { Logo } from '@/components/logo'
-import Link from 'next/link'
-import { getValidToken } from '@/lib/interlinkAuth'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { useWeb3 } from '@/app/context/Web3Context'
+import {
+  CreatorPanel,
+  HistoryPanel,
+  PositionsPanel,
+} from '@/components/protocol/AccountPanels'
+import {
+  AppShell,
+  type WorkspaceTab,
+} from '@/components/protocol/AppShell'
+import { CreateMarketPanel } from '@/components/protocol/CreateMarketPanel'
+import {
+  AdminPanel,
+  GovernancePanel,
+  RewardsPanel,
+} from '@/components/protocol/GovernancePanels'
+import { MarketplacePanel } from '@/components/protocol/MarketplacePanel'
+import { EmptyState } from '@/components/protocol/ProtocolUI'
+import type {
+  AccountMarketState,
+  ChainActivity,
+  DECAccount,
+  DECMemberRow,
+  MarketRuntime,
+  WorkspaceAction,
+} from '@/lib/interpredictFrontend'
+import {
+  INTERPREDICT_ABI,
+  type ProtocolMarket,
+} from '@/lib/interpredictProtocol'
 
-type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History' | 'DEC Members' | 'My Votes' | 'Unresolved Markets' | 'Resolved Markets' | 'DEC Rewards'
+const PAGE_SIZE = 50
+const HISTORY_BLOCK_WINDOW = 20_000
+const configuredDeploymentBlock = Number(
+  process.env.NEXT_PUBLIC_CONTRACT_DEPLOYMENT_BLOCK ?? 0,
+)
+const CONTRACT_DEPLOYMENT_BLOCK =
+  Number.isSafeInteger(configuredDeploymentBlock) &&
+  configuredDeploymentBlock >= 0
+    ? configuredDeploymentBlock
+    : 0
+const protocolInterface = new ethers.Interface(INTERPREDICT_ABI)
 
-
-interface SmartMarket {
-  id: number
-  question: string
-  marketEndTime: number
-  votingEndTime: number
-  totalYesPool: string
-  totalNoPool: string
-  state: number
-  winningOutcome: number
-  creator: string
-  oracleResolutionRequested: boolean
-  votesForActive?: number
-  votesAgainstActive?: number
+type MarketsPage = {
+  markets?: ProtocolMarket[]
+  nextCursor?: string | null
+  protocolPaused?: boolean
+  degraded?: boolean
+  failedMarkets?: unknown[]
+  error?: string
 }
 
-
-interface MyPosition {
-  marketId: number
-  question: string
-  marketState: number
-  winningOutcome: number
-  yesAmount: string
-  noAmount: string
-  marketEndTime: number
-  oracleResolutionRequested: boolean
+function namedTupleValue(value: unknown, key: string) {
+  if (!value || (typeof value !== 'object' && !Array.isArray(value))) {
+    throw new Error(`Contract result is missing the named "${key}" output`)
+  }
+  const tuple = value as Record<string, unknown>
+  if (!(key in tuple)) {
+    throw new Error(`Contract ABI is missing the named "${key}" output`)
+  }
+  return tuple[key]
 }
 
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x8c69b2D0A1C89fd3C6aD64e1Be3536FAF63b55b6"
+function bigintValue(value: unknown) {
+  return BigInt(String(value ?? 0))
+}
 
-export default function DAppPortal() {
-  const { walletAddress, connectWallet, disconnectWallet, txStatus, setTxStatus, historyLogs, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, initializeMarketOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain, claimDecRewardsOnChain, t } = useWeb3()
+function numberValue(value: unknown) {
+  return Number(bigintValue(value))
+}
 
+function booleanValue(value: unknown) {
+  return value === true
+}
 
-  const [activeTab, setActiveTab] = useState<TabType>('MarketPlace')
-  const [stakeAmount, setStakeAmount] = useState<string>('0.1')
-  const [marketDesc, setMarketDesc] = useState('')
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<R>,
+) {
+  const results = new Array<PromiseSettledResult<R>>(values.length)
+  let nextIndex = 0
+  const workers = Array.from(
+    { length: Math.min(concurrency, values.length) },
+    async () => {
+      while (nextIndex < values.length) {
+        const index = nextIndex++
+        try {
+          results[index] = {
+            status: 'fulfilled',
+            value: await mapper(values[index]),
+          }
+        } catch (reason) {
+          results[index] = { status: 'rejected', reason }
+        }
+      }
+    },
+  )
+  await Promise.all(workers)
+  return results
+}
 
-  const [outcomes, setOutcomes] = useState<string[]>(['YES', 'NO'])
-  // Set default end date to at least 2 hours in the future (contract requires marketEndTime > now + 10min voting)
-  const [endDate, setEndDate] = useState<string>(() => {
-    const d = new Date()
-    d.setHours(d.getHours() + 2)
-    return d.toISOString().split('T')[0]
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  return typeof error === 'string' ? error : 'Unable to load protocol data'
+}
+
+function eventTopic(name: string) {
+  try {
+    return protocolInterface.getEvent(name)?.topicHash
+  } catch {
+    return undefined
+  }
+}
+
+function eventArgument(
+  parsed: ethers.LogDescription,
+  name: string,
+): unknown {
+  return (parsed.args as unknown as Record<string, unknown>)[name]
+}
+
+function describeEvent(parsed: ethers.LogDescription) {
+  const details: string[] = []
+  const marketId = eventArgument(parsed, 'marketId')
+  const outcomeIndex = eventArgument(parsed, 'outcomeIndex')
+  const vote = eventArgument(parsed, 'vote')
+  const amount =
+    eventArgument(parsed, 'amount') ??
+    eventArgument(parsed, 'grossAmount') ??
+    eventArgument(parsed, 'reward')
+  const shares = eventArgument(parsed, 'shares')
+  const reputation = eventArgument(parsed, 'reputation')
+  const honest = eventArgument(parsed, 'honest')
+
+  if (marketId !== undefined) details.push(`Market #${String(marketId)}`)
+  if (outcomeIndex !== undefined) {
+    details.push(`outcome ${numberValue(outcomeIndex) + 1}`)
+  }
+  if (vote !== undefined) details.push(`vote ${String(vote)}`)
+  if (amount !== undefined) details.push(`amount ${String(amount)}`)
+  if (shares !== undefined) details.push(`shares ${String(shares)}`)
+  if (reputation !== undefined) {
+    details.push(`reputation ${String(reputation)}`)
+  }
+  if (honest !== undefined) details.push(honest ? 'honest' : 'incorrect')
+  return details.join(' · ') || 'Wallet activity recorded on-chain'
+}
+
+export default function ProtocolWorkspacePage() {
+  const {
+    account,
+    contractAddress,
+    hasProtocolFunction,
+    isConfigured,
+    isCorrectNetwork,
+    provider,
+    readContract,
+    refreshWalletState,
+    roles,
+    runTransaction,
+    t,
+  } = useWeb3()
+  const [activeTab, setActiveTab] = useState('marketplace')
+  const [markets, setMarkets] = useState<ProtocolMarket[]>([])
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [apiProtocolPaused, setApiProtocolPaused] = useState(false)
+  const [marketLoading, setMarketLoading] = useState(true)
+  const [marketError, setMarketError] = useState('')
+  const [selectedMarketId, setSelectedMarketId] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null
+    const value = new URLSearchParams(window.location.search).get('market')
+    return value && /^\d+$/.test(value) ? Number(value) : null
   })
-  const [endTime, setEndTime] = useState<string>('23:59')
-  const [marketImage, setMarketImage] = useState<string | null>(null)
+  const initialMarketIdRef = useRef(selectedMarketId)
+  const [accountState, setAccountState] = useState<
+    Record<number, AccountMarketState>
+  >({})
+  const [accountLoading, setAccountLoading] = useState(false)
+  const [accountError, setAccountError] = useState('')
+  const [member, setMember] = useState<DECAccount | null>(null)
+  const [members, setMembers] = useState<DECMemberRow[]>([])
+  const [accountRefresh, setAccountRefresh] = useState(0)
+  const [chainActivities, setChainActivities] = useState<ChainActivity[]>([])
+  const [chainLoading, setChainLoading] = useState(false)
+  const [chainError, setChainError] = useState('')
+  const [chainRange, setChainRange] = useState<{
+    fromBlock: number
+    toBlock: number
+    deploymentBlock: number
+  } | null>(null)
+  const [canLoadOlder, setCanLoadOlder] = useState(false)
+  const marketAbortRef = useRef<AbortController | null>(null)
 
-  const [hasJoinedDEC, setHasJoinedDEC] = useState<boolean>(false)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const runtimes = useMemo<Record<number, MarketRuntime>>(
+    () =>
+      Object.fromEntries(
+        markets.map(market => [
+          market.id,
+          {
+            paused: apiProtocolPaused || Boolean(market.marketPaused),
+            marketPaused: Boolean(market.marketPaused),
+            participantCount: market.participantCount ?? 0,
+            tradeCount: market.tradeCount ?? 0,
+            resolutionMembershipEpoch: market.resolutionMembershipEpoch,
+            adminVerificationDeadline: market.adminVerificationDeadline,
+            resolutionQuorum: market.resolutionQuorum,
+          },
+        ]),
+      ),
+    [apiProtocolPaused, markets],
+  )
 
-  const ADMIN_ADDRESS = "0x6e832252ea4c78068ee109d953724d2762431992"
-  const [persistentLogs, setPersistentLogs] = useState<any[]>([])
+  const selectedMarket =
+    markets.find(market => market.id === selectedMarketId) ?? null
 
-  // 🟢 CLEAN SLATES: Zero static items. Populations are strictly real-time from contract calls.
-  const [allOnChainMarkets, setAllOnChainMarkets] = useState<SmartMarket[]>([])
-  const [blockchainDecList, setBlockchainDecList] = useState<string[]>([])
-  const [myPositions, setMyPositions] = useState<MyPosition[]>([])
-  const [isScanning, setIsScanning] = useState<boolean>(false)
-
-  // 🆕 NEW: the contract's real oracle (settlement) wallet, fetched on-chain so
-  // the "Unresolved Markets" tab and winner-selection buttons are gated on the
-  // actual settler rather than a hard-coded address.
-  const [oracleAddress, setOracleAddress] = useState<string | null>(null)
-
-  // 🆕 NEW: DEC Rewards — the connected DEC member's claimable share of the DEC
-  // Pool. `decRewardsClaimable` is computed on-chain as (decPool / totalDecMembers)
-  // minus what this member has already claimed (decRewardsClaimedTracker). Values
-  // are wei strings.
-  const [decRewardsClaimable, setDecRewardsClaimable] = useState<string>('0')
-  const [decPoolTotal, setDecPoolTotal] = useState<string>('0')
-  const [decMemberCount, setDecMemberCount] = useState<number>(0)
-
-  // 🆕 NEW: track markets whose payout THIS wallet has already claimed. The
-  // deployed contract exposes no per-user/per-market "claimed" view (only a
-  // PayoutClaimed event), so we persist claimed marketIds in localStorage
-  // (keyed per wallet) and reflect a "Claimed" badge instead of a Cash Out
-  // button once a payout succeeds.
-  const [claimedMarkets, setClaimedMarkets] = useState<number[]>([])
-
-
-
-  // 🆕 NEW: a once-per-second ticking clock so market countdown timers update
-  // live without needing a page refresh.
-  const [nowSec, setNowSec] = useState<number>(() => Math.floor(Date.now() / 1000))
-  useEffect(() => {
-    const interval = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // 📡 AUTOMATED CONTRACT DECODER SCANNER
-  // 🔧 FIXED: extracted into a stable useCallback so it can be re-triggered
-  // manually (Refresh button) instead of only on mount/dependency change.
-  const scanBlockchainRegistry = useCallback(async () => {
-    // 🔧 FIXED: only reset WALLET-SPECIFIC state (membership + positions) on a
-    // (re)scan. The market list itself is GLOBAL — clearing it up-front caused
-    // the "sometimes all, sometimes a few" flicker, because a slow/partial RPC
-    // read would leave the wiped list showing fewer markets than actually exist.
-    setHasJoinedDEC(false)
-    setMyPositions([])
-    setIsScanning(true)
+  const loadMarkets = useCallback(async (
+    cursor = '0',
+    append = false,
+    exactMarketId?: number,
+  ) => {
+    marketAbortRef.current?.abort()
+    const controller = new AbortController()
+    marketAbortRef.current = controller
+    setMarketLoading(true)
+    setMarketError('')
 
     try {
-      // 🔧 FIXED (#1): ALWAYS load the authoritative full market list from our
-      // own /api/markets route first (server-side service-wallet auth, fetched
-      // sequentially so it never silently drops markets like the parallel
-      // client-RPC path could). This guarantees the MarketPlace shows every
-      // market every time, regardless of the connected wallet's RPC health.
-      let baseMarkets: SmartMarket[] = []
+      const response = await fetch(
+        exactMarketId === undefined
+          ? `/api/markets?cursor=${encodeURIComponent(cursor)}&limit=${PAGE_SIZE}`
+          : `/api/markets?id=${exactMarketId}`,
+        { cache: 'no-store', signal: controller.signal },
+      )
+      const payload = (await response.json()) as MarketsPage
+      if (!response.ok) {
+        throw new Error(payload.error || `Market index failed (${response.status})`)
+      }
+      if (!Array.isArray(payload.markets)) {
+        throw new Error('Market index returned an invalid response')
+      }
+      const pageMarkets = payload.markets
+      setMarkets(previous => {
+        const indexed = new Map(
+          (append ? previous : []).map(market => [market.id, market]),
+        )
+        for (const market of pageMarkets) indexed.set(market.id, market)
+        return [...indexed.values()].sort((left, right) => right.id - left.id)
+      })
+      if (exactMarketId === undefined) {
+        setNextCursor(payload.nextCursor ?? null)
+      }
+      setApiProtocolPaused(Boolean(payload.protocolPaused))
+      setMarketError(
+        payload.degraded
+          ? `${payload.failedMarkets?.length ?? 0} market reads failed on this page.`
+          : '',
+      )
+    } catch (error) {
+      if (controller.signal.aborted) return
+      console.error('Market index load failed:', error)
+      setMarketError(errorMessage(error))
+    } finally {
+      if (!controller.signal.aborted) setMarketLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        await loadMarkets()
+        if (initialMarketIdRef.current !== null) {
+          await loadMarkets('0', true, initialMarketIdRef.current)
+        }
+      })()
+    }, 0)
+    return () => {
+      window.clearTimeout(timer)
+      marketAbortRef.current?.abort()
+    }
+  }, [loadMarkets])
+
+  const readMember = useCallback(
+    async (address: string): Promise<DECAccount> => {
+      const [rawMember, rawRewards] = await Promise.all([
+        readContract<unknown>('decMembers', [address]),
+        readContract<unknown>('decRewardsView', [address]),
+      ])
+      const storedRewards = bigintValue(
+        namedTupleValue(rawMember, 'storedRewards'),
+      )
+      return {
+        exists: booleanValue(namedTupleValue(rawMember, 'exists')),
+        active: booleanValue(namedTupleValue(rawMember, 'active')),
+        removed: booleanValue(namedTupleValue(rawMember, 'removed')),
+        joinedAt: numberValue(namedTupleValue(rawMember, 'joinedAt')),
+        proposalVotes: bigintValue(
+          namedTupleValue(rawMember, 'proposalVotes'),
+        ),
+        resolutionVotes: bigintValue(
+          namedTupleValue(rawMember, 'resolutionVotes'),
+        ),
+        honestResolutionVotes: bigintValue(
+          namedTupleValue(rawMember, 'honestResolutionVotes'),
+        ),
+        incorrectResolutionVotes: bigintValue(
+          namedTupleValue(rawMember, 'incorrectResolutionVotes'),
+        ),
+        reputation: bigintValue(namedTupleValue(rawMember, 'reputation')),
+        totalRewardsEarned: bigintValue(
+          namedTupleValue(rawMember, 'totalRewardsEarned'),
+        ),
+        totalRewardsClaimed: bigintValue(
+          namedTupleValue(rawMember, 'totalRewardsClaimed'),
+        ),
+        storedRewards,
+        claimableRewards: bigintValue(
+          namedTupleValue(rawRewards, 'claimable'),
+        ),
+      }
+    },
+    [readContract],
+  )
+
+  const loadAccountData = useCallback(async () => {
+    if (!account || !isCorrectNetwork || !isConfigured) {
+      setAccountState({})
+      setMember(null)
+      setMembers([])
+      setAccountError('')
+      setAccountLoading(false)
+      return
+    }
+
+    setAccountLoading(true)
+    setAccountError('')
+    try {
+      const results = await mapWithConcurrency(markets, 4, async market => {
+        const [
+          shares,
+          resolutionCounts,
+          netContribution,
+          hasTraded,
+          payoutClaimed,
+          proposalVote,
+          resolutionVote,
+          reputationSettled,
+          rewardVested,
+          resolutionEligible,
+        ] = await Promise.all([
+          Promise.all(
+            market.outcomes.map((_, index) =>
+              readContract<unknown>('userShares', [market.id, account, index]),
+            ),
+          ),
+          Promise.all(
+            market.outcomes.map((_, index) =>
+              readContract<unknown>('resolutionVoteCounts', [
+                market.id,
+                index,
+              ]),
+            ),
+          ),
+          readContract<unknown>('userNetContribution', [market.id, account]),
+          readContract<unknown>('hasTradedInMarket', [market.id, account]),
+          readContract<unknown>('hasClaimedPayout', [market.id, account]),
+          readContract<unknown>('proposalVotes', [market.id, account]),
+          readContract<unknown>('resolutionVotes', [market.id, account]),
+          readContract<unknown>('resolutionReputationSettled', [
+            market.id,
+            account,
+          ]),
+          hasProtocolFunction('decMarketRewardClaimed')
+            ? readContract<unknown>('decMarketRewardClaimed', [
+                market.id,
+                account,
+              ])
+            : Promise.resolve(false),
+          market.resolutionRequestedAt > 0 &&
+          hasProtocolFunction('isResolutionVoterEligible')
+            ? readContract<unknown>('isResolutionVoterEligible', [
+                market.id,
+                account,
+              ])
+            : Promise.resolve(false),
+        ])
+        const state: AccountMarketState = {
+          shares: shares.map(bigintValue),
+          netContribution: bigintValue(netContribution),
+          hasTraded: booleanValue(hasTraded),
+          payoutClaimed: booleanValue(payoutClaimed),
+          proposalVote: numberValue(proposalVote),
+          resolutionVote: numberValue(resolutionVote),
+          resolutionCounts: resolutionCounts.map(bigintValue),
+          reputationSettled: booleanValue(reputationSettled),
+          rewardVested: booleanValue(rewardVested),
+          resolutionEligible: booleanValue(resolutionEligible),
+        }
+        return [market.id, state] as const
+      })
+
+      const nextState: Record<number, AccountMarketState> = {}
+      const failures: unknown[] = []
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          nextState[result.value[0]] = result.value[1]
+        } else {
+          failures.push(result.reason)
+        }
+      }
+      setAccountState(nextState)
+      if (failures.length) {
+        console.error('Some account market reads failed:', failures)
+        setAccountError(
+          `${failures.length} account market ${
+            failures.length === 1 ? 'read' : 'reads'
+          } failed. Refresh to retry.`,
+        )
+      }
+
+      const currentMember = await readMember(account)
+      setMember(currentMember)
+
+      if (roles.isAdmin || roles.isDECManager) {
+        const addresses = Array.from(
+          await readContract<readonly string[]>('getDECMemberList'),
+        )
+        const memberResults = await mapWithConcurrency(
+          addresses,
+          4,
+          async address => ({ ...(await readMember(address)), address }),
+        )
+        const nextMembers: DECMemberRow[] = []
+        const memberFailures: unknown[] = []
+        for (const result of memberResults) {
+          if (result.status === 'fulfilled') nextMembers.push(result.value)
+          else memberFailures.push(result.reason)
+        }
+        setMembers(nextMembers)
+        if (memberFailures.length) {
+          console.error('Some DEC member reads failed:', memberFailures)
+          setAccountError(current =>
+            [
+              current,
+              `${memberFailures.length} DEC member reads failed.`,
+            ]
+              .filter(Boolean)
+              .join(' '),
+          )
+        }
+      } else {
+        setMembers([])
+      }
+    } catch (error) {
+      console.error('Account data load failed:', error)
+      setAccountError(errorMessage(error))
+    } finally {
+      setAccountLoading(false)
+    }
+  }, [
+    account,
+    hasProtocolFunction,
+    isConfigured,
+    isCorrectNetwork,
+    markets,
+    readContract,
+    readMember,
+    roles.isAdmin,
+    roles.isDECManager,
+  ])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadAccountData(), 0)
+    return () => window.clearTimeout(timer)
+  }, [accountRefresh, loadAccountData])
+
+  const perform = useCallback<WorkspaceAction>(
+    async (method, args, label) => {
+      await runTransaction(method, args, label)
       try {
-        const marketsRes = await fetch('/api/markets', { cache: 'no-store' })
-        if (marketsRes.ok) {
-          const data = await marketsRes.json()
-          baseMarkets = (data.allMarkets || []).map((m: any) => ({
-            ...m,
-            oracleResolutionRequested: Boolean(m.oracleResolutionRequested)
-          }))
-          setAllOnChainMarkets(baseMarkets)
-        }
-      } catch (e) {
-        console.warn('Base market fetch via /api/markets failed:', e)
+        await refreshWalletState()
+      } catch (error) {
+        console.error('Wallet refresh after transaction failed:', error)
+        setAccountError(errorMessage(error))
       }
+      await loadMarkets()
+      setAccountRefresh(value => value + 1)
+    },
+    [loadMarkets, refreshWalletState, runTransaction],
+  )
 
-      // DEC membership (+ admin directory) via the API too — reliable even when
-      // the user's own RPC session is flaky.
-      if (walletAddress) {
-        try {
-          const decRes = await fetch(`/api/dec-membership?address=${walletAddress}`, { cache: 'no-store' })
-          if (decRes && decRes.ok) {
-            const decData = await decRes.json()
-            if (decData.isDecMember) setHasJoinedDEC(true)
-            if (decData.allDecMembers?.length) setBlockchainDecList(decData.allDecMembers)
-          }
-        } catch (e) {
-          console.warn('DEC membership API fetch failed:', e)
-        }
-      }
+  const openMarket = useCallback((market: ProtocolMarket) => {
+    setSelectedMarketId(market.id)
+    setActiveTab('marketplace')
+    window.history.replaceState(null, '', `/app?market=${market.id}`)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
 
-      // Logged-out (or no injected wallet) visitors stop here — the base list is
-      // all they need, and there are no wallet-specific positions to load.
-      const shouldUsePublicAPI = !walletAddress || typeof window === 'undefined' || !(window as any).ethereum
-      if (shouldUsePublicAPI) {
+  const closeMarket = useCallback(() => {
+    setSelectedMarketId(null)
+    window.history.replaceState(null, '', '/app')
+  }, [])
+
+  const refresh = useCallback(async () => {
+    await loadMarkets()
+    try {
+      await refreshWalletState()
+    } catch (error) {
+      console.error('Wallet refresh failed:', error)
+      setAccountError(errorMessage(error))
+    }
+    setAccountRefresh(value => value + 1)
+  }, [loadMarkets, refreshWalletState])
+
+  const loadChainHistory = useCallback(async (older = false) => {
+    if (!account || !provider || !isCorrectNetwork || !isConfigured) {
+      setChainError(t('connectRequired'))
+      return
+    }
+    setChainLoading(true)
+    setChainError('')
+    try {
+      const latestBlock =
+        older && chainRange
+          ? chainRange.fromBlock - 1
+          : await provider.getBlockNumber()
+      if (latestBlock < CONTRACT_DEPLOYMENT_BLOCK) {
+        setCanLoadOlder(false)
         return
       }
+      const fromBlock = Math.max(
+        CONTRACT_DEPLOYMENT_BLOCK,
+        latestBlock - HISTORY_BLOCK_WINDOW + 1,
+      )
+      const accountTopic = ethers.zeroPadValue(account, 32)
+      const marketAccountEventNames = [
+        'OutcomePurchased',
+        'PayoutClaimed',
+        'CancellationRefundClaimed',
+        'CreatorFeesClaimed',
+        'CreatorSeedReturned',
+        'ProposalVoteCast',
+        'ResolutionVoteCast',
+        'ResolutionParticipationSettled',
+        'CommunityMarketProposed',
+        'TeamMarketCreated',
+        'ResolutionRequested',
+        'ProposalRefunded',
+        'ActiveMarketCancelled',
+        'OutcomeConfirmed',
+        'MarketPauseChanged',
+      ]
+      const directAccountEventNames = [
+        'DECRewardsClaimed',
+        'DECReputationUpdated',
+        'DECMemberStatusChanged',
+      ]
+      const marketAccountTopics = marketAccountEventNames
+        .map(eventTopic)
+        .filter((topic): topic is string => Boolean(topic))
+      const directAccountTopics = directAccountEventNames
+        .map(eventTopic)
+        .filter((topic): topic is string => Boolean(topic))
 
-      // Native Human-Readable ABI mapping descriptor for strict interface conversions
-      const iface = new ethers.Interface([
-        "function totalMarkets() view returns (uint256)",
-        "function oracle() view returns (address)",
-        "function isDecMember(address) view returns (bool)",
-        "function getAllDecMembers() view returns (address[])",
-        "function markets(uint256) view returns (uint256 id, string question, uint256 marketEndTime, uint256 votingEndTime, uint256 totalYesPool, uint256 totalNoPool, uint8 state, uint8 winningOutcome, address creator, bool creatorFeeClaimed, uint256 votesForActive, uint256 votesAgainstActive, bool oracleResolutionRequested)",
-        "function yesShares(uint256,address) view returns (uint256)",
-        "function noShares(uint256,address) view returns (uint256)",
-        "function decPool() view returns (uint256)",
-        "function totalDecMembers() view returns (uint256)",
-        "function decRewardsClaimedTracker(address) view returns (uint256)"
+      const [marketLogs, directLogs] = await Promise.all([
+        marketAccountTopics.length
+          ? provider.getLogs({
+              address: contractAddress,
+              fromBlock,
+              toBlock: latestBlock,
+              topics: [marketAccountTopics, null, accountTopic],
+            })
+          : Promise.resolve([]),
+        directAccountTopics.length
+          ? provider.getLogs({
+              address: contractAddress,
+              fromBlock,
+              toBlock: latestBlock,
+              topics: [directAccountTopics, accountTopic],
+            })
+          : Promise.resolve([]),
       ])
 
-
-      // 🔧 FIXED (markets truly not loading): read on-chain state through
-      // MetaMask's OWN provider via window.ethereum `eth_call`. This is the
-      // EXACT same channel that already successfully SENDS transactions
-      // (create market, join DEC, vote, resolve, cash out). It therefore does
-      // NOT depend on the Bearer-token / service-token auth gate that returns
-      // "Forbidden" (server /api/markets) or "Rate limit exceeded" (our direct
-      // fetch). Reads run sequentially to be gentle on the endpoint. All
-      // best-effort: any failure keeps the base list and never shows a banner.
-      const ethCall = async (data: string): Promise<string | null> => {
-        try {
-          const result: string = await (window as any).ethereum.request({
-            method: 'eth_call',
-            params: [{ to: CONTRACT_ADDRESS, data }, 'latest']
-          })
-          return result && result !== '0x' ? result : null
-        } catch (e) {
-          console.warn('eth_call via wallet provider failed:', e)
-          return null
-        }
-      }
-
-      // 1. Market list — total count, then each market, straight from chain.
-      let marketsForPositions = baseMarkets
-      const countHex = await ethCall(iface.encodeFunctionData("totalMarkets"))
-      if (countHex) {
-        const totalCount = Number(iface.decodeFunctionResult("totalMarkets", countHex)[0])
-        const tempMarkets: SmartMarket[] = []
-        for (let i = 0; i < totalCount; i++) {
-          const raw = await ethCall(iface.encodeFunctionData("markets", [i]))
-          if (raw) {
-            const decoded = iface.decodeFunctionResult("markets", raw)
-            tempMarkets.push({
-              id: Number(decoded[0]),
-              question: String(decoded[1]),
-              marketEndTime: Number(decoded[2]),
-              votingEndTime: Number(decoded[3]),
-              totalYesPool: decoded[4].toString(),
-              totalNoPool: decoded[5].toString(),
-              state: Number(decoded[6]),
-              winningOutcome: Number(decoded[7]),
-              creator: String(decoded[8]),
-              oracleResolutionRequested: Boolean(decoded[12])
-            })
-          }
-        }
-        // Replace the list whenever we read at least one market successfully.
-        if (tempMarkets.length > 0) {
-          setAllOnChainMarkets(tempMarkets)
-          marketsForPositions = tempMarkets
-        }
-      }
-
-      // 2. Oracle (settlement wallet) — gates the resolve buttons.
-      const oracleHex = await ethCall(iface.encodeFunctionData("oracle"))
-      if (oracleHex) {
-        setOracleAddress(String(iface.decodeFunctionResult("oracle", oracleHex)[0]))
-      }
-
-      // 3. This wallet's DEC membership.
-      let isMember = false
-      const decHex = await ethCall(iface.encodeFunctionData("isDecMember", [walletAddress]))
-      if (decHex) {
-        isMember = iface.decodeFunctionResult("isDecMember", decHex)[0]
-        setHasJoinedDEC(isMember)
-      }
-
-      // 4. Team wallet → full DEC member directory.
-      if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
-        const membersHex = await ethCall(iface.encodeFunctionData("getAllDecMembers"))
-        if (membersHex) {
-          const members = iface.decodeFunctionResult("getAllDecMembers", membersHex)[0]
-          setBlockchainDecList(Array.from(members as string[]))
-        }
-      } else if (isMember) {
-        setBlockchainDecList([walletAddress])
-      }
-
-      // 4b. 🆕 NEW: DEC Rewards — for a committee member, compute their claimable
-      // share of the DEC Pool: (decPool / totalDecMembers) − alreadyClaimed.
-      if (isMember) {
-        const poolHex = await ethCall(iface.encodeFunctionData("decPool"))
-        const membersHex = await ethCall(iface.encodeFunctionData("totalDecMembers"))
-        const claimedHex = await ethCall(iface.encodeFunctionData("decRewardsClaimedTracker", [walletAddress]))
-        const pool = poolHex ? BigInt(iface.decodeFunctionResult("decPool", poolHex)[0].toString()) : BigInt(0)
-        const members = membersHex ? BigInt(iface.decodeFunctionResult("totalDecMembers", membersHex)[0].toString()) : BigInt(0)
-        const alreadyClaimed = claimedHex ? BigInt(iface.decodeFunctionResult("decRewardsClaimedTracker", claimedHex)[0].toString()) : BigInt(0)
-        setDecPoolTotal(pool.toString())
-        setDecMemberCount(Number(members))
-        if (members > BigInt(0)) {
-          const sharePerMember = pool / members
-          const claimable = sharePerMember > alreadyClaimed ? sharePerMember - alreadyClaimed : BigInt(0)
-          setDecRewardsClaimable(claimable.toString())
-        } else {
-          setDecRewardsClaimable('0')
-        }
-      } else {
-        setDecRewardsClaimable('0')
-        setDecPoolTotal('0')
-        setDecMemberCount(0)
-      }
-
-      // 5. This wallet's yes/no shares per market, to power "My Votes".
-
-      if (marketsForPositions.length > 0) {
-        const positionResults: MyPosition[] = []
-        for (const m of marketsForPositions) {
-          const yesHex = await ethCall(iface.encodeFunctionData("yesShares", [m.id, walletAddress]))
-          const noHex = await ethCall(iface.encodeFunctionData("noShares", [m.id, walletAddress]))
-          const yesAmount = yesHex ? iface.decodeFunctionResult("yesShares", yesHex)[0].toString() : "0"
-          const noAmount = noHex ? iface.decodeFunctionResult("noShares", noHex)[0].toString() : "0"
-          positionResults.push({
-            marketId: m.id,
-            question: m.question,
-            marketState: m.state,
-            winningOutcome: m.winningOutcome,
-            yesAmount,
-            noAmount,
-            marketEndTime: m.marketEndTime,
-            oracleResolutionRequested: m.oracleResolutionRequested
-          })
-        }
-        setMyPositions(positionResults.filter(p => BigInt(p.yesAmount) > BigInt(0) || BigInt(p.noAmount) > BigInt(0)))
-      }
-
-    } catch (err: any) {
-      // 🔧 FIXED: enrichment failures (usually Interlink RPC rate limiting) are
-      // now NON-FATAL. The MarketPlace still shows the reliable /api/markets
-      // base list, so we log quietly instead of surfacing an alarming banner.
-      console.warn("On-chain enrichment skipped:", err?.message || err)
-    } finally {
-
-      setIsScanning(false)
-    }
-  }, [walletAddress])
-
-  useEffect(() => {
-    scanBlockchainRegistry()
-  }, [scanBlockchainRegistry]) // Only re-scan when walletAddress changes or callback updates
-
-  useEffect(() => {
-    if (walletAddress) {
-      const savedLogs = localStorage.getItem(`interpredict_logs_${walletAddress.toLowerCase()}`)
-      if (savedLogs) setPersistentLogs(JSON.parse(savedLogs))
-    }
-  }, [walletAddress, historyLogs])
-
-  // 🆕 NEW: check localStorage for DEC membership as fallback when RPC fails
-  useEffect(() => {
-    if (walletAddress) {
-      const decKey = `interpredict_dec_joined_${walletAddress.toLowerCase()}`
-      const localJoined = localStorage.getItem(decKey)
-      if (localJoined === 'true') {
-        setHasJoinedDEC(true)
-      }
-    }
-  }, [walletAddress])
-
-  // 🆕 NEW: load this wallet's already-claimed payout markets from localStorage
-  // so the Resolved Markets tab shows "Claimed" instead of a Cash Out button
-  // for payouts already withdrawn (the contract has no per-user claimed view).
-  useEffect(() => {
-    if (walletAddress) {
-      const saved = localStorage.getItem(`interpredict_claimed_${walletAddress.toLowerCase()}`)
-      if (saved) {
-        try { setClaimedMarkets(JSON.parse(saved)) } catch { setClaimedMarkets([]) }
-      } else {
-        setClaimedMarkets([])
-      }
-    } else {
-      setClaimedMarkets([])
-    }
-  }, [walletAddress])
-
-
-  // 🆕 NEW: is the connected wallet the contract's settlement oracle? Gates the
-  // "Unresolved Markets" tab and the YES/NO/DRAW winner-selection buttons.
-  // Fallback: if RPC fails but wallet matches ADMIN (team), treat as oracle
-  const isOracle = !!walletAddress && (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase() || (!!oracleAddress && walletAddress.toLowerCase() === oracleAddress.toLowerCase()))
-
-  // 🆕 NEW: fallback for DEC membership - if RPC fails but wallet has local record
-  const isDecMember = hasJoinedDEC || (walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase())
-
-  const getVisibleTabs = (): TabType[] => {
-    if (!walletAddress) return ['MarketPlace', 'Pending Markets', 'Resolved Markets']
-    const tabs: TabType[] = ['MarketPlace']
-    if (hasJoinedDEC) tabs.push('Market Proposals')
-    else tabs.push('Pending Markets')
-    tabs.push('My Votes')
-    tabs.push('Make Market')
-    if (hasJoinedDEC) tabs.push('DEC Rewards')
-    if (!hasJoinedDEC) tabs.push('Join DEC')
-
-    // Unresolved Markets tab always visible when wallet connected (data will show based on isOracle)
-    tabs.push('Unresolved Markets')
-    tabs.push('Resolved Markets')
-    tabs.push('History')
-    if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) tabs.push('DEC Members')
-    return tabs
-  }
-
-  const visibleTabs = getVisibleTabs()
-
-  const handleTabSelect = (tab: TabType) => {
-    setActiveTab(tab)
-    setMobileMenuOpen(false)
-  }
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => setMarketImage(reader.result as string)
-      reader.readAsDataURL(file)
-    }
-  }
-
-  const addOutcomeChoice = () => outcomes.length < 4 && setOutcomes([...outcomes, ''])
-  const removeOutcomeChoice = (index: number) => outcomes.length > 2 && setOutcomes(outcomes.filter((_, i) => i !== index))
-  const handleOutcomeTextChange = (index: number, text: string) => {
-    const updated = [...outcomes]
-    updated[index] = text
-    setOutcomes(updated)
-  }
-
-  const handleCreateMarketSubmit = async () => {
-    if (!marketDesc || !endDate || !endTime) return
-    // Combine date and time for precise market end timestamp
-    const [hours, minutes] = endTime.split(':').map(Number)
-    const endDateTime = new Date(endDate)
-    endDateTime.setHours(hours, minutes, 0, 0)
-
-    // Ensure marketEndTime is at least 15 minutes in the future (contract requires +10min voting buffer)
-    const now = Math.floor(Date.now() / 1000)
-    const minRequiredTime = now + 15 * 60 // 15 minutes in seconds
-    let marketEndTimeInSeconds = Math.floor(endDateTime.getTime() / 1000)
-
-    // If user selected a time too close to now, automatically extend to 1 hour from now
-    if (marketEndTimeInSeconds < minRequiredTime) {
-      const extendedTime = new Date(now * 1000)
-      extendedTime.setHours(extendedTime.getHours() + 1)
-      marketEndTimeInSeconds = Math.floor(extendedTime.getTime() / 1000)
-    }
-
-    const success = await createMarketOnChain(marketDesc, marketEndTimeInSeconds)
-    if (success) {
-      setMarketDesc('')
-      setOutcomes(['YES', 'NO'])
-      setMarketImage(null)
-    }
-  }
-
-  const handleJoinCommitteeSubmit = async () => {
-    const success = await joinDecOnChain()
-    if (success) {
-      setHasJoinedDEC(true) // Optimistic update
-      localStorage.setItem(`interpredict_dec_joined_${walletAddress?.toLowerCase()}`, 'true')
-      scanBlockchainRegistry() // Refresh to get updated DEC status
-    }
-  }
-
-  const executeTradeAction = async (marketId: number, outcomeIndex: number) => {
-    if (!walletAddress) return connectWallet()
-    const ok = await placeBetOnChain(marketId, outcomeIndex, stakeAmount)
-    if (ok) {
-      // 🆕 FIX #2: optimistically reflect the new position in "My Votes"
-      // IMMEDIATELY (before the slower full re-scan finishes) and jump the user
-      // to that tab, so a voted market shows up the instant the trade confirms.
-      const mkt = allOnChainMarkets.find(m => m.id === marketId)
-      let addWei = BigInt(0)
-      try { addWei = ethers.parseEther(stakeAmount || '0') } catch { }
-      setMyPositions((prev) => {
-        const existing = prev.find(p => p.marketId === marketId)
-        if (existing) {
-          return prev.map(p => p.marketId === marketId ? {
-            ...p,
-            yesAmount: outcomeIndex === 0 ? (BigInt(p.yesAmount) + addWei).toString() : p.yesAmount,
-            noAmount: outcomeIndex === 1 ? (BigInt(p.noAmount) + addWei).toString() : p.noAmount
-          } : p)
-        }
-        return [...prev, {
-          marketId,
-          question: mkt?.question || `Pool #${marketId}`,
-          marketState: mkt?.state ?? 1,
-          winningOutcome: mkt?.winningOutcome ?? 0,
-          yesAmount: outcomeIndex === 0 ? addWei.toString() : '0',
-          noAmount: outcomeIndex === 1 ? addWei.toString() : '0',
-          marketEndTime: mkt?.marketEndTime ?? 0,
-          oracleResolutionRequested: mkt?.oracleResolutionRequested ?? false
-        }]
-      })
-      setActiveTab('My Votes')
-    }
-    scanBlockchainRegistry() // Refresh positions after trade
-  }
-
-  const handleCashOut = async (marketId: number) => {
-    const ok = await claimPayoutOnChain(marketId)
-    if (ok) {
-      // 🆕 NEW: mark this market as claimed for the connected wallet and persist
-      // to localStorage, so the Resolved Markets tab shows "Claimed" instead of
-      // the Cash Out button (the contract has no per-user claimed view to read).
-      if (walletAddress) {
-        setClaimedMarkets((prev) => {
-          const updated = prev.includes(marketId) ? prev : [...prev, marketId]
-          localStorage.setItem(`interpredict_claimed_${walletAddress.toLowerCase()}`, JSON.stringify(updated))
-          return updated
+      const activities = [...marketLogs, ...directLogs]
+        .map(log => {
+          const parsed = protocolInterface.parseLog(log)
+          if (!parsed) return null
+          return {
+            id: `${log.transactionHash}-${log.index}`,
+            event: parsed.name,
+            detail: describeEvent(parsed),
+            blockNumber: log.blockNumber,
+            txHash: log.transactionHash,
+          } satisfies ChainActivity
         })
-      }
-      scanBlockchainRegistry() // 🆕 FIX #9: refresh balances/positions after payout
+        .filter((activity): activity is ChainActivity => Boolean(activity))
+        .sort((left, right) => right.blockNumber - left.blockNumber)
+      setChainActivities(previous => {
+        const indexed = new Map(
+          (older ? previous : []).map(activity => [activity.id, activity]),
+        )
+        for (const activity of activities) indexed.set(activity.id, activity)
+        return [...indexed.values()].sort(
+          (left, right) => right.blockNumber - left.blockNumber,
+        )
+      })
+      setChainRange(previous => ({
+        fromBlock: older && previous
+          ? Math.min(previous.fromBlock, fromBlock)
+          : fromBlock,
+        toBlock: older && previous ? previous.toBlock : latestBlock,
+        deploymentBlock: CONTRACT_DEPLOYMENT_BLOCK,
+      }))
+      setCanLoadOlder(fromBlock > CONTRACT_DEPLOYMENT_BLOCK)
+    } catch (error) {
+      console.error('Bounded chain history scan failed:', error)
+      setChainError(
+        `${errorMessage(error)}. The scan is limited to the latest ${HISTORY_BLOCK_WINDOW.toLocaleString()} blocks.`,
+      )
+    } finally {
+      setChainLoading(false)
     }
-  }
+  }, [
+    account,
+    chainRange,
+    contractAddress,
+    isConfigured,
+    isCorrectNetwork,
+    provider,
+    t,
+  ])
 
-
-  // 🆕 FIX #4: finalize a proposal once its curation window closes — graduates
-  // it to the MarketPlace or rejects it (90% stake refunded to the creator).
-  const handleFinalizeProposal = async (marketId: number) => {
-    const ok = await initializeMarketOnChain(marketId)
-    if (ok) scanBlockchainRegistry()
-  }
-
-
-  // 🆕 NEW: a voter pings an ended market for settlement, then refreshes so the
-  // "Awaiting team resolution" state (and the team's Unresolved tab) reflects it.
-  const handleRequestResolution = async (marketId: number) => {
-    const ok = await requestResolutionOnChain(marketId)
-    if (ok) scanBlockchainRegistry()
-  }
-
-  // 🆕 NEW: the oracle/team wallet declares the winning outcome (0=YES,1=NO,2=DRAW).
-  const handleResolveMarket = async (marketId: number, winningOutcome: number) => {
-    const ok = await resolveMarketOnChain(marketId, winningOutcome)
-    if (ok) scanBlockchainRegistry()
-  }
-
-  // 🆕 NEW: a DEC member claims their equal share of the DEC Pool (revenue from
-  // the 2% platform fee split equally among all committee members).
-  const handleClaimDecRewards = async () => {
-    const ok = await claimDecRewardsOnChain()
-    if (ok) scanBlockchainRegistry()
-  }
-
-
-  const getTabLabel = (tab: TabType): string => {
-    const translationMap: Record<TabType, string> = {
-      'MarketPlace': t('marketPlace'),
-      'Pending Markets': t('pendingMarkets'),
-      'Market Proposals': 'Market Proposals',
-      'Make Market': t('makeMarket'),
-      'Join DEC': t('joinDec'),
-      'History': t('history'),
-      'DEC Members': t('adminPanel'),
-      'My Votes': 'My Votes',
-      'Unresolved Markets': 'Unresolved Markets',
-      'Resolved Markets': 'Resolved Markets',
-      'DEC Rewards': 'DEC Rewards'
+  const tabs = useMemo<WorkspaceTab[]>(() => {
+    const items: WorkspaceTab[] = [
+      { id: 'marketplace', label: t('marketplace'), icon: LayoutGrid },
+      { id: 'create', label: t('createMarket'), icon: PlusCircle },
+      { id: 'positions', label: t('positions'), icon: WalletCards },
+      { id: 'creator', label: t('creatorDashboard'), icon: Factory },
+      { id: 'governance', label: t('governance'), icon: Vote },
+      { id: 'rewards', label: t('rewards'), icon: Award },
+      { id: 'history', label: t('history'), icon: History },
+    ]
+    if (roles.isAdmin || roles.isDECManager || roles.canPause) {
+      items.splice(items.length - 1, 0, {
+        id: 'admin',
+        label: t('administration'),
+        icon: Shield,
+      })
     }
-    return translationMap[tab] || tab
+    return items
+  }, [roles.canPause, roles.isAdmin, roles.isDECManager, t])
 
-  }
-
-  // 🔧 NEW: an on-chain "Active" state doesn't mean trading is still open —
-  // the contract never auto-transitions state on expiry, it just blocks new
-  // buyShares() calls past marketEndTime. So we now split by real elapsed
-  // time on the client, not just the raw enum value.
-  const activeMarkets = allOnChainMarkets.filter(m => m.state === 1 && m.marketEndTime > nowSec)
-  const inactiveMarkets = allOnChainMarkets.filter(m => (m.state === 1 && m.marketEndTime <= nowSec) || m.state === 2)
-  const pendingProposals = allOnChainMarkets.filter(m => m.state === 0)
-
-  // 🆕 NEW: markets whose trading has ended and were pinged for settlement, but
-  // aren't resolved yet — these are what the oracle picks a winner for.
-  const unresolvedMarkets = allOnChainMarkets.filter(m => m.state === 1 && m.marketEndTime <= nowSec && m.oracleResolutionRequested)
-  // 🆕 NEW: ended markets where user can request resolution (trading closed, no resolution yet)
-  const endedMarketsNeedingResolution = allOnChainMarkets.filter(m => m.state === 1 && m.marketEndTime <= nowSec && !m.oracleResolutionRequested)
-  // 🆕 NEW: fully settled markets.
-  const resolvedMarkets = allOnChainMarkets.filter(m => m.state === 2)
-
-  // 🆕 NEW: split the connected wallet's positions into still-tradable vs ended.
-  const activePositions = myPositions.filter(p => p.marketState === 1 && p.marketEndTime > nowSec)
-  const endedPositions = myPositions.filter(p => p.marketState === 2 || (p.marketState === 1 && p.marketEndTime <= nowSec))
-
-  // 🆕 NEW: on-chain Outcome enum -> label (0 = YES, 1 = NO, 2 = DRAW).
-  const outcomeLabel = (outcome: number): string => (outcome === 0 ? 'YES' : outcome === 1 ? 'NO' : 'DRAW')
-
-  // 🆕 NEW: human-readable expiry date for a market's on-chain end time.
-  const formatExpiryDate = (endTimeSec: number): string =>
-    new Date(endTimeSec * 1000).toLocaleString(undefined, {
-      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-    })
-
-  // 🆕 NEW: live countdown string (recomputed every second via `nowSec`).
-  const formatCountdown = (endTimeSec: number): string => {
-    let remaining = endTimeSec - nowSec
-    if (remaining <= 0) return 'Expired'
-    const days = Math.floor(remaining / 86400); remaining %= 86400
-    const hours = Math.floor(remaining / 3600); remaining %= 3600
-    const minutes = Math.floor(remaining / 60)
-    const seconds = remaining % 60
-    const pad = (n: number) => String(n).padStart(2, '0')
-    return days > 0
-      ? `${days}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`
-      : `${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`
+  const visibleTab = tabs.some(tab => tab.id === activeTab)
+    ? activeTab
+    : 'marketplace'
+  let panel: React.ReactNode
+  switch (visibleTab) {
+    case 'create':
+      panel = <CreateMarketPanel perform={perform} />
+      break
+    case 'positions':
+      panel = (
+        <PositionsPanel
+          markets={markets}
+          accountState={accountState}
+          runtimes={runtimes}
+          onOpen={openMarket}
+          perform={perform}
+        />
+      )
+      break
+    case 'creator':
+      panel = (
+        <CreatorPanel
+          markets={markets}
+          onOpen={openMarket}
+          perform={perform}
+        />
+      )
+      break
+    case 'governance':
+      panel = (
+        <GovernancePanel
+          markets={markets}
+          accountState={accountState}
+          runtimes={runtimes}
+          perform={perform}
+        />
+      )
+      break
+    case 'rewards':
+      panel = (
+        <RewardsPanel
+          member={member}
+          markets={markets}
+          accountState={accountState}
+          perform={perform}
+        />
+      )
+      break
+    case 'admin':
+      panel = (
+        <AdminPanel
+          markets={markets}
+          runtimes={runtimes}
+          members={members}
+          perform={perform}
+        />
+      )
+      break
+    case 'history':
+      panel = (
+        <HistoryPanel
+          chainActivities={chainActivities}
+          chainLoading={chainLoading}
+          chainError={chainError}
+          chainRange={chainRange}
+          canLoadOlder={canLoadOlder}
+          onLoadChain={() => void loadChainHistory(false)}
+          onLoadOlder={() => void loadChainHistory(true)}
+        />
+      )
+      break
+    default:
+      panel = (
+        <MarketplacePanel
+          markets={markets}
+          selected={selectedMarket}
+          accountState={accountState}
+          runtimes={runtimes}
+          onOpen={openMarket}
+          onClose={closeMarket}
+          perform={perform}
+        />
+      )
   }
 
   return (
-    <div className="min-h-screen bg-[#060117] text-slate-100 font-sans antialiased overflow-x-hidden pb-12">
-      {/* Upper Status Panel */}
-      <header className="fixed top-0 inset-x-0 h-20 bg-[#0d0022]/90 backdrop-blur-md border-b border-purple-950/40 z-40 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto h-full flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <Logo className="size-9 rounded-xl" />
-            <span className="hidden sm:inline font-heading text-lg font-bold tracking-tight text-white group-hover:text-primary transition-colors">InterPredict</span>
-          </Link>
-
-          <div className="flex items-center gap-2 sm:gap-4">
-            {/* 🆕 NEW: manual refresh, no more navigating away and back */}
-            <button
-              onClick={() => scanBlockchainRegistry()}
-              disabled={isScanning}
-              className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors mr-2 disabled:opacity-50"
-              title="Refresh"
-            >
-              <RefreshCw className={`size-3.5 ${isScanning ? 'animate-spin' : ''}`} /> <span className="hidden sm:inline">Refresh</span>
-            </button>
-            <Link href="/" className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors mr-2">
-              <Home className="size-3.5" /> <span className="hidden sm:inline">Home</span>
-            </Link>
-            {walletAddress ? (
-              <div className="flex items-center bg-purple-950/30 border border-purple-900/40 rounded-full pr-1.5 pl-4 py-1.5 gap-3">
-                <span className="font-mono text-xs text-purple-300">{`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}</span>
-                <button onClick={disconnectWallet} className="p-2 bg-purple-900/40 hover:bg-rose-950/40 rounded-full text-slate-400 hover:text-rose-400 transition-colors"><LogOut className="size-3.5" /></button>
-              </div>
-            ) : (
-              <button onClick={connectWallet} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary to-purple-600 text-xs sm:text-sm font-semibold rounded-full border border-purple-500/20 shadow-lg"><Wallet className="size-3.5" /><span>{t('connectBtn')}</span></button>
-            )}
-          </div>
+    <AppShell
+      tabs={tabs}
+      activeTab={visibleTab}
+      onTabChange={setActiveTab}
+      onRefresh={() => void refresh()}
+      refreshing={marketLoading || accountLoading}
+    >
+      {(marketError || accountError) && (
+        <div
+          role="alert"
+          className="mb-5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200"
+        >
+          {[marketError, accountError].filter(Boolean).join(' ')}
         </div>
-      </header>
-
-      {/* Main Framework Frame */}
-      <div className="max-w-7xl mx-auto pt-28 px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
-        <div className="lg:hidden w-full relative z-30">
-          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="w-full flex items-center justify-between bg-secondary/20 border border-secondary/30 rounded-xl px-4 py-3 text-sm font-semibold text-slate-200">
-            <div className="flex items-center gap-2"><Menu className="size-4 text-primary" /><span>{getTabLabel(activeTab)}</span></div>
-            {mobileMenuOpen ? <X className="size-4" /> : <ArrowRight className="size-4 rotate-90" />}
+      )}
+      {marketLoading && !markets.length ? (
+        <EmptyState>{t('loadingMarkets')}</EmptyState>
+      ) : (
+        panel
+      )}
+      {nextCursor && (
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={() => void loadMarkets(nextCursor, true)}
+            disabled={marketLoading}
+            className="focus-ring inline-flex rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:border-primary/40 hover:text-primary disabled:opacity-50"
+          >
+            {marketLoading ? t('loadingMarkets') : t('loadMore')}
           </button>
-          {mobileMenuOpen && (
-            <div className="absolute top-full inset-x-0 mt-2 bg-[#0d0022] border border-purple-950/80 rounded-xl p-2 shadow-2xl space-y-1 z-50">
-              {visibleTabs.map((tab) => (
-                <button key={tab} onClick={() => handleTabSelect(tab)} className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-primary text-white' : 'text-slate-400 hover:bg-purple-950/40'}`}>{getTabLabel(tab)}</button>
-              ))}
-            </div>
-          )}
         </div>
-
-        <aside className="hidden lg:flex flex-col gap-1.5 lg:col-span-1">
-          {visibleTabs.map((tab) => {
-            const Icon = { 'MarketPlace': Layers, 'Market Proposals': Hourglass, 'Pending Markets': Hourglass, 'Make Market': PlusCircle, 'Join DEC': Shield, 'History': History, 'DEC Members': Users, 'My Votes': Cpu, 'Unresolved Markets': Gavel, 'Resolved Markets': CheckCircle2, 'DEC Rewards': Coins }[tab]
-
-            return (
-              <button key={tab} onClick={() => setActiveTab(tab)} className={`flex items-center gap-2.5 px-4 py-3.5 rounded-xl font-semibold text-sm border transition-all ${activeTab === tab ? 'bg-primary text-white border-primary/50 shadow-md' : 'text-slate-400 border-transparent hover:bg-secondary/40'}`}>
-                <Icon className="size-4 shrink-0" /><span>{getTabLabel(tab)}</span>
-              </button>
-            )
-          })}
-        </aside>
-
-        <section className="lg:col-span-3 bg-secondary/10 border border-secondary/20 rounded-2xl p-5 sm:p-6 min-h-[500px] flex flex-col justify-between shadow-inner w-full overflow-hidden">
-          <div className="w-full">
-            <div className="mb-6 border-b border-purple-950/40 pb-5">
-              <h2 className="text-lg sm:text-xl font-bold font-heading">{t('statusPanel')}</h2>
-              <p className="text-purple-400 text-[10px] sm:text-xs font-semibold tracking-wide mt-1">{t('taglineSub')}</p>
-            </div>
-
-            {/* TAB: MARKETPLACE */}
-            {activeTab === 'MarketPlace' && (
-              <div className="w-full space-y-8">
-                <div>
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Active Markets</h3>
-                  <div className="grid grid-cols-1 gap-4 w-full">
-                    {activeMarkets.length === 0 ? (
-                      <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No active verified trading markets deployed yet.</div>
-                    ) : (
-                      activeMarkets.map((market) => (
-                        <div key={market.id} className="bg-secondary/40 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl relative">
-                          <div className="absolute top-4 right-4 size-12 rounded-xl bg-purple-950/40 border border-purple-900/30 overflow-hidden flex items-center justify-center">
-                            {/* 🔧 FIXED: this was rendering the single shared `marketImage`
-                                (whatever the CURRENT user last uploaded in the Make Market
-                                form) on EVERY card, since there's no per-market image storage
-                                on-chain or off-chain. Always show the default logo until real
-                                per-market image persistence is built. */}
-                            <Logo className="size-8 rounded-lg" />
-                          </div>
-                          <div className="flex justify-between items-center mb-3 pr-14">
-                            <span className="px-2 py-0.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded text-[10px] font-bold tracking-wider uppercase">Live Pool #{market.id}</span>
-                            <span className="text-[11px] text-slate-400 font-mono">{t('statusActive')}</span>
-                          </div>
-                          <h4 className="text-sm sm:text-base font-bold text-slate-200 mb-3 leading-snug pr-14">{market.question}</h4>
-                          {/* 🆕 NEW: per-market expiry date + live countdown timer */}
-                          <div className="mb-4 flex flex-col gap-1 text-[10px] font-mono">
-                            <span className="text-slate-400">Expires: <span className="text-slate-300">{formatExpiryDate(market.marketEndTime)}</span></span>
-                            <span className="text-purple-300">⏳ {formatCountdown(market.marketEndTime)}</span>
-                          </div>
-                          <div className="mb-4">
-                            <label className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block mb-1">{t('wagerTitle')}</label>
-                            <input type="number" value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} className="w-full bg-black/20 border border-purple-900/40 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none" />
-                          </div>
-                          <div className="grid grid-cols-2 gap-3 mb-4">
-                            <button onClick={() => executeTradeAction(market.id, 0)} className="py-2.5 bg-gradient-to-r from-purple-700 to-indigo-600 text-white font-bold text-xs rounded-lg uppercase">Predict YES</button>
-                            <button onClick={() => executeTradeAction(market.id, 1)} className="py-2.5 bg-gradient-to-r from-purple-700 to-indigo-600 text-white font-bold text-xs rounded-lg uppercase">Predict NO</button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {/* 🆕 NEW: expired-but-unresolved and resolved markets, split out so
-                    they can never be mistaken for still-tradable */}
-                <div>
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Inactive Markets</h3>
-                  <div className="grid grid-cols-1 gap-4 w-full">
-                    {inactiveMarkets.length === 0 ? (
-                      <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No inactive markets yet.</div>
-                    ) : (
-                      inactiveMarkets.map((market) => (
-                        <div key={market.id} className="bg-secondary/20 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl relative opacity-70">
-                          <div className="flex justify-between items-center mb-3">
-                            <span className="px-2 py-0.5 bg-slate-500/10 border border-slate-500/20 text-slate-400 rounded text-[10px] font-bold tracking-wider uppercase">Pool #{market.id}</span>
-                            <span className="text-[11px] text-slate-500 font-mono">{market.state === 2 ? 'Resolved' : 'Trading Closed'}</span>
-                          </div>
-                          <h4 className="text-sm sm:text-base font-bold text-slate-300 leading-snug mb-2">{market.question}</h4>
-                          {/* 🆕 NEW: expiry date shown for closed/resolved markets too */}
-                          <div className="flex flex-col gap-1 text-[10px] font-mono">
-                            <span className="text-slate-500">Expired: <span className="text-slate-400">{formatExpiryDate(market.marketEndTime)}</span></span>
-                            <span className="text-slate-500">⏳ {formatCountdown(market.marketEndTime)}</span>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB: PENDING MARKETS */}
-            {activeTab === 'Pending Markets' && (
-              <div className="grid grid-cols-1 gap-4 w-full">
-                {pendingProposals.length === 0 ? (
-                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No pending community proposals are currently awaiting curation.</div>
-                ) : (
-                  pendingProposals.map((market) => (
-                    <div key={market.id} className="bg-secondary/20 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl">
-                      <div className="flex justify-between items-center mb-3">
-                        <span className="text-xs font-mono text-purple-400 font-bold">Query Index #{market.id}</span>
-                        <span className="text-[10px] bg-purple-500/10 text-purple-300 px-2 py-0.5 rounded font-bold uppercase">{t('votingPhase')}</span>
-                      </div>
-                      <p className="text-sm font-medium text-slate-300 leading-normal">{market.question}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-
-            {/* TAB: MARKET PROPOSALS — only ever visible when hasJoinedDEC is true,
-                and hasJoinedDEC is now reset to false immediately on every wallet
-                switch, so a non-member can no longer see (or attempt) vote buttons
-                during the brief window before their real membership status loads. */}
-            {activeTab === 'Market Proposals' && (
-              <div className="grid grid-cols-1 gap-4 w-full">
-                {pendingProposals.length === 0 ? (
-                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No outstanding market proposals to vote on at this time.</div>
-                ) : (
-                  pendingProposals.map((market) => (
-                    (() => {
-                      const votingOpen = market.votingEndTime > 0 && nowSec < market.votingEndTime
-                      return (
-                        <div key={market.id} className="bg-secondary/30 border border-purple-500/20 rounded-xl p-4 sm:p-5 w-full max-w-xl">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs font-mono text-primary font-bold">Proposal #{market.id}</span>
-                            <span className="text-[11px] font-mono text-yellow-400">{votingOpen ? 'Curation Active' : 'Curation Ended'}</span>
-                          </div>
-                          <p className="text-sm font-semibold mb-3 text-slate-200">{market.question}</p>
-                          {market.votingEndTime > 0 && (
-                            <p className="text-[10px] font-mono text-purple-300 mb-3">
-                              {votingOpen ? <>⏳ Voting closes in {formatCountdown(market.votingEndTime)}</> : <>Voting closed {formatExpiryDate(market.votingEndTime)}</>}
-                            </p>
-                          )}
-                          {votingOpen ? (
-                            <div className="grid grid-cols-2 gap-3">
-                              <button onClick={() => castVoteOnChain(market.id, true)} className="py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg">Vote FOR (Graduate)</button>
-                              <button onClick={() => castVoteOnChain(market.id, false)} className="py-2.5 bg-rose-600 text-white text-xs font-bold rounded-lg">Vote AGAINST (Reject)</button>
-                            </div>
-                          ) : (
-                            // 🆕 FIX #4: after the curation window closes, anyone can finalize —
-                            // the contract graduates it to the MarketPlace (votes FOR win) or
-                            // rejects it (refunding 90% of the 1 tITL stake to the creator).
-                            <button onClick={() => handleFinalizeProposal(market.id)} className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg uppercase">Finalize (Graduate / Reject)</button>
-                          )}
-                        </div>
-                      )
-                    })()
-                  ))
-                )}
-              </div>
-            )}
-
-
-            {/* TAB: MAKE MARKET */}
-            {activeTab === 'Make Market' && (
-              <div className="space-y-4 w-full max-w-xl">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="text-xs font-bold text-slate-400 block mb-1.5">{t('marketStatement')}</label>
-                    <textarea placeholder="e.g., Will Bitcoin settle above $120,000 on the global macro index deadline?" value={marketDesc} onChange={(e) => setMarketDesc(e.target.value)} className="w-full h-24 bg-black/20 border border-purple-900/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary resize-none text-slate-200" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 block mb-1.5">{t('uploadImageLabel')}</label>
-                    <div onClick={() => fileInputRef.current?.click()} className="h-24 bg-black/30 border border-dashed border-purple-900/50 rounded-xl flex flex-col items-center justify-center cursor-pointer p-2 relative overflow-hidden text-center">
-                      <input type="file" ref={fileInputRef} onChange={handleImageChange} accept="image/*" className="hidden" />
-                      {marketImage ? <img src={marketImage} alt="Preview" className="size-full object-cover rounded-lg" /> : <><Upload className="size-5 text-purple-400 mb-1 mx-auto" /><span className="text-[9px] text-slate-400 leading-tight">{t('uploadPlaceholder')}</span></>}
-                    </div>
-                    <p className="text-[9px] text-slate-500 mt-1">Preview only — custom images aren't saved to the market yet.</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 block mb-1.5">{t('votingEndDate')}</label>
-                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-black/20 border border-purple-900/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary text-slate-200" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 block mb-1.5">Time</label>
-                    <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-black/20 border border-purple-900/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary text-slate-200" />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-1.5">
-                    <label className="text-xs font-bold text-slate-400">{t('outcomesTitle')}</label>
-                    {outcomes.length < 4 && <button type="button" onClick={addOutcomeChoice} className="text-[11px] text-primary font-semibold">{t('addChoiceBtn')}</button>}
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {outcomes.map((outcome, idx) => (
-                      <div key={idx} className="flex gap-2 items-center">
-                        <div className="relative flex-1">
-                          <span className="absolute left-3 top-2.5 text-[10px] font-mono text-slate-500 font-bold uppercase">Option {idx + 1}</span>
-                          <input type="text" value={outcome} placeholder={idx === 0 ? "YES" : idx === 1 ? "NO" : `Choice ${idx + 1}`} onChange={(e) => handleOutcomeTextChange(idx, e.target.value)} className="w-full bg-black/20 border border-purple-900/50 rounded-xl pl-16 pr-3 py-2 text-sm focus:outline-none text-slate-200 font-mono" />
-                        </div>
-                        {outcomes.length > 2 && <button type="button" onClick={() => removeOutcomeChoice(idx)} className="p-2 bg-red-950/20 text-red-400 text-xs font-bold rounded-xl">{t('removeChoiceBtn')}</button>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <button onClick={handleCreateMarketSubmit} className="w-full py-3 bg-gradient-to-r from-primary to-purple-600 text-white text-xs font-bold rounded-xl shadow-md">
-                  {walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase() ? t('teamBypass') : t('userPropose')}
-                </button>
-              </div>
-            )}
-
-            {/* TAB: JOIN DEC */}
-            {activeTab === 'Join DEC' && (
-              <div className="p-6 bg-gradient-to-br from-purple-950/20 to-indigo-950/20 border border-purple-900/30 rounded-xl text-center w-full max-w-xl">
-                <Shield className="size-10 mx-auto text-primary mb-3" />
-                <p className="text-sm font-semibold mb-1 text-slate-200">{t('assessorTitle')}</p>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">{t('assessorSub')}</p>
-                <button onClick={handleJoinCommitteeSubmit} className="px-6 py-2.5 bg-primary text-white font-bold text-xs rounded-xl">{t('assessorBtn')}</button>
-              </div>
-            )}
-
-            {/* TAB: MY VOTES — 🆕 NEW: the connected wallet's own positions, now
-                split into Active (still-tradable, with a live countdown) and
-                Ended (past their end time or resolved). Ended positions expose the
-                voter-driven "Resolve Market" ping and, once settled, Cash Out. */}
-            {activeTab === 'My Votes' && (
-              <div className="space-y-8 w-full">
-                <p className="text-[10px] text-slate-500">Positions can be cashed out once a market resolves. Withdrawing a position before resolution isn't currently supported.</p>
-
-                {myPositions.length === 0 ? (
-                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">You haven't placed any predictions yet.</div>
-                ) : (
-                  <>
-                    {/* ACTIVE POSITIONS */}
-                    <div>
-                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Active</h3>
-                      <div className="space-y-4">
-                        {activePositions.length === 0 ? (
-                          <div className="p-6 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No active positions.</div>
-                        ) : (
-                          activePositions.map((pos) => (
-                            <div key={pos.marketId} className="bg-secondary/30 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl">
-                              <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-mono text-primary font-bold">Pool #{pos.marketId}</span>
-                                <span className="text-[11px] font-mono text-emerald-400">Open</span>
-                              </div>
-                              <p className="text-sm font-semibold mb-3 text-slate-200">{pos.question}</p>
-                              <div className="flex gap-4 text-[11px] font-mono text-slate-400 mb-2">
-                                <span>YES: {ethers.formatEther(pos.yesAmount)} tITL</span>
-                                <span>NO: {ethers.formatEther(pos.noAmount)} tITL</span>
-                              </div>
-                              <div className="flex flex-col gap-1 text-[10px] font-mono">
-                                <span className="text-slate-400">Expires: <span className="text-slate-300">{formatExpiryDate(pos.marketEndTime)}</span></span>
-                                <span className="text-purple-300">⏳ {formatCountdown(pos.marketEndTime)}</span>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-
-                    {/* ENDED POSITIONS */}
-                    <div>
-                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Inactive</h3>
-                      <div className="space-y-4">
-                        {endedPositions.length === 0 ? (
-                          <div className="p-6 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No ended positions.</div>
-                        ) : (
-                          endedPositions.map((pos) => {
-                            const isResolved = pos.marketState === 2
-                            const wonYes = isResolved && (pos.winningOutcome === 0 || pos.winningOutcome === 2) && BigInt(pos.yesAmount) > BigInt(0)
-                            const wonNo = isResolved && (pos.winningOutcome === 1 || pos.winningOutcome === 2) && BigInt(pos.noAmount) > BigInt(0)
-                            const canCashOut = wonYes || wonNo
-                            return (
-                              <div key={pos.marketId} className="bg-secondary/20 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl opacity-95">
-                                <div className="flex justify-between items-center mb-2">
-                                  <span className="text-xs font-mono text-primary font-bold">Pool #{pos.marketId}</span>
-                                  <span className="text-[11px] font-mono text-slate-400">{isResolved ? `Resolved · ${outcomeLabel(pos.winningOutcome)} won` : 'Trading Closed'}</span>
-                                </div>
-                                <p className="text-sm font-semibold mb-3 text-slate-200">{pos.question}</p>
-                                <div className="flex gap-4 text-[11px] font-mono text-slate-400 mb-2">
-                                  <span>YES: {ethers.formatEther(pos.yesAmount)} tITL</span>
-                                  <span>NO: {ethers.formatEther(pos.noAmount)} tITL</span>
-                                </div>
-                                <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(pos.marketEndTime)}</p>
-                                {isResolved ? (
-                                  claimedMarkets.includes(pos.marketId) ? (
-                                    <div className="w-full py-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-lg uppercase flex items-center justify-center gap-1.5">
-                                      <CheckCircle2 className="size-3.5" /> Claimed
-                                    </div>
-                                  ) : canCashOut ? (
-                                    <button onClick={() => handleCashOut(pos.marketId)} className="w-full py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg uppercase">Cash Out</button>
-                                  ) : (
-                                    <p className="text-[11px] font-mono text-rose-400">No payout — your side didn't win.</p>
-                                  )
-                                ) : pos.oracleResolutionRequested ? (
-
-                                  <p className="text-[11px] font-mono text-yellow-400">⏳ Awaiting team resolution</p>
-                                ) : (
-                                  <button onClick={() => handleRequestResolution(pos.marketId)} className="w-full py-2.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-lg uppercase">Resolve Market</button>
-                                )}
-                              </div>
-                            )
-                          })
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* TAB: UNRESOLVED MARKETS — 🆕 NEW: oracle/team-only settlement queue.
-                Lists ended markets that voters have pinged for resolution; the
-                oracle declares the winning outcome (YES/NO/DRAW) via resolveMarket. */}
-            {activeTab === 'Unresolved Markets' && (
-              <div className="space-y-4 w-full">
-                {(() => {
-                  // 🆕 FIX #7/#8: every market whose trading window has closed but that
-                  // hasn't been settled yet lands here automatically. VOTERS see a
-                  // "Resolve Market" button that pings the team; the TEAM/ORACLE sees
-                  // the winner-selection buttons (YES/NO/DRAW) and settles it.
-                  const expiredUnresolved = allOnChainMarkets.filter(m => m.state === 1 && m.marketEndTime <= nowSec)
-                  if (!walletAddress) {
-                    return <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">Connect your wallet to view markets awaiting resolution.</div>
-                  }
-                  if (expiredUnresolved.length === 0) {
-                    return <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No markets awaiting resolution.</div>
-                  }
-                  return (
-                    <>
-                      <p className="text-[10px] text-slate-500 mb-2">
-                        {isOracle
-                          ? 'Ended markets awaiting settlement. Choose the winning outcome — winners can then cash out, losing bets are forfeited.'
-                          : 'These markets have ended and need settlement. Tap “Resolve Market” to ping the team to declare the winning outcome.'}
-                      </p>
-                      {expiredUnresolved.map((market) => (
-                        <div key={market.id} className="bg-secondary/30 border border-yellow-500/20 rounded-xl p-4 sm:p-5 w-full max-w-xl">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs font-mono text-primary font-bold">Pool #{market.id}</span>
-                            <span className="text-[11px] font-mono text-yellow-400">{market.oracleResolutionRequested ? 'Awaiting Settlement' : 'Ended — Needs Resolution'}</span>
-                          </div>
-                          <p className="text-sm font-semibold mb-3 text-slate-200">{market.question}</p>
-                          <div className="flex gap-4 text-[11px] font-mono text-slate-400 mb-2">
-                            <span>YES pool: {ethers.formatEther(market.totalYesPool)} tITL</span>
-                            <span>NO pool: {ethers.formatEther(market.totalNoPool)} tITL</span>
-                          </div>
-                          <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(market.marketEndTime)}</p>
-                          {isOracle ? (
-                            <>
-                              <p className="text-[11px] font-semibold text-slate-300 mb-2">Which option wins?</p>
-                              <div className="grid grid-cols-3 gap-3">
-                                <button onClick={() => handleResolveMarket(market.id, 0)} className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg uppercase">YES</button>
-                                <button onClick={() => handleResolveMarket(market.id, 1)} className="py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg uppercase">NO</button>
-                                <button onClick={() => handleResolveMarket(market.id, 2)} className="py-2.5 bg-slate-600 hover:bg-slate-500 text-white text-xs font-bold rounded-lg uppercase">Draw</button>
-                              </div>
-                            </>
-                          ) : market.oracleResolutionRequested ? (
-                            <p className="text-[11px] font-mono text-yellow-400">⏳ Awaiting team resolution</p>
-                          ) : (
-                            <button onClick={() => handleRequestResolution(market.id)} className="w-full py-2.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-lg uppercase">Resolve Market</button>
-                          )}
-                        </div>
-                      ))}
-                    </>
-                  )
-                })()}
-              </div>
-            )}
-
-
-            {/* TAB: RESOLVED MARKETS — 🆕 NEW: settled markets with their winning
-                outcome. Winners can cash out here as well. */}
-            {activeTab === 'Resolved Markets' && (
-              <div className="space-y-4 w-full">
-                {resolvedMarkets.length === 0 ? (
-                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No markets have been resolved yet.</div>
-                ) : (
-                  resolvedMarkets.map((market) => (
-                    <div key={market.id} className="bg-secondary/20 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs font-mono text-primary font-bold">Pool #{market.id}</span>
-                        <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-[10px] font-bold tracking-wider uppercase">{outcomeLabel(market.winningOutcome)} Won</span>
-                      </div>
-                      <p className="text-sm font-semibold mb-3 text-slate-200">{market.question}</p>
-                      <div className="flex gap-4 text-[11px] font-mono text-slate-400 mb-2">
-                        <span>YES pool: {ethers.formatEther(market.totalYesPool)} tITL</span>
-                        <span>NO pool: {ethers.formatEther(market.totalNoPool)} tITL</span>
-                      </div>
-                      <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(market.marketEndTime)}</p>
-                      {walletAddress && (
-                        claimedMarkets.includes(market.id) ? (
-                          <div className="w-full py-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-lg uppercase flex items-center justify-center gap-1.5">
-                            <CheckCircle2 className="size-3.5" /> Claimed
-                          </div>
-                        ) : (
-                          <button onClick={() => handleCashOut(market.id)} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg uppercase">Cash Out (winners only)</button>
-                        )
-                      )}
-
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-
-            {/* TAB: HISTORY */}
-            {activeTab === 'History' && (
-              <div className="space-y-4 w-full">
-                <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-3 font-mono">{t('ledgerTitle')}</h4>
-                {persistentLogs.length === 0 ? (
-                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">{t('noLogs')}</div>
-                ) : (
-                  <div className="space-y-3">
-                    {persistentLogs.map((log) => (
-                      <div key={log.id} className="bg-black/30 border border-purple-950/60 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-mono font-bold bg-purple-950 border border-purple-900 px-2 py-0.5 rounded text-purple-300">{log.type}</span>
-                            <span className="text-[11px] text-slate-500 font-mono">{log.timestamp}</span>
-                          </div>
-                          <p className="text-sm font-semibold text-slate-200 leading-snug">{log.description}</p>
-                          <p className="text-xs text-slate-400 font-mono">{log.detail}</p>
-                        </div>
-                        <div className="shrink-0 sm:text-right">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase border ${log.status === 'Success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/10 border-rose-500/30 text-rose-400'}`}>● {log.status}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* TAB: ADMIN DEC MEMBERS DIRECTORY PANEL */}
-            {activeTab === 'DEC Members' && walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase() && (
-              <div className="space-y-4 w-full">
-                <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-4 font-mono">● {t('adminPanel')}</h4>
-                {blockchainDecList.length === 0 ? (
-                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No decentralized curation members registered on-chain.</div>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border border-purple-950/60 bg-black/30 shadow-md">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-purple-950/80 bg-purple-950/15 text-[10px] font-mono font-bold uppercase tracking-wider text-purple-300">
-                          <th className="p-4">{t('memberAddress')}</th>
-                          <th className="p-4">{t('registrationTime')}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-purple-950/40 font-mono text-xs">
-                        {blockchainDecList.map((member, index) => (
-                          <tr key={index} className="hover:bg-purple-950/5 transition-colors">
-                            <td className="p-4 text-slate-200">{member}</td>
-                            <td className="p-4 text-slate-400">0.1 tITL Stake Verified</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* TAB: DEC REWARDS — 🆕 NEW: DEC committee members claim their equal
-                share of the DEC Pool. The pool accrues the 2% DEC portion of the
-                5% platform fee on every winner cash-out; it's split equally among
-                all committee members, and each member can claim their outstanding
-                share here. */}
-            {activeTab === 'DEC Rewards' && hasJoinedDEC && (
-              <div className="space-y-6 w-full max-w-xl">
-                <div className="p-6 bg-gradient-to-br from-purple-950/30 to-indigo-950/20 border border-purple-900/30 rounded-2xl">
-                  <div className="flex items-center gap-2.5 mb-4">
-                    <Coins className="size-6 text-primary" />
-                    <h3 className="text-sm font-bold text-slate-100">DEC Committee Rewards</h3>
-                  </div>
-                  <p className="text-xs text-slate-400 leading-relaxed mb-5">
-                    Platform revenue routed to the DEC Pool (the committee&apos;s share of the 5% platform fee on every winning cash-out) is split <span className="text-purple-300 font-semibold">equally</span> among all committee members. Claim your outstanding share below.
-                  </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-                    <div className="bg-black/30 border border-purple-950/60 rounded-xl p-3">
-                      <p className="text-[9px] font-mono uppercase tracking-wider text-slate-500 mb-1">DEC Pool</p>
-                      <p className="text-sm font-bold text-slate-200 font-mono">{ethers.formatEther(decPoolTotal)} tITL</p>
-                    </div>
-                    <div className="bg-black/30 border border-purple-950/60 rounded-xl p-3">
-                      <p className="text-[9px] font-mono uppercase tracking-wider text-slate-500 mb-1">Members</p>
-                      <p className="text-sm font-bold text-slate-200 font-mono">{decMemberCount}</p>
-                    </div>
-                    <div className="bg-black/30 border border-emerald-900/50 rounded-xl p-3">
-                      <p className="text-[9px] font-mono uppercase tracking-wider text-emerald-500 mb-1">Your Claimable</p>
-                      <p className="text-sm font-bold text-emerald-400 font-mono">{ethers.formatEther(decRewardsClaimable)} tITL</p>
-                    </div>
-                  </div>
-
-                  {BigInt(decRewardsClaimable || '0') > BigInt(0) ? (
-                    <button onClick={handleClaimDecRewards} className="w-full py-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-xs font-bold rounded-xl uppercase shadow-md">
-                      Claim {ethers.formatEther(decRewardsClaimable)} tITL
-                    </button>
-                  ) : (
-                    <div className="p-4 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">
-                      No rewards available to claim yet. Rewards accrue as markets settle and winners cash out.
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-          </div>
-
-          {txStatus && <div className="mt-6 p-4 bg-purple-950/40 border border-purple-500/20 rounded-xl text-xs text-purple-300 font-mono animate-pulse">{txStatus}</div>}
-
-        </section>
-      </div>
-    </div>
+      )}
+    </AppShell>
   )
 }

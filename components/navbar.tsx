@@ -16,9 +16,9 @@ export function Navbar() {
 
   // 🔮 Dynamic links array declared inside the component so it can use the translation engine
   const links = [
-    { label: t('navMarkets'), href: "#markets" },
-    { label: t('howItWorksBtn'), href: "#architecture" },
-    { label: t('navEcosystem'), href: "#ecosystem" },
+    { label: t('navMarkets'), href: "/#markets" },
+    { label: t('howItWorksBtn'), href: "/#architecture" },
+    { label: t('navEcosystem'), href: "/#ecosystem" },
     { label: t('navWhitepaper'), href: "/whitepaper" },
     {
       label: t('navAbout'),
@@ -27,30 +27,25 @@ export function Navbar() {
     },
   ]
 
-  // 🔄 Hard refresh handler applied cleanly to the home link
-  const handleLogoClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    window.location.href = window.location.origin + window.location.pathname + '?nocache=' + Date.now();
-  };
-
   return (
     <header className="fixed inset-x-0 top-0 z-50">
       <div className="mx-auto mt-4 max-w-7xl px-4 sm:px-6">
         <nav className="nav-glass flex items-center justify-between rounded-2xl px-4 py-3 sm:px-6">
 
-          {/* Logo wrapper link with the hard refresh click handler attached */}
-          <a href="/" onClick={handleLogoClick} className="flex items-center gap-2.5 cursor-pointer">
+          <Link href="/" className="flex items-center gap-2.5">
             <Logo className="size-9 rounded-xl transition hover:opacity-80 active:scale-95" />
             <span className="font-heading text-lg font-bold tracking-tight text-foreground">
               InterPredict
             </span>
-          </a>
+          </Link>
 
           <div className="hidden items-center gap-8 md:flex">
             {links.map((link) => (
               <a
                 key={link.label}
                 href={link.href}
+                target={link.external ? "_blank" : undefined}
+                rel={link.external ? "noopener noreferrer" : undefined}
                 className="text-sm font-semibold text-foreground transition-[color,text-shadow] duration-200 hover:text-primary hover:[text-shadow:0_0_16px_rgba(98,0,238,0.22)]"
               >
                 {link.label}
@@ -76,6 +71,10 @@ export function Navbar() {
           <div className="flex items-center gap-1 md:hidden">
             <ThemeToggle />
             <button
+              type="button"
+              aria-label={open ? t('close') : t('launchBtn')}
+              aria-expanded={open}
+              aria-controls="site-mobile-menu"
               className="rounded-xl p-2 text-foreground transition-colors hover:bg-secondary"
               onClick={() => setOpen((v) => !v)}
             >
@@ -86,11 +85,13 @@ export function Navbar() {
 
         {/* MOBILE LAYOUT COLLAPSE MENU CHANNELS */}
         {open && (
-          <div className="nav-glass mt-2 flex flex-col gap-2 rounded-2xl p-3 md:hidden">
+          <div id="site-mobile-menu" className="nav-glass mt-2 flex flex-col gap-2 rounded-2xl p-3 md:hidden">
             {links.map((link) => (
               <a
                 key={link.label}
                 href={link.href}
+                target={link.external ? "_blank" : undefined}
+                rel={link.external ? "noopener noreferrer" : undefined}
                 onClick={() => setOpen(false)}
                 className="rounded-lg px-3 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-secondary/80 hover:text-primary"
               >
@@ -98,7 +99,7 @@ export function Navbar() {
               </a>
             ))}
             <div className="flex justify-between items-center px-3 py-1.5 border-t border-border/40 mt-1 pt-3">
-              <span className="text-xs text-muted-foreground font-medium">Language:</span>
+              <span className="text-xs text-muted-foreground font-medium">{t('language')}:</span>
               <LanguageSelector />
             </div>
             <Link

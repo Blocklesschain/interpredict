@@ -1,80 +1,152 @@
-# InterPredict
+# InterPredict V2
 
-**InterPredict** is a community-governed prediction marketplace built on the Interlink Network. It supports binary and categorical prediction markets, real-time trading via a central limit order book, committee-based curation, and a long-term vision for fully decentralized governance.
+InterPredict is an ERC-20-collateralized, multi-outcome prediction-market
+application for the Interlink Network. Community markets pass through
+Decentralized Ecosystem Curation (DEC); team-role markets activate immediately
+with fully funded seed liquidity. Trading, proposal voting, resolution voting,
+evidence escalation, claims, and liabilities are enforced on-chain.
 
-## What This Repo Contains
+> **Release status:** local production-readiness review. No push, merge,
+> testnet deployment, production deployment, or live address change is
+> authorized by this repository state.
 
-- `app/` - Next.js App Router pages and layouts
-- `components/` - reusable UI components and page sections
-- `lib/` - application utilities and shared helper code
-- `public/` - static assets such as images and icons
-- `styles/` / `app/globals.css` - global styling and Tailwind configuration entry points
+## V2 behavior
 
-## Tech Stack
+- two, three, or four outcomes;
+- one-token community proposal fee plus ten-token seed;
+- team-market seed of at least ten tokens;
+- 24-hour community proposal vote;
+- trade-time 50-basis-point fee;
+- three-hour DEC resolution vote;
+- epoch-frozen DEC eligibility and upward-rounded 50% quorum;
+- 24-hour evidence-backed admin verification with permissionless timeout;
+- permissionless voter reputation settlement;
+- vested DEC rewards that remain claimable after later ineligibility;
+- exact ERC-20 transfer checks;
+- global and per-market emergency pauses;
+- explicit proposal, creator-seed, trading, creator-fee, and DEC liabilities.
 
-- Next.js 16.2.6 (App Router)
-- React 19
-- TypeScript 5.7.3
-- Tailwind CSS 4
-- shadcn/ui components
-- lucide-react icons
+V2 is a breaking redeployment from the native-currency binary V1 contract. See
+[Migration Guide](docs/MIGRATION_GUIDE.md).
 
-## Local Setup
+## Repository
 
-Recommended package manager: `npm`, `pnpm`, or `yarn`
+| Path | Purpose |
+| --- | --- |
+| `app/` | Next.js routes, connected application, and server APIs |
+| `components/` | Shared responsive UI and protocol workflow components |
+| `lib/` | Generated ABI, canonical decoders, lifecycle/history helpers |
+| `interpredict-deploy/` | Solidity, Hardhat tests, artifact gates, and deployment scripts |
+| `docs/` | Specification, architecture, compliance, audit, diagrams, and runbooks |
+
+The main contract is externally linked to `InterPredictReader`. The current
+optimized runtimes are 23,619 bytes for `InterPredict` and 3,046 bytes for the
+reader. Both deployed bytecodes and the link address must be verified.
+
+## Local setup
+
+Use npm with the checked-in lockfile:
 
 ```bash
-npm install
+npm ci
+copy .env.example .env.local
 npm run dev
 ```
 
-or with pnpm:
+Open `http://localhost:3000`. Populate only local/test values; never commit
+private keys, RPC bearer tokens, cron secrets, or production configuration.
 
-```bash
-pnpm install
-pnpm dev
+Important application variables:
+
+```text
+NEXT_PUBLIC_CONTRACT_ADDRESS=<InterPredict V2>
+NEXT_PUBLIC_SETTLEMENT_TOKEN_ADDRESS=<token returned by settlementToken()>
+NEXT_PUBLIC_CONTRACT_DEPLOYMENT_BLOCK=<first V2 event block>
+NEXT_PUBLIC_SETTLEMENT_TOKEN_SYMBOL=tITL
+INTERLINK_RPC_URL=<authenticated RPC>
+INTERLINK_CHAIN_ID=<exact expected chain>
+SERVICE_WALLET_PRIVATE_KEY=<dedicated minimally funded service signer>
+CRON_SECRET=<high-entropy keeper bearer secret>
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+The deployment block is strongly recommended: wallet history loads logs in
+bounded block ranges and otherwise must begin at block zero.
 
-## Available Scripts
+## Validation
 
-- `npm run dev` - start the development server
-- `npm run build` - build the app for production
-- `npm run start` - start the production server after build
-- `npm run lint` - run ESLint across the project
+Application:
 
-## Project Notes for Developers
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
 
-- The entry layout is `app/layout.tsx`
-- Main homepage content is in `app/page.tsx`
-- Whitepaper content lives in `app/whitepaper/page.tsx`
-- Shared UI sections are in `components/`
-- Global styles are loaded from `app/globals.css`
-- The project currently uses `@vercel/analytics` in production builds for analytics tracking
+Protocol:
 
-## Recommended Workflow
+```bash
+cd interpredict-deploy
+npm ci
+npm run compile
+npm test
+npm run test:fuzz
+npm run test:tooling
+npm run abi:check
+npm run size:check
+npm run storage:check
+```
 
-1. Pull the latest branch
-2. Install dependencies
-3. Start the dev server
-4. Make edits in `app/`, `components/`, or `lib/`
-5. Verify changes at `http://localhost:3000`
+Root `npm run validate` and deploy-package `npm run validate` compose the
+release checks. Also run `git diff --check`. Dependency-audit and static-analysis
+findings require human review; do not apply a breaking automatic audit fix.
 
-## Contact & Social
+## ABI and APIs
 
-If you want to reach the InterPredict team or discuss the project, connect with us on:
+The public `getMarket`, `getMarketOutcomes`, and `getMarketPricing` getters
+return canonical ABI-encoded bytes to keep the main runtime below EIP-170. All
+clients decode through `lib/interpredictProtocol.ts`; the artifact tooling
+guards ABI, storage layout, decoder schema, linked bytecode, and size drift.
 
-- Telegram: [https://t.me/InterPredict](https://t.me/InterPredict)
-- X: [https://x.com/InterPredict](https://x.com/InterPredict)
+`GET /api/markets` uses bounded newest-first offset pagination by default.
+Treat `nextCursor` as opaque. It supports `order=asc|desc`, exact `id=<marketId>`
+lookup, filters, partial-failure telemetry, pause/deadline/quorum data, and
+settlement-token metadata.
 
-## Contribution
+The authenticated keeper performs only deterministic or permissionless
+lifecycle calls. It is not an oracle and is not required for on-chain deadline
+enforcement. Its in-process overlap flag is not a distributed lock; production
+requires one logical scheduler and distributed lease or nonce coordination.
 
-Feel free to open issues, submit PRs, or extend the whitepaper and frontend content. Keep updates consistent with the existing Next.js + Tailwind structure.
+## Deployment
 
-## Useful Links
+Do not deploy until the audit and go/no-go are approved. The reviewed process
+deploys and verifies `InterPredictReader` first, then the linked main contract,
+then roles and DEC membership. It never updates frontend production addresses
+automatically.
 
-- [Next.js Documentation](https://nextjs.org/docs)
-- [Tailwind CSS](https://tailwindcss.com/)
-- [TypeScript](https://www.typescriptlang.org/)
-- [shadcn/ui](https://ui.shadcn.com/)
+Read:
+
+- [Deployment Runbook](docs/DEPLOYMENT.md)
+- [Developer Guide](docs/DEVELOPER_GUIDE.md)
+- [Protocol Architecture](docs/PROTOCOL_UPGRADE_ARCHITECTURE.md)
+- [Protocol Diagrams](docs/PROTOCOL_DIAGRAMS.md)
+- [Complete Specification](docs/INTERPREDICT_COMPLETE_PROTOCOL_SPECIFICATION.md)
+- [Compliance Matrix](docs/PROTOCOL_COMPLIANCE_MATRIX.md)
+- [Post-Implementation Audit](docs/POST_IMPLEMENTATION_AUDIT.md)
+- [UI Regression Review](docs/UI_REGRESSION_REVIEW.md)
+
+## Security boundaries
+
+- Verify chain, main address, reader link, token address/decimals/code hash, and
+  deployment block independently.
+- Configure only exact-transfer, non-rebasing ERC-20 settlement tokens.
+- Use a multisig/contract admin and least-privilege operational accounts.
+- Keep the keeper signer separate from every administrative role.
+- Never disclose a seed phrase or private key to this application.
+- Tests and internal review reduce risk but do not replace an independent audit.
+
+## Community
+
+- Telegram: [t.me/InterPredict](https://t.me/InterPredict)
+- X: [x.com/InterPredict](https://x.com/InterPredict)

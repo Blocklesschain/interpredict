@@ -1,0 +1,1106 @@
+{
+  "compiler": "0.8.20",
+  "contract": "InterPredict",
+  "sourceName": "contracts/InterPredict.sol",
+  "storage": [
+    {
+      "astId": 26,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "_roles",
+      "offset": 0,
+      "slot": "0",
+      "type": "t_mapping(t_bytes32,t_struct(RoleData)21_storage)"
+    },
+    {
+      "astId": 1118,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "_paused",
+      "offset": 0,
+      "slot": "1",
+      "type": "t_bool"
+    },
+    {
+      "astId": 5295,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "treasury",
+      "offset": 1,
+      "slot": "1",
+      "type": "t_address"
+    },
+    {
+      "astId": 5305,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "totalMarkets",
+      "offset": 0,
+      "slot": "2",
+      "type": "t_uint256"
+    },
+    {
+      "astId": 5307,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "activeDECMemberCount",
+      "offset": 0,
+      "slot": "3",
+      "type": "t_uint256"
+    },
+    {
+      "astId": 5309,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "totalProposalSeedLiability",
+      "offset": 0,
+      "slot": "4",
+      "type": "t_uint256"
+    },
+    {
+      "astId": 5311,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "totalCreatorSeedLiability",
+      "offset": 0,
+      "slot": "5",
+      "type": "t_uint256"
+    },
+    {
+      "astId": 5313,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "totalTradingCollateralLiability",
+      "offset": 0,
+      "slot": "6",
+      "type": "t_uint256"
+    },
+    {
+      "astId": 5315,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "totalCreatorFeeLiability",
+      "offset": 0,
+      "slot": "7",
+      "type": "t_uint256"
+    },
+    {
+      "astId": 5317,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "totalDECRewardLiability",
+      "offset": 0,
+      "slot": "8",
+      "type": "t_uint256"
+    },
+    {
+      "astId": 5322,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "_markets",
+      "offset": 0,
+      "slot": "9",
+      "type": "t_mapping(t_uint256,t_struct(Market)5260_storage)"
+    },
+    {
+      "astId": 5327,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "_outcomes",
+      "offset": 0,
+      "slot": "10",
+      "type": "t_mapping(t_uint256,t_array(t_string_storage)dyn_storage)"
+    },
+    {
+      "astId": 5332,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "_virtualBalances",
+      "offset": 0,
+      "slot": "11",
+      "type": "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)"
+    },
+    {
+      "astId": 5337,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "_totalShares",
+      "offset": 0,
+      "slot": "12",
+      "type": "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)"
+    },
+    {
+      "astId": 5345,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "userShares",
+      "offset": 0,
+      "slot": "13",
+      "type": "t_mapping(t_uint256,t_mapping(t_address,t_mapping(t_uint8,t_uint256)))"
+    },
+    {
+      "astId": 5352,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "proposalVotes",
+      "offset": 0,
+      "slot": "14",
+      "type": "t_mapping(t_uint256,t_mapping(t_address,t_enum(ProposalVote)5105))"
+    },
+    {
+      "astId": 5358,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "resolutionVotes",
+      "offset": 0,
+      "slot": "15",
+      "type": "t_mapping(t_uint256,t_mapping(t_address,t_uint8))"
+    },
+    {
+      "astId": 5364,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "resolutionVoteCounts",
+      "offset": 0,
+      "slot": "16",
+      "type": "t_mapping(t_uint256,t_mapping(t_uint8,t_uint32))"
+    },
+    {
+      "astId": 5370,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "hasClaimedPayout",
+      "offset": 0,
+      "slot": "17",
+      "type": "t_mapping(t_uint256,t_mapping(t_address,t_bool))"
+    },
+    {
+      "astId": 5376,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "resolutionReputationSettled",
+      "offset": 0,
+      "slot": "18",
+      "type": "t_mapping(t_uint256,t_mapping(t_address,t_bool))"
+    },
+    {
+      "astId": 5382,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "hasTradedInMarket",
+      "offset": 0,
+      "slot": "19",
+      "type": "t_mapping(t_uint256,t_mapping(t_address,t_bool))"
+    },
+    {
+      "astId": 5388,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "userNetContribution",
+      "offset": 0,
+      "slot": "20",
+      "type": "t_mapping(t_uint256,t_mapping(t_address,t_uint256))"
+    },
+    {
+      "astId": 5392,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "participantCount",
+      "offset": 0,
+      "slot": "21",
+      "type": "t_mapping(t_uint256,t_uint256)"
+    },
+    {
+      "astId": 5396,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "tradeCount",
+      "offset": 0,
+      "slot": "22",
+      "type": "t_mapping(t_uint256,t_uint256)"
+    },
+    {
+      "astId": 5401,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "decMembers",
+      "offset": 0,
+      "slot": "23",
+      "type": "t_mapping(t_address,t_struct(DECMember)5285_storage)"
+    },
+    {
+      "astId": 5404,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "_decMemberList",
+      "offset": 0,
+      "slot": "24",
+      "type": "t_array(t_address)dyn_storage"
+    },
+    {
+      "astId": 5409,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "_creatorMarkets",
+      "offset": 0,
+      "slot": "25",
+      "type": "t_mapping(t_address,t_array(t_uint256)dyn_storage)"
+    },
+    {
+      "astId": 5411,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "_membershipEpoch",
+      "offset": 0,
+      "slot": "26",
+      "type": "t_uint64"
+    },
+    {
+      "astId": 5417,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "_decMembershipHistory",
+      "offset": 0,
+      "slot": "27",
+      "type": "t_mapping(t_address,t_array(t_struct(MembershipCheckpoint)5290_storage)dyn_storage)"
+    },
+    {
+      "astId": 5423,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "_resolutionRewardEligible",
+      "offset": 0,
+      "slot": "28",
+      "type": "t_mapping(t_uint256,t_mapping(t_address,t_bool))"
+    },
+    {
+      "astId": 5429,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "_resolutionRewardEligibleVoteCounts",
+      "offset": 0,
+      "slot": "29",
+      "type": "t_mapping(t_uint256,t_mapping(t_uint8,t_uint32))"
+    },
+    {
+      "astId": 5433,
+      "contract": "project/contracts/InterPredict.sol:InterPredict",
+      "label": "marketPaused",
+      "offset": 0,
+      "slot": "30",
+      "type": "t_mapping(t_uint256,t_bool)"
+    }
+  ],
+  "types": {
+    "t_address": {
+      "encoding": "inplace",
+      "label": "address",
+      "numberOfBytes": "20"
+    },
+    "t_array(t_address)dyn_storage": {
+      "base": "t_address",
+      "encoding": "dynamic_array",
+      "label": "address[]",
+      "numberOfBytes": "32"
+    },
+    "t_array(t_string_storage)dyn_storage": {
+      "base": "t_string_storage",
+      "encoding": "dynamic_array",
+      "label": "string[]",
+      "numberOfBytes": "32"
+    },
+    "t_array(t_struct(MembershipCheckpoint)5290_storage)dyn_storage": {
+      "base": "t_struct(MembershipCheckpoint)5290_storage",
+      "encoding": "dynamic_array",
+      "label": "struct InterPredict.MembershipCheckpoint[]",
+      "numberOfBytes": "32"
+    },
+    "t_array(t_uint256)dyn_storage": {
+      "base": "t_uint256",
+      "encoding": "dynamic_array",
+      "label": "uint256[]",
+      "numberOfBytes": "32"
+    },
+    "t_bool": {
+      "encoding": "inplace",
+      "label": "bool",
+      "numberOfBytes": "1"
+    },
+    "t_bytes32": {
+      "encoding": "inplace",
+      "label": "bytes32",
+      "numberOfBytes": "32"
+    },
+    "t_enum(DecisionReason)5117": {
+      "encoding": "inplace",
+      "label": "enum InterPredict.DecisionReason",
+      "numberOfBytes": "1"
+    },
+    "t_enum(MarketCategory)5086": {
+      "encoding": "inplace",
+      "label": "enum InterPredict.MarketCategory",
+      "numberOfBytes": "1"
+    },
+    "t_enum(MarketOrigin)5067": {
+      "encoding": "inplace",
+      "label": "enum InterPredict.MarketOrigin",
+      "numberOfBytes": "1"
+    },
+    "t_enum(MarketState)5101": {
+      "encoding": "inplace",
+      "label": "enum InterPredict.MarketState",
+      "numberOfBytes": "1"
+    },
+    "t_enum(ProposalDecision)5110": {
+      "encoding": "inplace",
+      "label": "enum InterPredict.ProposalDecision",
+      "numberOfBytes": "1"
+    },
+    "t_enum(ProposalVote)5105": {
+      "encoding": "inplace",
+      "label": "enum InterPredict.ProposalVote",
+      "numberOfBytes": "1"
+    },
+    "t_enum(ResolutionFailure)5122": {
+      "encoding": "inplace",
+      "label": "enum InterPredict.ResolutionFailure",
+      "numberOfBytes": "1"
+    },
+    "t_mapping(t_address,t_array(t_struct(MembershipCheckpoint)5290_storage)dyn_storage)": {
+      "encoding": "mapping",
+      "key": "t_address",
+      "label": "mapping(address => struct InterPredict.MembershipCheckpoint[])",
+      "numberOfBytes": "32",
+      "value": "t_array(t_struct(MembershipCheckpoint)5290_storage)dyn_storage"
+    },
+    "t_mapping(t_address,t_array(t_uint256)dyn_storage)": {
+      "encoding": "mapping",
+      "key": "t_address",
+      "label": "mapping(address => uint256[])",
+      "numberOfBytes": "32",
+      "value": "t_array(t_uint256)dyn_storage"
+    },
+    "t_mapping(t_address,t_bool)": {
+      "encoding": "mapping",
+      "key": "t_address",
+      "label": "mapping(address => bool)",
+      "numberOfBytes": "32",
+      "value": "t_bool"
+    },
+    "t_mapping(t_address,t_enum(ProposalVote)5105)": {
+      "encoding": "mapping",
+      "key": "t_address",
+      "label": "mapping(address => enum InterPredict.ProposalVote)",
+      "numberOfBytes": "32",
+      "value": "t_enum(ProposalVote)5105"
+    },
+    "t_mapping(t_address,t_mapping(t_uint8,t_uint256))": {
+      "encoding": "mapping",
+      "key": "t_address",
+      "label": "mapping(address => mapping(uint8 => uint256))",
+      "numberOfBytes": "32",
+      "value": "t_mapping(t_uint8,t_uint256)"
+    },
+    "t_mapping(t_address,t_struct(DECMember)5285_storage)": {
+      "encoding": "mapping",
+      "key": "t_address",
+      "label": "mapping(address => struct InterPredict.DECMember)",
+      "numberOfBytes": "32",
+      "value": "t_struct(DECMember)5285_storage"
+    },
+    "t_mapping(t_address,t_uint256)": {
+      "encoding": "mapping",
+      "key": "t_address",
+      "label": "mapping(address => uint256)",
+      "numberOfBytes": "32",
+      "value": "t_uint256"
+    },
+    "t_mapping(t_address,t_uint8)": {
+      "encoding": "mapping",
+      "key": "t_address",
+      "label": "mapping(address => uint8)",
+      "numberOfBytes": "32",
+      "value": "t_uint8"
+    },
+    "t_mapping(t_bytes32,t_struct(RoleData)21_storage)": {
+      "encoding": "mapping",
+      "key": "t_bytes32",
+      "label": "mapping(bytes32 => struct AccessControl.RoleData)",
+      "numberOfBytes": "32",
+      "value": "t_struct(RoleData)21_storage"
+    },
+    "t_mapping(t_uint256,t_array(t_string_storage)dyn_storage)": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => string[])",
+      "numberOfBytes": "32",
+      "value": "t_array(t_string_storage)dyn_storage"
+    },
+    "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => uint256[])",
+      "numberOfBytes": "32",
+      "value": "t_array(t_uint256)dyn_storage"
+    },
+    "t_mapping(t_uint256,t_bool)": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => bool)",
+      "numberOfBytes": "32",
+      "value": "t_bool"
+    },
+    "t_mapping(t_uint256,t_mapping(t_address,t_bool))": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => mapping(address => bool))",
+      "numberOfBytes": "32",
+      "value": "t_mapping(t_address,t_bool)"
+    },
+    "t_mapping(t_uint256,t_mapping(t_address,t_enum(ProposalVote)5105))": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => mapping(address => enum InterPredict.ProposalVote))",
+      "numberOfBytes": "32",
+      "value": "t_mapping(t_address,t_enum(ProposalVote)5105)"
+    },
+    "t_mapping(t_uint256,t_mapping(t_address,t_mapping(t_uint8,t_uint256)))": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => mapping(address => mapping(uint8 => uint256)))",
+      "numberOfBytes": "32",
+      "value": "t_mapping(t_address,t_mapping(t_uint8,t_uint256))"
+    },
+    "t_mapping(t_uint256,t_mapping(t_address,t_uint256))": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => mapping(address => uint256))",
+      "numberOfBytes": "32",
+      "value": "t_mapping(t_address,t_uint256)"
+    },
+    "t_mapping(t_uint256,t_mapping(t_address,t_uint8))": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => mapping(address => uint8))",
+      "numberOfBytes": "32",
+      "value": "t_mapping(t_address,t_uint8)"
+    },
+    "t_mapping(t_uint256,t_mapping(t_uint8,t_uint32))": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => mapping(uint8 => uint32))",
+      "numberOfBytes": "32",
+      "value": "t_mapping(t_uint8,t_uint32)"
+    },
+    "t_mapping(t_uint256,t_struct(Market)5260_storage)": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => struct InterPredict.Market)",
+      "numberOfBytes": "32",
+      "value": "t_struct(Market)5260_storage"
+    },
+    "t_mapping(t_uint256,t_uint256)": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => uint256)",
+      "numberOfBytes": "32",
+      "value": "t_uint256"
+    },
+    "t_mapping(t_uint8,t_uint256)": {
+      "encoding": "mapping",
+      "key": "t_uint8",
+      "label": "mapping(uint8 => uint256)",
+      "numberOfBytes": "32",
+      "value": "t_uint256"
+    },
+    "t_mapping(t_uint8,t_uint32)": {
+      "encoding": "mapping",
+      "key": "t_uint8",
+      "label": "mapping(uint8 => uint32)",
+      "numberOfBytes": "32",
+      "value": "t_uint32"
+    },
+    "t_string_storage": {
+      "encoding": "bytes",
+      "label": "string",
+      "numberOfBytes": "32"
+    },
+    "t_struct(DECMember)5285_storage": {
+      "encoding": "inplace",
+      "label": "struct InterPredict.DECMember",
+      "members": [
+        {
+          "astId": 5262,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "exists",
+          "offset": 0,
+          "slot": "0",
+          "type": "t_bool"
+        },
+        {
+          "astId": 5264,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "active",
+          "offset": 1,
+          "slot": "0",
+          "type": "t_bool"
+        },
+        {
+          "astId": 5266,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "removed",
+          "offset": 2,
+          "slot": "0",
+          "type": "t_bool"
+        },
+        {
+          "astId": 5268,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "joinedAt",
+          "offset": 3,
+          "slot": "0",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 5270,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "proposalVotes",
+          "offset": 0,
+          "slot": "1",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5272,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "resolutionVotes",
+          "offset": 0,
+          "slot": "2",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5274,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "honestResolutionVotes",
+          "offset": 0,
+          "slot": "3",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5276,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "incorrectResolutionVotes",
+          "offset": 0,
+          "slot": "4",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5278,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "reputation",
+          "offset": 0,
+          "slot": "5",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5280,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "totalRewardsEarned",
+          "offset": 0,
+          "slot": "6",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5282,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "totalRewardsClaimed",
+          "offset": 0,
+          "slot": "7",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5284,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "storedRewards",
+          "offset": 0,
+          "slot": "8",
+          "type": "t_uint256"
+        }
+      ],
+      "numberOfBytes": "288"
+    },
+    "t_struct(Market)5260_storage": {
+      "encoding": "inplace",
+      "label": "struct InterPredict.Market",
+      "members": [
+        {
+          "astId": 5147,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "id",
+          "offset": 0,
+          "slot": "0",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5149,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "creator",
+          "offset": 0,
+          "slot": "1",
+          "type": "t_address"
+        },
+        {
+          "astId": 5152,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "origin",
+          "offset": 20,
+          "slot": "1",
+          "type": "t_enum(MarketOrigin)5067"
+        },
+        {
+          "astId": 5155,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "category",
+          "offset": 21,
+          "slot": "1",
+          "type": "t_enum(MarketCategory)5086"
+        },
+        {
+          "astId": 5158,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "state",
+          "offset": 22,
+          "slot": "1",
+          "type": "t_enum(MarketState)5101"
+        },
+        {
+          "astId": 5160,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "question",
+          "offset": 0,
+          "slot": "2",
+          "type": "t_string_storage"
+        },
+        {
+          "astId": 5162,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "description",
+          "offset": 0,
+          "slot": "3",
+          "type": "t_string_storage"
+        },
+        {
+          "astId": 5164,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "customCategory",
+          "offset": 0,
+          "slot": "4",
+          "type": "t_string_storage"
+        },
+        {
+          "astId": 5166,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "thumbnailURI",
+          "offset": 0,
+          "slot": "5",
+          "type": "t_string_storage"
+        },
+        {
+          "astId": 5168,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "resolutionCriteria",
+          "offset": 0,
+          "slot": "6",
+          "type": "t_string_storage"
+        },
+        {
+          "astId": 5170,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "primaryEvidenceURI",
+          "offset": 0,
+          "slot": "7",
+          "type": "t_string_storage"
+        },
+        {
+          "astId": 5172,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "backupEvidenceURI",
+          "offset": 0,
+          "slot": "8",
+          "type": "t_string_storage"
+        },
+        {
+          "astId": 5174,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "tradingEndTime",
+          "offset": 0,
+          "slot": "9",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 5176,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "proposalVotingStartedAt",
+          "offset": 8,
+          "slot": "9",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 5178,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "proposalVotingDeadline",
+          "offset": 16,
+          "slot": "9",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 5180,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "proposalFinalizedAt",
+          "offset": 24,
+          "slot": "9",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 5182,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "activatedAt",
+          "offset": 0,
+          "slot": "10",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 5184,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "resolutionRequestedAt",
+          "offset": 8,
+          "slot": "10",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 5186,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "resolutionVotingDeadline",
+          "offset": 16,
+          "slot": "10",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 5188,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "resolutionFinalizedAt",
+          "offset": 24,
+          "slot": "10",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 5190,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "outcomeConfirmedAt",
+          "offset": 0,
+          "slot": "11",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 5192,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "finalizedAt",
+          "offset": 8,
+          "slot": "11",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 5194,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "approvalVotes",
+          "offset": 16,
+          "slot": "11",
+          "type": "t_uint32"
+        },
+        {
+          "astId": 5196,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "rejectionVotes",
+          "offset": 20,
+          "slot": "11",
+          "type": "t_uint32"
+        },
+        {
+          "astId": 5198,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "resolutionSnapshot",
+          "offset": 24,
+          "slot": "11",
+          "type": "t_uint32"
+        },
+        {
+          "astId": 5200,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "resolutionVoterCount",
+          "offset": 28,
+          "slot": "11",
+          "type": "t_uint32"
+        },
+        {
+          "astId": 5202,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "leadingOutcome",
+          "offset": 0,
+          "slot": "12",
+          "type": "t_uint8"
+        },
+        {
+          "astId": 5204,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "winningOutcome",
+          "offset": 1,
+          "slot": "12",
+          "type": "t_uint8"
+        },
+        {
+          "astId": 5207,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "proposalDecision",
+          "offset": 2,
+          "slot": "12",
+          "type": "t_enum(ProposalDecision)5110"
+        },
+        {
+          "astId": 5210,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "decisionReason",
+          "offset": 3,
+          "slot": "12",
+          "type": "t_enum(DecisionReason)5117"
+        },
+        {
+          "astId": 5213,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "resolutionFailure",
+          "offset": 4,
+          "slot": "12",
+          "type": "t_enum(ResolutionFailure)5122"
+        },
+        {
+          "astId": 5215,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "proposalFinalized",
+          "offset": 5,
+          "slot": "12",
+          "type": "t_bool"
+        },
+        {
+          "astId": 5217,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "refundCompleted",
+          "offset": 6,
+          "slot": "12",
+          "type": "t_bool"
+        },
+        {
+          "astId": 5219,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "resolutionVoteFinalized",
+          "offset": 7,
+          "slot": "12",
+          "type": "t_bool"
+        },
+        {
+          "astId": 5221,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "adminConfirmed",
+          "offset": 8,
+          "slot": "12",
+          "type": "t_bool"
+        },
+        {
+          "astId": 5223,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "seedReturned",
+          "offset": 9,
+          "slot": "12",
+          "type": "t_bool"
+        },
+        {
+          "astId": 5225,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "activeMarketCancelled",
+          "offset": 10,
+          "slot": "12",
+          "type": "t_bool"
+        },
+        {
+          "astId": 5227,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "originalSeed",
+          "offset": 0,
+          "slot": "13",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5229,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "tradingCollateral",
+          "offset": 0,
+          "slot": "14",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5231,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "marketVolume",
+          "offset": 0,
+          "slot": "15",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5233,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "creatorFeesEarned",
+          "offset": 0,
+          "slot": "16",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5235,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "creatorFeesClaimed",
+          "offset": 0,
+          "slot": "17",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5237,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "decRewardFunds",
+          "offset": 0,
+          "slot": "18",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5239,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "decRewardPerEligibleVoter",
+          "offset": 0,
+          "slot": "19",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5241,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "payoutRemaining",
+          "offset": 0,
+          "slot": "20",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5243,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "winningSharesRemaining",
+          "offset": 0,
+          "slot": "21",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 5245,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "adminVerificationReason",
+          "offset": 0,
+          "slot": "22",
+          "type": "t_string_storage"
+        },
+        {
+          "astId": 5247,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "adminEvidenceURI",
+          "offset": 0,
+          "slot": "23",
+          "type": "t_string_storage"
+        },
+        {
+          "astId": 5249,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "cancellationReason",
+          "offset": 0,
+          "slot": "24",
+          "type": "t_string_storage"
+        },
+        {
+          "astId": 5251,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "cancellationEvidenceURI",
+          "offset": 0,
+          "slot": "25",
+          "type": "t_string_storage"
+        },
+        {
+          "astId": 5253,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "resolutionMembershipEpoch",
+          "offset": 0,
+          "slot": "26",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 5255,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "adminVerificationDeadline",
+          "offset": 8,
+          "slot": "26",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 5257,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "resolutionQuorum",
+          "offset": 16,
+          "slot": "26",
+          "type": "t_uint32"
+        },
+        {
+          "astId": 5259,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "resolutionRequester",
+          "offset": 0,
+          "slot": "27",
+          "type": "t_address"
+        }
+      ],
+      "numberOfBytes": "896"
+    },
+    "t_struct(MembershipCheckpoint)5290_storage": {
+      "encoding": "inplace",
+      "label": "struct InterPredict.MembershipCheckpoint",
+      "members": [
+        {
+          "astId": 5287,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "epoch",
+          "offset": 0,
+          "slot": "0",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 5289,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "active",
+          "offset": 8,
+          "slot": "0",
+          "type": "t_bool"
+        }
+      ],
+      "numberOfBytes": "32"
+    },
+    "t_struct(RoleData)21_storage": {
+      "encoding": "inplace",
+      "label": "struct AccessControl.RoleData",
+      "members": [
+        {
+          "astId": 18,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "hasRole",
+          "offset": 0,
+          "slot": "0",
+          "type": "t_mapping(t_address,t_bool)"
+        },
+        {
+          "astId": 20,
+          "contract": "project/contracts/InterPredict.sol:InterPredict",
+          "label": "adminRole",
+          "offset": 0,
+          "slot": "1",
+          "type": "t_bytes32"
+        }
+      ],
+      "numberOfBytes": "64"
+    },
+    "t_uint256": {
+      "encoding": "inplace",
+      "label": "uint256",
+      "numberOfBytes": "32"
+    },
+    "t_uint32": {
+      "encoding": "inplace",
+      "label": "uint32",
+      "numberOfBytes": "4"
+    },
+    "t_uint64": {
+      "encoding": "inplace",
+      "label": "uint64",
+      "numberOfBytes": "8"
+    },
+    "t_uint8": {
+      "encoding": "inplace",
+      "label": "uint8",
+      "numberOfBytes": "1"
+    }
+  }
+}

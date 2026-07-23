@@ -7,11 +7,14 @@ export function ThemeToggle() {
   const [dark, setDark] = useState(false)
 
   useEffect(() => {
-    const stored = localStorage.getItem("theme")
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
-    const isDark = stored === "dark" || (!stored && prefersDark)
-    setDark(isDark)
-    document.documentElement.classList.toggle("dark", isDark)
+    const timer = window.setTimeout(() => {
+      const stored = localStorage.getItem("theme")
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
+      const isDark = stored === "dark" || (!stored && prefersDark)
+      setDark(isDark)
+      document.documentElement.classList.toggle("dark", isDark)
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const toggle = () => {

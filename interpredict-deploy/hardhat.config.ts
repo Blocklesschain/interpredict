@@ -1,17 +1,15 @@
 import dotenv from "dotenv";
+import { getBackendToken } from "./lib/interlinkAuthBackend";
 
 dotenv.config({ path: ".env.local" });
 
 const deployerKey = process.env.PRIVATE_KEY;
-const interlinkToken = process.env.INTERLINK_TOKEN;
 
 if (!deployerKey) {
   throw new Error("PRIVATE_KEY is missing from .env.local");
 }
 
-if (!interlinkToken) {
-  throw new Error("INTERLINK_TOKEN is missing from .env.local");
-}
+const interlinkToken = await getBackendToken();
 
 /** @type {import("hardhat/config").HardhatUserConfig} */
 const config = {

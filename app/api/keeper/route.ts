@@ -5,12 +5,16 @@ import { getValidServiceToken } from '@/lib/interlinkServiceAuth'
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '0x8c69b2D0A1C89fd3C6aD64e1Be3536FAF63b55b6'
 const RPC_URL = 'https://evm-rpc.test-net.interlinklabs.ai/v1/rpc'
 const SERVICE_WALLET_PRIVATE_KEY = process.env.SERVICE_WALLET_PRIVATE_KEY
-const CRON_SECRET = process.env.CRON_SECRET // shared secret so randoms on the internet can't spam this route
+const CRON_SECRET = process.env.CRON_SECRET
 
 const iface = new ethers.Interface([
   'function totalMarkets() view returns (uint256)',
-  'function markets(uint256) view returns (uint256 id, string question, uint256 marketEndTime, uint256 votingEndTime, uint256 totalYesPool, uint256 totalNoPool, uint8 state, uint8 winningOutcome, address creator, bool creatorFeeClaimed, uint256 votesForActive, uint256 votesAgainstActive, bool oracleResolutionRequested)',
-  'function initializeMarket(uint256 _marketId)'
+  'function markets(uint256) view returns (uint256 id, string question, string description, uint8 category, string customCategory, string thumbnailUri, uint8 origin, address creator, uint256 proposalVotingStart, uint256 proposalVotingDeadline, uint256 approvalVotes, uint256 rejectionVotes, bool proposalFinalized, uint8 proposalDecision, uint256 proposalFinalizationTimestamp, uint256 refundAmount, address refundRecipient, bool refundCompleted, uint256 marketEndTime, uint8 state, uint256 resolutionRequester, uint256 resolutionVotingStart, uint256 resolutionVotingDeadline, uint256 activeDECSnapshot, uint256 resolutionQuorum, uint256 totalResolutionVotes, uint8 decSelectedOutcome, uint8 confirmedOutcome, bool outcomeConfirmed, bool finalized, uint256 finalizationTimestamp, string resolutionCriteria, string primaryEvidenceUri, string backupEvidenceUri, uint256 totalVolume, uint256 participantCount, uint256 creatorFeesEarned, uint256 creatorFeesClaimed, uint256 creatorSeedClaimed, bool cancelled, string cancelReason, uint256 cancelTimestamp)',
+  'function enterProposalVoting(uint256)',
+  'function finalizeProposalVoting(uint256)',
+  'function finalizeResolutionVoting(uint256)',
+  'function finalizeMarket(uint256)',
+  'function accrueDecRewards(uint256)'
 ])
 
 async function rpcCall(accessToken: string, body: unknown) {
@@ -34,7 +38,6 @@ async function readContractCall(accessToken: string, data: string) {
 }
 
 export async function GET(request: Request) {
-  // Optional but recommended: protect this route so only your cron scheduler can trigger it.
   if (CRON_SECRET) {
     const authHeader = request.headers.get('authorization')
     if (authHeader !== `Bearer ${CRON_SECRET}`) {
@@ -51,47 +54,139 @@ export async function GET(request: Request) {
   try {
     const accessToken = await getValidServiceToken()
 
-    // 1. Find every market currently sitting in "Proposed" whose voting window has closed
     const countResult = await readContractCall(accessToken, iface.encodeFunctionData('totalMarkets'))
     const totalCount = Number(iface.decodeFunctionResult('totalMarkets', countResult)[0])
 
     const nowSec = Math.floor(Date.now() / 1000)
-    const dueMarketIds: number[] = []
+
+    // Scan all markets for keeper actions
+    const toEnterVoting: number[] = []
+    const toFinalizeProposal: number[] = []
+    const toFinalizeResolution: number[] = []
+    const toFinalizeMarket: number[] = []
+    const toAccrueRewards: number[] = []
 
     for (let i = 0; i < totalCount; i++) {
       const raw = await readContractCall(accessToken, iface.encodeFunctionData('markets', [i]))
       const decoded = iface.decodeFunctionResult('markets', raw)
-      const state = Number(decoded[6])
-      const votingEndTime = Number(decoded[3])
+      const state = Number(decoded[19]) // 0-13 state
+      const proposalVotingStart = Number(decoded[8])
+      const proposalVotingDeadline = Number(decoded[9])
+      const resolutionVotingDeadline = Number(decoded[22])
+      const outcomeConfirmed = Boolean(decoded[28])
+      const finalized = Boolean(decoded[29])
 
-      if (state === 0 && nowSec >= votingEndTime) {
-        dueMarketIds.push(i)
+      // Proposed (state==3) -> enter proposal voting (if origin=community)
+      if (state === 3) {
+        toEnterVoting.push(i)
+      }
+      // DECProposalVoting (state==4) && deadline passed -> finalize
+      else if (state === 4 && nowSec >= proposalVotingDeadline) {
+        toFinalizeProposal.push(i)
+      }
+      // DECResolutionVoting (state==9) && deadline passed -> finalize
+      else if (state === 9 && nowSec >= resolutionVotingDeadline && resolutionVotingDeadline > 0) {
+        toFinalizeResolution.push(i)
+      }
+      // OutcomeConfirmed (state==11) && not finalized -> finalize market
+      else if (state === 11 && outcomeConfirmed && !finalized) {
+        toFinalizeMarket.push(i)
+      }
+      // Finalized (state==12) && not yet accrued -> accrue rewards
+      else if (state === 12 && finalized) {
+        toAccrueRewards.push(i)
       }
     }
 
-    if (dueMarketIds.length === 0) {
+    if (toEnterVoting.length === 0 && toFinalizeProposal.length === 0 && 
+        toFinalizeResolution.length === 0 && toFinalizeMarket.length === 0 &&
+        toAccrueRewards.length === 0) {
       return NextResponse.json({ processed: 0, results: [], message: 'No markets due for transition.' })
     }
 
-    // 2. Set up an authenticated, transaction-capable connection using the service wallet
     const connection = new ethers.FetchRequest(RPC_URL)
     connection.setHeader('Authorization', `Bearer ${accessToken}`)
     const provider = new ethers.JsonRpcProvider(connection, undefined, { staticNetwork: true })
     const serviceSigner = new ethers.Wallet(SERVICE_WALLET_PRIVATE_KEY, provider)
 
-    // 3. Call initializeMarket() on each — this is a public function, so the service
-    // wallet doesn't need any special permission, just enough gas to send the tx.
-    for (const marketId of dueMarketIds) {
+    for (const marketId of toEnterVoting) {
       try {
         const tx = await serviceSigner.sendTransaction({
           to: CONTRACT_ADDRESS,
-          data: iface.encodeFunctionData('initializeMarket', [marketId])
+          data: iface.encodeFunctionData('enterProposalVoting', [marketId])
         })
         const receipt = await tx.wait()
-
         results.push({
           marketId,
-          action: receipt && Number(receipt.status) === 1 ? 'transitioned' : 'failed',
+          action: receipt && Number(receipt.status) === 1 ? 'entered_voting' : 'failed',
+          txHash: tx.hash
+        })
+      } catch (err: any) {
+        results.push({ marketId, action: 'error', error: err.message })
+      }
+    }
+
+    for (const marketId of toFinalizeProposal) {
+      try {
+        const tx = await serviceSigner.sendTransaction({
+          to: CONTRACT_ADDRESS,
+          data: iface.encodeFunctionData('finalizeProposalVoting', [marketId])
+        })
+        const receipt = await tx.wait()
+        results.push({
+          marketId,
+          action: receipt && Number(receipt.status) === 1 ? 'proposal_finalized' : 'failed',
+          txHash: tx.hash
+        })
+      } catch (err: any) {
+        results.push({ marketId, action: 'error', error: err.message })
+      }
+    }
+
+    for (const marketId of toFinalizeResolution) {
+      try {
+        const tx = await serviceSigner.sendTransaction({
+          to: CONTRACT_ADDRESS,
+          data: iface.encodeFunctionData('finalizeResolutionVoting', [marketId])
+        })
+        const receipt = await tx.wait()
+        results.push({
+          marketId,
+          action: receipt && Number(receipt.status) === 1 ? 'resolution_finalized' : 'failed',
+          txHash: tx.hash
+        })
+      } catch (err: any) {
+        results.push({ marketId, action: 'error', error: err.message })
+      }
+    }
+
+    for (const marketId of toFinalizeMarket) {
+      try {
+        const tx = await serviceSigner.sendTransaction({
+          to: CONTRACT_ADDRESS,
+          data: iface.encodeFunctionData('finalizeMarket', [marketId])
+        })
+        const receipt = await tx.wait()
+        results.push({
+          marketId,
+          action: receipt && Number(receipt.status) === 1 ? 'market_finalized' : 'failed',
+          txHash: tx.hash
+        })
+      } catch (err: any) {
+        results.push({ marketId, action: 'error', error: err.message })
+      }
+    }
+
+    for (const marketId of toAccrueRewards) {
+      try {
+        const tx = await serviceSigner.sendTransaction({
+          to: CONTRACT_ADDRESS,
+          data: iface.encodeFunctionData('accrueDecRewards', [marketId])
+        })
+        const receipt = await tx.wait()
+        results.push({
+          marketId,
+          action: receipt && Number(receipt.status) === 1 ? 'rewards_accrued' : 'failed',
           txHash: tx.hash
         })
       } catch (err: any) {

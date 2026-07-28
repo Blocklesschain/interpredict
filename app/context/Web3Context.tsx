@@ -4,10 +4,11 @@ import { createContext, useContext, useState, useEffect } from 'react'
 import { ethers } from 'ethers'
 import { translations, LocaleType } from './translations'
 import { getValidToken } from '@/lib/interlinkAuth'
+import contractABI from '@/lib/interpredictAbi.json'
 
 export interface HistoryRecord {
   id: string
-  type: 'Market Proposal' | 'Team Deployment' | 'Market Trade' | 'Committee Bond' | 'Governance Vote'
+  type: 'Market Proposal' | 'Team Deployment' | 'Market Trade' | 'Committee Bond' | 'Governance Vote' | 'DEC Rewards' | 'Creator Fee' | 'Payout'
   description: string
   detail: string
   status: 'Pending' | 'Success' | 'Failed'
@@ -25,806 +26,28 @@ interface Web3ContextType {
   t: (key: keyof typeof translations['en']) => string
   connectWallet: () => Promise<void>
   disconnectWallet: () => void
-  createMarketOnChain: (description: string, marketEndTime: number) => Promise<boolean>
+  createMarketOnChain: (description: string, marketEndTime: number, outcomes: string[], category: number, thumbnailUri: string, resolutionCriteria: string) => Promise<boolean>
   joinDecOnChain: () => Promise<boolean>
   castVoteOnChain: (marketId: number, support: boolean) => Promise<void>
-  placeBetOnChain: (marketId: number, outcome: number, amount: string) => Promise<boolean>
+  placeBetOnChain: (marketId: number, outcomeIndex: number, amount: string) => Promise<boolean>
   initializeMarketOnChain: (marketId: number) => Promise<boolean>
   claimPayoutOnChain: (marketId: number) => Promise<boolean>
   requestResolutionOnChain: (marketId: number) => Promise<boolean>
   resolveMarketOnChain: (marketId: number, winningOutcome: number) => Promise<boolean>
   claimDecRewardsOnChain: () => Promise<boolean>
+  claimCreatorFeesOnChain: (marketId: number) => Promise<boolean>
+  claimCreatorSeedOnChain: (marketId: number) => Promise<boolean>
+  voteOnResolutionOnChain: (marketId: number, outcomeIndex: number) => Promise<boolean>
+  finalizeResolutionVotingOnChain: (marketId: number) => Promise<boolean>
+  finalizeProposalVotingOnChain: (marketId: number) => Promise<boolean>
 }
-
-
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
 
 const INTERLINK_TESTNET_CHAIN_ID = '19042026'
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x8c69b2D0A1C89fd3C6aD64e1Be3536FAF63b55b6";
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x8c69b2D0A1C89fd3C6aD64e1Be3536FAF63b55b6"
+const TITL_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_TITL_TOKEN_ADDRESS || "0x..."
 
-const CONTRACT_ABI = {
-  "_format": "hh3-artifact-1",
-  "contractName": "InterPredict",
-  "sourceName": "contracts/InterPredict.sol",
-  "abi": [
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "_oracle",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "nonpayable",
-      "type": "constructor"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "marketId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "creator",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "CreatorYieldClaimed",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "member",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "timestamp",
-          "type": "uint256"
-        }
-      ],
-      "name": "DecMemberJoined",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "decMember",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "DecRewardsClaimed",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "marketId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "marketEndTime",
-          "type": "uint256"
-        }
-      ],
-      "name": "MarketInitialized",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "marketId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "question",
-          "type": "string"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "votingEndTime",
-          "type": "uint256"
-        }
-      ],
-      "name": "MarketProposed",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "marketId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "enum InterPredict.Outcome",
-          "name": "winningOutcome",
-          "type": "uint8"
-        }
-      ],
-      "name": "MarketResolved",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "marketId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "question",
-          "type": "string"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "marketEndTime",
-          "type": "uint256"
-        }
-      ],
-      "name": "OracleResolutionRequested",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "previousOracle",
-          "type": "address"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "newOracle",
-          "type": "address"
-        }
-      ],
-      "name": "OracleUpdated",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "marketId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "trader",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "PayoutClaimed",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "marketId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "trader",
-          "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "bool",
-          "name": "isYes",
-          "type": "bool"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "SharePurchased",
-      "type": "event"
-    },
-    {
-      "inputs": [],
-      "name": "CREATOR_FEE_BPS",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "DEC_POOL_FEE_BPS",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "MARKET_STAKE",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "TEAM_BASE_FEE_BPS",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "TEAM_EXCLUSIVE_FEE_BPS",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "TOTAL_PLATFORM_FEE_BPS",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "VOTING_DURATION",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "_marketId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "bool",
-          "name": "_isYes",
-          "type": "bool"
-        }
-      ],
-      "name": "buyShares",
-      "outputs": [],
-      "stateMutability": "payable",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "claimDecRewards",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "_marketId",
-          "type": "uint256"
-        }
-      ],
-      "name": "claimPayout",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "string",
-          "name": "_question",
-          "type": "string"
-        },
-        {
-          "internalType": "uint256",
-          "name": "_marketEndTime",
-          "type": "uint256"
-        }
-      ],
-      "name": "createActiveMarket",
-      "outputs": [],
-      "stateMutability": "payable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "name": "decMemberList",
-      "outputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "decPool",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "name": "decRewardsClaimedTracker",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "getAllDecMembers",
-      "outputs": [
-        {
-          "internalType": "address[]",
-          "name": "",
-          "type": "address[]"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        },
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "name": "hasVotedOnCuration",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "_marketId",
-          "type": "uint256"
-        }
-      ],
-      "name": "initializeMarket",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "name": "isDecMember",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "joinCommittee",
-      "outputs": [],
-      "stateMutability": "payable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "name": "markets",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "id",
-          "type": "uint256"
-        },
-        {
-          "internalType": "string",
-          "name": "question",
-          "type": "string"
-        },
-        {
-          "internalType": "uint256",
-          "name": "marketEndTime",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "votingEndTime",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "totalYesPool",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "totalNoPool",
-          "type": "uint256"
-        },
-        {
-          "internalType": "enum InterPredict.MarketState",
-          "name": "state",
-          "type": "uint8"
-        },
-        {
-          "internalType": "enum InterPredict.Outcome",
-          "name": "winningOutcome",
-          "type": "uint8"
-        },
-        {
-          "internalType": "address",
-          "name": "creator",
-          "type": "address"
-        },
-        {
-          "internalType": "bool",
-          "name": "creatorFeeClaimed",
-          "type": "bool"
-        },
-        {
-          "internalType": "uint256",
-          "name": "votesForActive",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "votesAgainstActive",
-          "type": "uint256"
-        },
-        {
-          "internalType": "bool",
-          "name": "oracleResolutionRequested",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        },
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "name": "noShares",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "oracle",
-      "outputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "owner",
-      "outputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "string",
-          "name": "_question",
-          "type": "string"
-        },
-        {
-          "internalType": "uint256",
-          "name": "_marketEndTime",
-          "type": "uint256"
-        }
-      ],
-      "name": "proposeMarket",
-      "outputs": [],
-      "stateMutability": "payable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "_marketId",
-          "type": "uint256"
-        }
-      ],
-      "name": "requestOracleResolution",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "_marketId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "enum InterPredict.Outcome",
-          "name": "_winningOutcome",
-          "type": "uint8"
-        }
-      ],
-      "name": "resolveMarket",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "totalDecMembers",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "totalMarkets",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "_newOracle",
-          "type": "address"
-        }
-      ],
-      "name": "updateOracle",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "_marketId",
-          "type": "uint256"
-        },
-        {
-          "internalType": "bool",
-          "name": "_support",
-          "type": "bool"
-        }
-      ],
-      "name": "voteOnCuration",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        },
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "name": "yesShares",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    }
-  ]
-}
-
-// 🆕 NEW: MetaMask/ethers errors often carry far more detail than err.message
-// alone (a code, raw revert data, an RPC-level reason) — this pulls all of
-// it together into one string so it shows up directly in the History tab
-// and status banner, without needing DevTools access at all.
 function formatTxError(err: any): string {
   const parts: string[] = []
   if (err?.message) parts.push(err.message)
@@ -926,17 +149,13 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      (window as any).ethereum.on('accountsChanged', handleAccountsChanged)
+      ;(window as any).ethereum.on('accountsChanged', handleAccountsChanged)
       return () => {
-        (window as any).ethereum.removeListener('accountsChanged', handleAccountsChanged)
+        ;(window as any).ethereum.removeListener('accountsChanged', handleAccountsChanged)
       }
     }
   }, [])
 
-  // 🆕 NEW: proactively keep the bearer token warm in the background while a
-  // wallet is connected, instead of only refreshing lazily right before an
-  // action. Runs once immediately on connect, then every 14 minutes (just
-  // under the real 15-minute expiry) for as long as walletAddress is set.
   useEffect(() => {
     if (!walletAddress) return
 
@@ -951,9 +170,8 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    keepTokenWarm() // run once immediately on connect
-    const intervalId = setInterval(keepTokenWarm, 14 * 60 * 1000) // then every 14 minutes
-
+    keepTokenWarm()
+    const intervalId = setInterval(keepTokenWarm, 14 * 60 * 1000)
     return () => clearInterval(intervalId)
   }, [walletAddress])
 
@@ -1001,7 +219,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
       const storageKey = `interpredict_logs_${address.toLowerCase()}`
       const savedLogs = localStorage.getItem(storageKey)
-      setHistoryLogs(savedLogs ? JSON.parse(savedLogs) : [])
+      if (savedLogs) setHistoryLogs(JSON.parse(savedLogs))
 
       setTxStatus("Wallet interface integrated successfully.")
     } catch (err: any) {
@@ -1016,9 +234,6 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     setTxStatus("Wallet session cleared successfully.")
   }
 
-  // 🔧 FIXED: now authenticates using the connected wallet's own bearer token
-  // (auto-refreshed / re-signed as needed via lib/interlinkAuth.ts) instead of
-  // reading a token from localStorage that was never actually being set.
   const getContractInstance = async () => {
     if (!(window as any).ethereum) throw new Error("Wallet not identified")
     if (!walletAddress) throw new Error("Wallet not connected")
@@ -1027,67 +242,116 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     const signer = await browserProvider.getSigner()
     const accessToken = await getValidToken(walletAddress, signer)
 
-    const rpcUrl = "https://evm-rpc.test-net.interlinklabs.ai/v1/rpc";
+    const rpcUrl = "https://evm-rpc.test-net.interlinklabs.ai/v1/rpc"
 
-    const connection = new ethers.FetchRequest(rpcUrl);
-    connection.setHeader("Authorization", `Bearer ${accessToken}`);
+    const connection = new ethers.FetchRequest(rpcUrl)
+    connection.setHeader("Authorization", `Bearer ${accessToken}`)
 
     const testnetProvider = new ethers.JsonRpcProvider(connection, undefined, {
       staticNetwork: true
     })
 
-    const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI.abi, testnetProvider)
-
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, testnetProvider)
     return { contract, provider: testnetProvider }
   }
 
-  const createMarketOnChain = async (description: string, marketEndTime: number): Promise<boolean> => {
-    const isTeam = walletAddress?.toLowerCase() === "0x6e832252ea4c78068ee109d953724d2762431992";
-    const txType = isTeam ? 'Team Deployment' : 'Market Proposal';
-    const feeText = isTeam ? '0.00 tITL (Bypassed)' : '1.00 tITL';
+  const getSignerContract = async () => {
+    if (!(window as any).ethereum) throw new Error("Wallet not identified")
+    if (!walletAddress) throw new Error("Wallet not connected")
+
+    const browserProvider = new ethers.BrowserProvider((window as any).ethereum)
+    const signer = await browserProvider.getSigner()
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer)
+    return { contract, signer }
+  }
+
+  const getTokenContract = async (signer?: ethers.Signer) => {
+    if (!(window as any).ethereum) throw new Error("Wallet not identified")
+    const provider = new ethers.BrowserProvider((window as any).ethereum)
+    const tokenSigner = signer || await provider.getSigner()
+    const tokenContract = new ethers.Contract(TITL_TOKEN_ADDRESS, [
+      "function approve(address spender, uint256 amount) returns (bool)",
+      "function allowance(address owner, address spender) view returns (uint256)",
+      "function balanceOf(address account) view returns (uint256)"
+    ], tokenSigner)
+    return tokenContract
+  }
+
+  const ensureTokenAllowance = async (amount: bigint) => {
+    if (!(window as any).ethereum) throw new Error("Wallet not identified")
+    if (!walletAddress) throw new Error("Wallet not connected")
+
+    const provider = new ethers.BrowserProvider((window as any).ethereum)
+    const signer = await provider.getSigner()
+    const tokenContract = await getTokenContract(signer)
+
+    const allowance = await tokenContract.allowance(walletAddress, CONTRACT_ADDRESS)
+    if (allowance < amount) {
+      setTxStatus("Approving tITL token spending...")
+      const approveTx = await tokenContract.approve(CONTRACT_ADDRESS, amount)
+      await approveTx.wait()
+      setTxStatus("Token approval confirmed.")
+    }
+  }
+
+  const createMarketOnChain = async (
+    description: string,
+    marketEndTime: number,
+    outcomes: string[],
+    category: number,
+    thumbnailUri: string,
+    resolutionCriteria: string
+  ): Promise<boolean> => {
+    const isTeam = walletAddress?.toLowerCase() === "0x6e832252ea4c78068ee109d953724d2762431992"
+    const txType = isTeam ? 'Team Deployment' : 'Market Proposal'
 
     try {
-      setTxStatus("Broadcasting market initialization payload...")
-      const { provider } = await getContractInstance()
+      setTxStatus("Broadcasting market creation payload...")
+      const { contract } = await getContractInstance()
+      const signerContract = (await getSignerContract()).contract
 
-      const iface = new ethers.Interface(CONTRACT_ABI.abi);
-      const data = isTeam
-        ? iface.encodeFunctionData("createActiveMarket", [description, marketEndTime])
-        : iface.encodeFunctionData("proposeMarket", [description, marketEndTime]);
-
-      const txValue = isTeam ? "0x0" : "0x" + ethers.parseEther("1.0").toString(16);
-
-      const txHash = await (window as any).ethereum.request({
-        method: "eth_sendTransaction",
-        params: [{
-          from: walletAddress,
-          to: CONTRACT_ADDRESS,
-          data: data,
-          value: txValue
-        }]
-      });
-
-      setTxStatus("Awaiting on-chain verification blocks...")
-
-      let receipt = null;
-      while (!receipt) {
-        receipt = await provider.getTransactionReceipt(txHash);
-        if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-
-      if (receipt && Number(receipt.status) === 1) {
-        setTxStatus("Market structure deployed securely to Interlink registry!")
-        if (walletAddress) {
-          saveLogToLocalStorage(walletAddress, txType, description, `Success — Fee: ${feeText}`, 'Success')
-        }
-        return true;
+      // Ensure token allowance for 11 tITL (community) or seed amount (team)
+      if (!isTeam) {
+        await ensureTokenAllowance(ethers.parseEther("11"))
       } else {
-        throw new Error("Transaction execution failed on-chain.");
+        await ensureTokenAllowance(ethers.parseEther("10"))
       }
+
+      const iface = new ethers.Interface(contractABI)
+
+      // Use struct-based params for both functions
+      const params = {
+        q: description,
+        d: "",
+        cat: category,
+        cc: "",
+        tu: thumbnailUri,
+        ol: outcomes,
+        et: marketEndTime,
+        rc: resolutionCriteria,
+        ev: "",
+        pe: ""
+      }
+
+      let tx
+      if (isTeam) {
+        tx = await signerContract.cTM(params, { value: ethers.parseEther("10") })
+      } else {
+        tx = await signerContract.pM(params, { value: ethers.parseEther("11") })
+      }
+
+      setTxStatus("Awaiting on-chain confirmation...")
+      await tx.wait()
+
+      setTxStatus(isTeam ? "Team market created and activated!" : "Market proposed! Awaiting DEC review.")
+      if (walletAddress) {
+        saveLogToLocalStorage(walletAddress, txType, description, `Success — Market #${await getNextMarketId()}`, 'Success')
+      }
+      return true
     } catch (err: any) {
       const detail = formatTxError(err)
       console.error('createMarketOnChain failed:', err)
-      setTxStatus(`Deployment Cancelled: ${detail}`)
+      setTxStatus(`Error: ${detail}`)
       if (walletAddress) {
         saveLogToLocalStorage(walletAddress, txType, description, `Failed — ${detail}`, 'Failed')
       }
@@ -1095,402 +359,313 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const getNextMarketId = async (): Promise<number> => {
+    try {
+      const { contract } = await getContractInstance()
+      const count = await contract.totalMarkets()
+      return Number(count) - 1
+    } catch { return 0 }
+  }
+
   const joinDecOnChain = async (): Promise<boolean> => {
     try {
-      setTxStatus("Reading native node balance parameters...")
+      setTxStatus("Joining DEC Committee...")
       const { contract, provider } = await getContractInstance()
+      const { signer } = await getSignerContract()
 
-      if (walletAddress) {
-        const isAlreadyMember = await contract.isDecMember(walletAddress);
-        if (isAlreadyMember) {
-          setTxStatus("Already a registered DEC Committee Member!");
-          return true;
-        }
+      const isAlreadyMember = await contract.isActiveDecMember(walletAddress)
+      if (isAlreadyMember) {
+        setTxStatus("Already a registered DEC Committee Member!")
+        return true
       }
 
-      setTxStatus("Processing DEC Committee registration payment...")
-      const iface = new ethers.Interface(CONTRACT_ABI.abi);
-      const data = iface.encodeFunctionData("joinCommittee");
-      const txValue = "0x" + ethers.parseEther("0.1").toString(16);
-
-      const txHash = await (window as any).ethereum.request({
-        method: "eth_sendTransaction",
-        params: [{
-          from: walletAddress,
-          to: CONTRACT_ADDRESS,
-          data: data,
-          value: txValue
-        }]
-      });
-
-      setTxStatus("Node verified! Registering on Interlink network...")
-
-      let receipt = null;
-      while (!receipt) {
-        receipt = await provider.getTransactionReceipt(txHash);
-        if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-
-      if (receipt && Number(receipt.status) === 1) {
-        setTxStatus("Welcome to the Decentralized Curation Committee.")
-        if (walletAddress) {
-          saveLogToLocalStorage(walletAddress, 'Committee Bond', 'Request to join DEC Committee', 'Success — 0.10 tITL routed to treasury registry contract', 'Success')
-          setDecMembers((prev) => [...prev, walletAddress])
-        }
-        return true;
-      } else {
-        throw new Error("Transaction reverted on-chain.");
-      }
+      setTxStatus("Processing DEC Committee registration...")
+      // DEC membership is granted by admin via addDecMember() now
+      setTxStatus("DEC membership requires admin approval. Contact the team to add you.")
+      return false
     } catch (err: any) {
       const detail = formatTxError(err)
       console.error('joinDecOnChain failed:', err)
-      setTxStatus(`Verification Cancelled: ${detail}`)
-      if (walletAddress) {
-        saveLogToLocalStorage(walletAddress, 'Committee Bond', 'Request to join DEC Committee', `Failed — ${detail}`, 'Failed')
-      }
+      setTxStatus(`Error: ${detail}`)
       return false
     }
   }
 
   const castVoteOnChain = async (marketId: number, support: boolean) => {
-    const ballotText = support ? 'Voted FOR' : 'Voted AGAINST';
+    const ballotText = support ? 'Voted FOR (Approve)' : 'Voted AGAINST (Reject)'
     try {
-      setTxStatus("Transmitting curation consensus weight...")
-      const { provider } = await getContractInstance()
+      setTxStatus("Transmitting curation vote...")
+      const { contract } = await getContractInstance()
+      const signerContract = (await getSignerContract()).contract
 
-      const iface = new ethers.Interface(CONTRACT_ABI.abi);
-      const data = iface.encodeFunctionData("voteOnCuration", [marketId, support]);
-
-      const txHash = await (window as any).ethereum.request({
-        method: "eth_sendTransaction",
-        params: [{
-          from: walletAddress,
-          to: CONTRACT_ADDRESS,
-          data: data
-        }]
-      });
-
-      setTxStatus("Ballot updated successfully on-chain.")
-
-      let receipt = null;
-      while (!receipt) {
-        receipt = await provider.getTransactionReceipt(txHash);
-        if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Check proposal voting state - may need to enter voting first
+      const market = await contract.markets(marketId)
+      if (Number(market.state) === 3) { // Proposed (0 index in new enum is 3 for Proposed state)
+        // State 3 = Proposed, need to enter voting first
+        setTxStatus("Entering proposal into DEC voting...")
+        const enterTx = await signerContract.enterProposalVoting(marketId)
+        await enterTx.wait()
       }
 
+      const tx = await signerContract.voteOnProposal(
+        marketId,
+        support ? 1 : 2 // 1=Approve, 2=Reject (0=None)
+      )
+      setTxStatus("Ballot submitted on-chain.")
+      await tx.wait()
+
       if (walletAddress) {
-        saveLogToLocalStorage(walletAddress, 'Governance Vote', `Vote cast on Proposal ID #${marketId}`, `Success — ${ballotText}`, 'Success')
+        saveLogToLocalStorage(walletAddress, 'Governance Vote', `Vote cast on Proposal #${marketId}`, `Success — ${ballotText}`, 'Success')
       }
     } catch (err: any) {
       const detail = formatTxError(err)
       console.error('castVoteOnChain failed:', err)
       setTxStatus(`Voting Error: ${detail}`)
       if (walletAddress) {
-        saveLogToLocalStorage(walletAddress, 'Governance Vote', `Vote attempt on Proposal ID #${marketId}`, `Failed — ${detail}`, 'Failed')
+        saveLogToLocalStorage(walletAddress, 'Governance Vote', `Vote attempt on Proposal #${marketId}`, `Failed — ${detail}`, 'Failed')
       }
     }
   }
 
-  const placeBetOnChain = async (marketId: number, outcome: number, amount: string): Promise<boolean> => {
-    const targetSide = outcome === 0 ? 'YES' : 'NO';
-    const isYes = outcome === 0;
-
+  const placeBetOnChain = async (marketId: number, outcomeIndex: number, amount: string): Promise<boolean> => {
     try {
-      setTxStatus("Transmitting position collateral payload...")
-      const { provider } = await getContractInstance()
+      setTxStatus("Transmitting trade payload...")
+      const { contract } = await getContractInstance()
+      const signerContract = (await getSignerContract()).contract
 
-      const iface = new ethers.Interface(CONTRACT_ABI.abi);
-      const data = iface.encodeFunctionData("buyShares", [marketId, isYes]);
-      const txValue = "0x" + ethers.parseEther(amount).toString(16);
+      const grossAmount = ethers.parseEther(amount || "0.1")
+      const minSharesOut = 1
 
-      const txHash = await (window as any).ethereum.request({
-        method: "eth_sendTransaction",
-        params: [{
-          from: walletAddress,
-          to: CONTRACT_ADDRESS,
-          data: data,
-          value: txValue
-        }]
-      });
+      // Ensure token allowance
+      await ensureTokenAllowance(grossAmount)
 
-      setTxStatus("Trade position logged securely inside on-chain pool matrix!")
+      const tx = await signerContract.buyOutcome(marketId, outcomeIndex, grossAmount, minSharesOut)
 
-      let receipt = null;
-      while (!receipt) {
-        receipt = await provider.getTransactionReceipt(txHash);
-        if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
+      setTxStatus("Trade logged on-chain!")
+      await tx.wait()
+
+      if (walletAddress) {
+        saveLogToLocalStorage(walletAddress, 'Market Trade', `Wager placed on Market #${marketId}`, `Success — Outcome ${outcomeIndex} with ${amount} tITL`, 'Success')
       }
-
-      if (receipt && Number(receipt.status) === 1) {
-        if (walletAddress) {
-          saveLogToLocalStorage(walletAddress, 'Market Trade', `Wager placed on Pool #${marketId}`, `Success — Predicted ${targetSide} with ${amount} tITL`, 'Success')
-        }
-        return true
-      } else {
-        throw new Error("Trade transaction failed on-chain.")
-      }
+      return true
     } catch (err: any) {
       const detail = formatTxError(err)
       console.error('placeBetOnChain failed:', err)
-      setTxStatus(`Execution Error: ${detail}`)
+      setTxStatus(`Trade Error: ${detail}`)
       if (walletAddress) {
-        saveLogToLocalStorage(walletAddress, 'Market Trade', `Wager attempt on Pool #${marketId}`, `Failed — ${detail}`, 'Failed')
+        saveLogToLocalStorage(walletAddress, 'Market Trade', `Wager attempt on Market #${marketId}`, `Failed — ${detail}`, 'Failed')
       }
       return false
     }
   }
 
-  // 🆕 NEW: finalize a community proposal after its curation voting window
-  // closes. Calls the contract's initializeMarket(), which either graduates
-  // the market to the MarketPlace (votes FOR >= votes AGAINST and > 0) or
-  // rejects it — refunding 90% of the 1 tITL stake to the creator and routing
-  // the 10% penalty to the team treasury. Callable by anyone (no access gate).
-  const initializeMarketOnChain = async (marketId: number): Promise<boolean> => {
+  const finalizeProposalVotingOnChain = async (marketId: number): Promise<boolean> => {
     try {
-      setTxStatus("Finalizing proposal curation result...")
-      const { provider } = await getContractInstance()
+      setTxStatus("Finalizing proposal voting...")
+      const signerContract = (await getSignerContract()).contract
+      const tx = await signerContract.finalizeProposalVoting(marketId)
+      await tx.wait()
+      setTxStatus("Proposal finalized!")
+      return true
+    } catch (err: any) {
+      const detail = formatTxError(err)
+      console.error('finalizeProposalVotingOnChain failed:', err)
+      setTxStatus(`Error: ${detail}`)
+      return false
+    }
+  }
 
-      const iface = new ethers.Interface(CONTRACT_ABI.abi);
-      const data = iface.encodeFunctionData("initializeMarket", [marketId]);
+  const initializeMarketOnChain = async (marketId: number): Promise<boolean> => {
+    // In the new contract, this maps to enterProposalVoting + finalizeProposalVoting
+    try {
+      setTxStatus("Entering proposal voting...")
+      const { contract } = await getContractInstance()
+      const signerContract = (await getSignerContract()).contract
 
-      const txHash = await (window as any).ethereum.request({
-        method: "eth_sendTransaction",
-        params: [{
-          from: walletAddress,
-          to: CONTRACT_ADDRESS,
-          data: data
-        }]
-      });
+      const market = await contract.markets(marketId)
+      const state = Number(market.state)
 
-      setTxStatus("Awaiting finalization confirmation...")
-
-      let receipt = null;
-      while (!receipt) {
-        receipt = await provider.getTransactionReceipt(txHash);
-        if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-
-      if (receipt && Number(receipt.status) === 1) {
-        setTxStatus("Proposal finalized — graduated or refunded per curation vote.")
-        if (walletAddress) {
-          saveLogToLocalStorage(walletAddress, 'Governance Vote', `Proposal #${marketId} finalized`, 'Success — graduated to MarketPlace or refunded to creator', 'Success')
-        }
+      if (state === 3) { // Proposed
+        const enterTx = await signerContract.enterProposalVoting(marketId)
+        await enterTx.wait()
+        setTxStatus("Proposal entered voting. Awaiting 24h window or finalization...")
         return true
-      } else {
-        throw new Error("Finalization transaction failed on-chain.")
+      } else if (state === 4) { // DECProposalVoting
+        const finTx = await signerContract.finalizeProposalVoting(marketId)
+        await finTx.wait()
+        setTxStatus("Proposal voting finalized!")
+        return true
       }
+      return false
     } catch (err: any) {
       const detail = formatTxError(err)
       console.error('initializeMarketOnChain failed:', err)
-      setTxStatus(`Finalization Error: ${detail}`)
-      if (walletAddress) {
-        saveLogToLocalStorage(walletAddress, 'Governance Vote', `Finalization attempt on Proposal #${marketId}`, `Failed — ${detail}`, 'Failed')
-      }
+      setTxStatus(`Error: ${detail}`)
       return false
     }
   }
 
-
-  // 🆕 NEW: lets a wallet cash out winnings from a resolved market it
-  // participated in — calls the contract's existing claimPayout(), which was
-  // never wired up to any button in the UI before.
   const claimPayoutOnChain = async (marketId: number): Promise<boolean> => {
     try {
-      setTxStatus("Requesting payout claim...")
-      const { provider } = await getContractInstance()
-
-      const iface = new ethers.Interface(CONTRACT_ABI.abi);
-      const data = iface.encodeFunctionData("claimPayout", [marketId]);
-
-      const txHash = await (window as any).ethereum.request({
-        method: "eth_sendTransaction",
-        params: [{
-          from: walletAddress,
-          to: CONTRACT_ADDRESS,
-          data: data
-        }]
-      });
-
-      setTxStatus("Awaiting payout confirmation...")
-
-      let receipt = null;
-      while (!receipt) {
-        receipt = await provider.getTransactionReceipt(txHash);
-        if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
+      setTxStatus("Claiming winnings...")
+      const signerContract = (await getSignerContract()).contract
+      const tx = await signerContract.claimWinnings(marketId)
+      await tx.wait()
+      setTxStatus("Winnings claimed successfully!")
+      if (walletAddress) {
+        saveLogToLocalStorage(walletAddress, 'Payout', `Winnings claimed on Market #${marketId}`, 'Success', 'Success')
       }
-
-      if (receipt && Number(receipt.status) === 1) {
-        setTxStatus("Payout claimed successfully!")
-        if (walletAddress) {
-          saveLogToLocalStorage(walletAddress, 'Market Trade', `Payout claimed on Pool #${marketId}`, 'Success — Winnings transferred to wallet', 'Success')
-        }
-        return true
-      } else {
-        throw new Error("Payout transaction failed on-chain.")
-      }
+      return true
     } catch (err: any) {
       const detail = formatTxError(err)
       console.error('claimPayoutOnChain failed:', err)
       setTxStatus(`Claim Error: ${detail}`)
-      if (walletAddress) {
-        saveLogToLocalStorage(walletAddress, 'Market Trade', `Payout claim attempt on Pool #${marketId}`, `Failed — ${detail}`, 'Failed')
-      }
       return false
     }
   }
 
-  // 🆕 NEW: anyone (in practice, a voter, gated in the UI) pings a market for
-  // settlement once its trading window closes. Calls the contract's
-  // requestOracleResolution(), which flips oracleResolutionRequested = true so
-  // the team/oracle wallet can pick the winner in the Unresolved Markets tab.
   const requestResolutionOnChain = async (marketId: number): Promise<boolean> => {
     try {
       setTxStatus("Requesting market resolution...")
-      const { provider } = await getContractInstance()
-
-      const iface = new ethers.Interface(CONTRACT_ABI.abi);
-      const data = iface.encodeFunctionData("requestOracleResolution", [marketId]);
-
-      const txHash = await (window as any).ethereum.request({
-        method: "eth_sendTransaction",
-        params: [{
-          from: walletAddress,
-          to: CONTRACT_ADDRESS,
-          data: data
-        }]
-      });
-
-      setTxStatus("Awaiting resolution request confirmation...")
-
-      let receipt = null;
-      while (!receipt) {
-        receipt = await provider.getTransactionReceipt(txHash);
-        if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-
-      if (receipt && Number(receipt.status) === 1) {
-        setTxStatus("Resolution requested — awaiting team settlement.")
-        if (walletAddress) {
-          saveLogToLocalStorage(walletAddress, 'Governance Vote', `Resolution requested for Pool #${marketId}`, 'Success — team pinged to settle', 'Success')
-        }
-        return true
-      } else {
-        throw new Error("Resolution request failed on-chain.")
-      }
+      const signerContract = (await getSignerContract()).contract
+      const tx = await signerContract.requestResolution(marketId)
+      await tx.wait()
+      setTxStatus("Resolution requested! DEC voting open for 3 hours.")
+      return true
     } catch (err: any) {
       const detail = formatTxError(err)
       console.error('requestResolutionOnChain failed:', err)
-      setTxStatus(`Resolution Request Error: ${detail}`)
-      if (walletAddress) {
-        saveLogToLocalStorage(walletAddress, 'Governance Vote', `Resolution request attempt on Pool #${marketId}`, `Failed — ${detail}`, 'Failed')
-      }
+      setTxStatus(`Error: ${detail}`)
       return false
     }
   }
 
-  // 🆕 NEW: oracle/team wallet settles a market by declaring the winning
-  // outcome (0 = YES, 1 = NO, 2 = DRAW). Calls the contract's onlyOracle
-  // resolveMarket(); after this, winners can claimPayout().
   const resolveMarketOnChain = async (marketId: number, winningOutcome: number): Promise<boolean> => {
-    const outcomeLabel = winningOutcome === 0 ? 'YES' : winningOutcome === 1 ? 'NO' : 'DRAW';
     try {
-      setTxStatus("Broadcasting market settlement...")
-      const { provider } = await getContractInstance()
+      setTxStatus("Confirming outcome as admin verifier...")
+      const { contract } = await getContractInstance()
+      const signerContract = (await getSignerContract()).contract
 
-      const iface = new ethers.Interface(CONTRACT_ABI.abi);
-      const data = iface.encodeFunctionData("resolveMarket", [marketId, winningOutcome]);
+      // Check state - if in DECResolutionVoting, finalize first
+      const market = await contract.markets(marketId)
+      const state = Number(market.state)
 
-      const txHash = await (window as any).ethereum.request({
-        method: "eth_sendTransaction",
-        params: [{
-          from: walletAddress,
-          to: CONTRACT_ADDRESS,
-          data: data
-        }]
-      });
-
-      setTxStatus("Awaiting settlement confirmation...")
-
-      let receipt = null;
-      while (!receipt) {
-        receipt = await provider.getTransactionReceipt(txHash);
-        if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
+      if (state === 9) { // DECResolutionVoting
+        setTxStatus("Finalizing resolution voting first...")
+        const finTx = await signerContract.finalizeResolutionVoting(marketId)
+        await finTx.wait()
       }
 
-      if (receipt && Number(receipt.status) === 1) {
-        setTxStatus(`Market resolved — ${outcomeLabel} declared the winning outcome.`)
-        if (walletAddress) {
-          saveLogToLocalStorage(walletAddress, 'Governance Vote', `Pool #${marketId} resolved`, `Success — ${outcomeLabel} wins`, 'Success')
-        }
-        return true
-      } else {
-        throw new Error("Settlement transaction failed on-chain.")
-      }
+      // Now confirm outcome (admin verification)
+      const tx = await signerContract.confirmOutcome(marketId, winningOutcome, "")
+      await tx.wait()
+
+      setTxStatus("Outcome confirmed! Finalizing market...")
+      const finalTx = await signerContract.finalizeMarket(marketId)
+      await finalTx.wait()
+
+      setTxStatus("Market resolved and finalized!")
+      return true
     } catch (err: any) {
       const detail = formatTxError(err)
       console.error('resolveMarketOnChain failed:', err)
-      setTxStatus(`Settlement Error: ${detail}`)
-      if (walletAddress) {
-        saveLogToLocalStorage(walletAddress, 'Governance Vote', `Settlement attempt on Pool #${marketId}`, `Failed — ${detail}`, 'Failed')
-      }
+      setTxStatus(`Error: ${detail}`)
       return false
     }
   }
 
-  // 🆕 NEW: DEC Committee member claims their equal share of the DEC Pool.
-  // The pool accrues the 2% DEC portion of the 5% platform fee on every
-  // claimPayout, plus any other revenue routed on-chain. Calls the contract's
-  // claimDecRewards(), which computes decPool / totalDecMembers and pays out
-  // the caller's outstanding share (tracked via decRewardsClaimedTracker).
+  const voteOnResolutionOnChain = async (marketId: number, outcomeIndex: number): Promise<boolean> => {
+    try {
+      setTxStatus("Casting resolution vote...")
+      const signerContract = (await getSignerContract()).contract
+      const tx = await signerContract.voteOnResolution(marketId, outcomeIndex)
+      await tx.wait()
+      setTxStatus("Resolution vote cast!")
+      return true
+    } catch (err: any) {
+      const detail = formatTxError(err)
+      console.error('voteOnResolutionOnChain failed:', err)
+      setTxStatus(`Error: ${detail}`)
+      return false
+    }
+  }
+
+  const finalizeResolutionVotingOnChain = async (marketId: number): Promise<boolean> => {
+    try {
+      setTxStatus("Finalizing resolution voting...")
+      const signerContract = (await getSignerContract()).contract
+      const tx = await signerContract.finalizeResolutionVoting(marketId)
+      await tx.wait()
+      setTxStatus("Resolution voting finalized!")
+      return true
+    } catch (err: any) {
+      const detail = formatTxError(err)
+      console.error('finalizeResolutionVotingOnChain failed:', err)
+      setTxStatus(`Error: ${detail}`)
+      return false
+    }
+  }
+
   const claimDecRewardsOnChain = async (): Promise<boolean> => {
     try {
-      setTxStatus("Requesting DEC rewards claim...")
-      const { provider } = await getContractInstance()
-
-      const iface = new ethers.Interface(CONTRACT_ABI.abi);
-      const data = iface.encodeFunctionData("claimDecRewards");
-
-      const txHash = await (window as any).ethereum.request({
-        method: "eth_sendTransaction",
-        params: [{
-          from: walletAddress,
-          to: CONTRACT_ADDRESS,
-          data: data
-        }]
-      });
-
-      setTxStatus("Awaiting DEC rewards confirmation...")
-
-      let receipt = null;
-      while (!receipt) {
-        receipt = await provider.getTransactionReceipt(txHash);
-        if (!receipt) await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-
-      if (receipt && Number(receipt.status) === 1) {
-        setTxStatus("DEC rewards claimed successfully!")
-        if (walletAddress) {
-          saveLogToLocalStorage(walletAddress, 'Committee Bond', 'DEC rewards claimed', 'Success — Committee share transferred to wallet', 'Success')
-        }
-        return true
-      } else {
-        throw new Error("DEC rewards transaction failed on-chain.")
-      }
+      setTxStatus("Claiming DEC rewards...")
+      const signerContract = (await getSignerContract()).contract
+      const tx = await signerContract.claimDecRewards()
+      await tx.wait()
+      setTxStatus("DEC rewards claimed!")
+      return true
     } catch (err: any) {
       const detail = formatTxError(err)
       console.error('claimDecRewardsOnChain failed:', err)
-      setTxStatus(`DEC Rewards Error: ${detail}`)
-      if (walletAddress) {
-        saveLogToLocalStorage(walletAddress, 'Committee Bond', 'DEC rewards claim attempt', `Failed — ${detail}`, 'Failed')
-      }
+      setTxStatus(`Error: ${detail}`)
+      return false
+    }
+  }
+
+  const claimCreatorFeesOnChain = async (marketId: number): Promise<boolean> => {
+    try {
+      setTxStatus("Claiming creator fees...")
+      const signerContract = (await getSignerContract()).contract
+      const tx = await signerContract.claimCreatorFees(marketId)
+      await tx.wait()
+      setTxStatus("Creator fees claimed!")
+      return true
+    } catch (err: any) {
+      const detail = formatTxError(err)
+      console.error('claimCreatorFeesOnChain failed:', err)
+      setTxStatus(`Error: ${detail}`)
+      return false
+    }
+  }
+
+  const claimCreatorSeedOnChain = async (marketId: number): Promise<boolean> => {
+    try {
+      setTxStatus("Claiming creator seed...")
+      const signerContract = (await getSignerContract()).contract
+      const tx = await signerContract.claimCreatorSeed(marketId)
+      await tx.wait()
+      setTxStatus("Creator seed claimed!")
+      return true
+    } catch (err: any) {
+      const detail = formatTxError(err)
+      console.error('claimCreatorSeedOnChain failed:', err)
+      setTxStatus(`Error: ${detail}`)
       return false
     }
   }
 
   return (
-    <Web3Context.Provider value={{ walletAddress, decMembers, txStatus, setTxStatus, historyLogs, locale, setLocale, t, connectWallet, disconnectWallet, createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain, initializeMarketOnChain, claimPayoutOnChain, requestResolutionOnChain, resolveMarketOnChain, claimDecRewardsOnChain }}>
-
-
+    <Web3Context.Provider value={{
+      walletAddress, decMembers, txStatus, setTxStatus, historyLogs,
+      locale, setLocale, t,
+      connectWallet, disconnectWallet,
+      createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain,
+      initializeMarketOnChain, claimPayoutOnChain, requestResolutionOnChain,
+      resolveMarketOnChain, claimDecRewardsOnChain,
+      claimCreatorFeesOnChain, claimCreatorSeedOnChain,
+      voteOnResolutionOnChain, finalizeResolutionVotingOnChain,
+      finalizeProposalVotingOnChain
+    }}>
       {children}
     </Web3Context.Provider>
   )

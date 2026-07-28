@@ -45,7 +45,7 @@ interface Web3ContextType {
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
 
 const INTERLINK_TESTNET_CHAIN_ID = '19042026'
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x8c69b2D0A1C89fd3C6aD64e1Be3536FAF63b55b6"
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x3E5936F13e1194380A66c3c1d75D4D7342299CfF"
 const TITL_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_TITL_TOKEN_ADDRESS || "0x..."
 
 function formatTxError(err: any): string {

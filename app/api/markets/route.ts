@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { ethers } from 'ethers'
 import { getValidServiceToken } from '@/lib/interlinkServiceAuth'
 
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '0x8c69b2D0A1C89fd3C6aD64e1Be3536FAF63b55b6'
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '0x3E5936F13e1194380A66c3c1d75D4D7342299CfF'
 const RPC_URL = 'https://evm-rpc.test-net.interlinklabs.ai/v1/rpc'
 
 const iface = new ethers.Interface([

@@ -541,25 +541,22 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
         return true
       }
 
-      /*
-       * AccessControl exposes hasRole publicly.
-       * Read DEC_ROLE from the contract and check whether the wallet
-       * already owns the role but is currently inactive.
-       */
-      let alreadyHasRole = false
+      // DEC_ROLE is not public in the deployed Solidity contract,
+      // therefore no contract.DEC_ROLE() getter exists.
+      const decRole = ethers.keccak256(
+        ethers.toUtf8Bytes('DEC_ROLE')
+      )
 
-      try {
-        const decRole = await contract.DEC_ROLE()
+      const alreadyHasRole = Boolean(
+        await contract.hasRole(decRole, address)
+      )
 
-        alreadyHasRole = Boolean(
-          await contract.hasRole(decRole, address)
-        )
-      } catch (roleCheckError) {
-        console.warn(
-          '[Web3Context] Detailed DEC role check unavailable:',
-          roleCheckError
-        )
-      }
+      console.log('[Web3Context] DEC approval check:', {
+        address,
+        isAlreadyActive,
+        alreadyHasRole,
+        decRole,
+      })
 
       if (alreadyHasRole) {
         setTxStatus(
@@ -597,6 +594,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       return false
     }
   }
+
 
   const castVoteOnChain = async (marketId: number, support: boolean) => {
     const ballotText = support ? 'Voted FOR (Approve)' : 'Voted AGAINST (Reject)'

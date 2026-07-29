@@ -35,6 +35,12 @@ const iface = new ethers.Interface([
 
   'function gPr2(uint256) view returns (uint256[])',
 
+  'function pv(uint256,address) view returns (uint8)',
+  'function rv(uint256,address) view returns (uint8)',
+  'function hvp(uint256,address) view returns (bool)',
+  'function hcw(uint256,address) view returns (bool)',
+  'function sh(uint256,uint8,address) view returns (uint256)',
+
   'event RR(uint256 id, address r, uint256 dl)',
   'event SP(uint256 id, address b, uint8 oi, uint256 g, uint256 n, uint256 s, uint256 f)',
   'event WC(uint256 id, address c, uint256 a)'
@@ -127,6 +133,10 @@ interface LoadedMarket {
   outcomePools: string[]
   confirmedOutcome: number
   finalized: boolean
+  hasCurrentWalletVoted?: boolean
+  currentWalletProposalVote?: number
+  hasCurrentWalletVotedOnResolution?: boolean
+  currentWalletResolutionVote?: number
   [key: string]: unknown
 }
 
@@ -435,10 +445,12 @@ async function loadLogsChunked(
   const logs: RpcLog[] = []
   const chunkSize = 10_000
 
-  console.info(`[Markets API] Event scan starting from ${configuredStart} (${from}), latest ${latest}`)
+  console.info(`[Markets API] Deployment block: ${configuredStart} (${from})`)
+  console.info(`[Markets API] Event scan range: ${from} to ${latest}`)
 
   while (from <= latest) {
     const to = Math.min(from + chunkSize - 1, latest)
+    console.info(`[Markets API] Scanning logs from ${from} to ${to}`)
     const result = await rpcJson(accessToken, 'eth_getLogs', [{
       address: CONTRACT_ADDRESS,
       fromBlock: ethers.toQuantity(from),
@@ -525,6 +537,51 @@ async function loadWalletPositionHistory(
   }
 
   return positions
+}
+
+
+async function loadWalletMarketState(
+  accessToken: string,
+  market: LoadedMarket,
+  walletAddress: string
+): Promise<{
+  proposalVote: number
+  resolutionVote: number
+  hasPosition: boolean
+  hasClaimedWinnings: boolean
+  shares: string[]
+}> {
+  const marketId = market.id
+  const proposalVoteResult = await readFunction(
+    accessToken, 'pv', [marketId, walletAddress], 920000 + marketId * 20, `pv(${marketId}, ${walletAddress})`
+  )
+  const resolutionVoteResult = await readFunction(
+    accessToken, 'rv', [marketId, walletAddress], 920001 + marketId * 20, `rv(${marketId}, ${walletAddress})`
+  )
+  const hasPositionResult = await readFunction(
+    accessToken, 'hvp', [marketId, walletAddress], 920002 + marketId * 20, `hvp(${marketId}, ${walletAddress})`
+  )
+  const hasClaimedResult = await readFunction(
+    accessToken, 'hcw', [marketId, walletAddress], 920003 + marketId * 20, `hcw(${marketId}, ${walletAddress})`
+  )
+
+  const shares: string[] = []
+  for (let outcomeIndex = 0; outcomeIndex < market.outcomeLabels.length; outcomeIndex++) {
+    const shareResult = await readFunction(
+      accessToken, 'sh', [marketId, outcomeIndex, walletAddress],
+      920004 + marketId * 20 + outcomeIndex,
+      `sh(${marketId}, ${outcomeIndex}, ${walletAddress})`
+    )
+    shares.push(bigintToString(shareResult[0]))
+  }
+
+  return {
+    proposalVote: Number(proposalVoteResult[0]),
+    resolutionVote: Number(resolutionVoteResult[0]),
+    hasPosition: Boolean(hasPositionResult[0]),
+    hasClaimedWinnings: Boolean(hasClaimedResult[0]),
+    shares
+  }
 }
 
 async function loadResolutionVotingDeadlines(
@@ -1103,9 +1160,48 @@ export async function GET(request: Request) {
         ].includes(market.state)
       )
 
-    const walletHistory = walletAddress
-      ? await loadWalletPositionHistory(accessToken, walletAddress)
-      : new Map<number, WalletPositionHistory>()
+    let walletHistory = new Map<number, WalletPositionHistory>()
+    if (walletAddress) {
+      try {
+        walletHistory = await loadWalletPositionHistory(accessToken, walletAddress)
+      } catch (error) {
+        console.warn('[Markets API] Wallet event history scan failed; using direct contract state fallback:', getErrorMessage(error))
+      }
+
+      for (const market of allMarkets) {
+        try {
+          const walletState = await loadWalletMarketState(accessToken, market, walletAddress)
+          market.currentWalletProposalVote = walletState.proposalVote
+          market.hasCurrentWalletVoted = walletState.proposalVote !== 0
+          market.currentWalletResolutionVote = walletState.resolutionVote
+          market.hasCurrentWalletVotedOnResolution = walletState.resolutionVote !== 0
+
+          const hasAnyShares = walletState.shares.some(value => BigInt(value) > BigInt(0))
+          const existing = walletHistory.get(market.id)
+          if (existing) {
+            existing.claimed = existing.claimed || walletState.hasClaimedWinnings
+            for (let index = 0; index < walletState.shares.length; index++) {
+              while (existing.shares.length <= index) existing.shares.push('0')
+              if (BigInt(existing.shares[index] || '0') === BigInt(0)) {
+                existing.shares[index] = walletState.shares[index]
+              }
+            }
+            walletHistory.set(market.id, existing)
+          } else if (walletState.hasPosition || hasAnyShares || walletState.hasClaimedWinnings) {
+            walletHistory.set(market.id, {
+              marketId: market.id,
+              stakes: Array.from({ length: market.outcomeLabels.length }, () => '0'),
+              shares: walletState.shares,
+              totalStake: '0',
+              claimed: walletState.hasClaimedWinnings,
+              claimedPayout: '0'
+            })
+          }
+        } catch (error) {
+          console.warn(`[Markets API] Unable to load wallet state for market ${market.id}:`, getErrorMessage(error))
+        }
+      }
+    }
 
     const walletPositions = Array.from(walletHistory.values()).map(history => {
       const market = allMarkets.find(item => item.id === history.marketId)

@@ -41,7 +41,9 @@ interface SmartMarket {
   proposalFinalized: boolean
   proposalDecision: number
   hasCurrentWalletVoted: boolean
+  currentWalletProposalVote: number
   hasCurrentWalletVotedOnResolution: boolean
+  currentWalletResolutionVote: number
   resolutionVotingDeadline: number
   activeDECSnapshot: number
   resolutionQuorum: number
@@ -191,7 +193,9 @@ export default function DAppPortal() {
             outcomePools: m.outcomePools || [],
             outcomePrices: m.outcomePrices || [],
             hasCurrentWalletVoted: Boolean(m.hasCurrentWalletVoted),
-            hasCurrentWalletVotedOnResolution: Boolean(m.hasCurrentWalletVotedOnResolution)
+            currentWalletProposalVote: Number(m.currentWalletProposalVote || 0),
+            hasCurrentWalletVotedOnResolution: Boolean(m.hasCurrentWalletVotedOnResolution),
+            currentWalletResolutionVote: Number(m.currentWalletResolutionVote || 0)
           }))
           setAllOnChainMarkets(baseMarkets)
 
@@ -570,6 +574,7 @@ export default function DAppPortal() {
   const unresolvedMarkets = allOnChainMarkets.filter(m => m.state >= 6 && m.state <= 11 || (m.state === 5 && m.marketEndTime <= nowSec))
   const resolvedMarkets = finalizedMarkets
   const creatorMarkets = allOnChainMarkets.filter(m => m.creator?.toLowerCase() === walletAddress?.toLowerCase())
+  const positionByMarketId = new Map(myPositions.map(position => [position.marketId, position]))
 
   const activePositions = myPositions.filter(p => p.marketState === 5 && p.marketEndTime > nowSec)
   const endedPositions = myPositions.filter(p => p.marketState >= 6 || (p.marketState === 5 && p.marketEndTime <= nowSec))
@@ -861,7 +866,7 @@ export default function DAppPortal() {
                                 Vote Submitted
                               </p>
                               <p className="mt-1 text-[10px] font-mono text-slate-400">
-                                This wallet has already voted on this proposal.
+                                This wallet has already voted {market.currentWalletProposalVote === 1 ? 'Approve' : market.currentWalletProposalVote === 2 ? 'Reject' : ''} on this proposal.
                               </p>
                             </div>
                           ) : (
@@ -1234,15 +1239,34 @@ export default function DAppPortal() {
                         ))}
                       </div>
                       <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(market.marketEndTime)}</p>
-                      {walletAddress && (
-                        claimedMarkets.includes(market.id) ? (
-                          <div className="w-full py-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-lg uppercase flex items-center justify-center gap-1.5">
-                            <CheckCircle2 className="size-3.5" /> Claimed
-                          </div>
-                        ) : (
+                      {walletAddress && (() => {
+                        const position = positionByMarketId.get(market.id)
+                        if (!position) return null
+
+                        const winningShares = BigInt(position.shares?.[market.confirmedOutcome] || '0')
+                        const hasWon = winningShares > BigInt(0) || position.claimed
+                        const hasClaimed = position.claimed || claimedMarkets.includes(market.id)
+
+                        if (!hasWon) {
+                          return (
+                            <div className="w-full py-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold rounded-lg uppercase text-center">
+                              Lost
+                            </div>
+                          )
+                        }
+
+                        if (hasClaimed) {
+                          return (
+                            <div className="w-full py-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-lg uppercase flex items-center justify-center gap-1.5">
+                              <CheckCircle2 className="size-3.5" /> Claimed
+                            </div>
+                          )
+                        }
+
+                        return (
                           <button onClick={() => handleCashOut(market.id)} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg uppercase">Cash Out</button>
                         )
-                      )}
+                      })()}
                     </div>
                   ))
                 )}

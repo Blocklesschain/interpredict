@@ -713,6 +713,11 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const { contract } = await getContractInstance()
 
       const state = Number(await contract.ms(marketId))
+      const existingVote = Number(await contract.pv(marketId, walletAddress))
+      if (existingVote !== 0) {
+        throw new Error(`This wallet has already voted ${existingVote === 1 ? 'Approve' : 'Reject'} on this proposal.`)
+      }
+
       if (state === MarketState.Proposed) {
         setTxStatus("Entering proposal into DEC voting...")
         await sendTxSafely('ePV', [marketId])

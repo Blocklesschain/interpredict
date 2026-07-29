@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useWeb3 } from './context/Web3Context'
 import { Navbar } from '@/components/navbar'
-import { ArrowRight, Layers, ShieldCheck, Coins, Gavel, CheckCircle2, TrendingUp, RefreshCw } from 'lucide-react'
+import { ArrowRight, Layers, ShieldCheck, Coins, Gavel, CheckCircle2, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
 import { ethers } from 'ethers'
 
@@ -110,8 +110,6 @@ export default function HomePage() {
               className="text-sm font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1.5 transition-all"
               title="Hard refresh"
             >
-              <RefreshCw className="size-3.5" />
-              <span>Refresh</span>
             </button>
           </div>
 

@@ -26,6 +26,7 @@ interface Web3ContextType {
   t: (key: keyof typeof translations['en']) => string
   connectWallet: () => Promise<void>
   disconnectWallet: () => void
+  getWalletBalance: (address: string) => Promise<string>
   createMarketOnChain: (description: string, marketEndTime: number, outcomes: string[], category: number, thumbnailUri: string, resolutionCriteria: string) => Promise<boolean>
   joinDecOnChain: () => Promise<boolean>
   castVoteOnChain: (marketId: number, support: boolean) => Promise<void>
@@ -279,13 +280,48 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     return { contract, provider: testnetProvider }
   }
 
-  const getSignerContract = async () => {
-    if (!(window as any).ethereum) throw new Error("Wallet not identified")
-    if (!walletAddress) throw new Error("Wallet not connected")
+  const getWalletBalance = async (
+    address: string
+  ): Promise<string> => {
+    try {
+      const { provider } = await getContractInstance()
+      const balance = await provider.getBalance(address)
 
-    const browserProvider = new ethers.BrowserProvider((window as any).ethereum)
+      return balance.toString()
+    } catch (err) {
+      console.warn(
+        '[Web3Context] getWalletBalance failed:',
+        err
+      )
+
+      return '0'
+    }
+  }
+
+  const getSignerContract = async () => {
+    if (
+      typeof window === 'undefined' ||
+      !(window as any).ethereum
+    ) {
+      throw new Error("Wallet not identified")
+    }
+
+    if (!walletAddress) {
+      throw new Error("Wallet not connected")
+    }
+
+    const browserProvider = new ethers.BrowserProvider(
+      (window as any).ethereum
+    )
+
     const signer = await browserProvider.getSigner()
-    const contract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer)
+
+    const contract = new ethers.Contract(
+      CONTRACT_ADDRESS,
+      contractABI,
+      signer
+    )
+
     return { contract, signer }
   }
 
@@ -635,7 +671,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     <Web3Context.Provider value={{
       walletAddress, decMembers, txStatus, setTxStatus, historyLogs,
       locale, setLocale, t,
-      connectWallet, disconnectWallet,
+      connectWallet, disconnectWallet, getWalletBalance,
       createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain,
       initializeMarketOnChain, claimPayoutOnChain, requestResolutionOnChain,
       resolveMarketOnChain, claimDecRewardsOnChain,

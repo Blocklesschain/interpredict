@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useWeb3 } from '../context/Web3Context'
 import { ethers } from 'ethers'
-import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Menu, X, LogOut, ArrowRight, Users, Upload, Cpu, Gavel, CheckCircle2, Coins, Trophy, Award, Globe, RefreshCw } from 'lucide-react'
+import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Menu, X, LogOut, ArrowRight, Users, Upload, Cpu, Gavel, CheckCircle2, Coins, Trophy, Award, Globe } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import Link from 'next/link'
 import { getValidToken } from '@/lib/interlinkAuth'
@@ -77,6 +77,7 @@ const STATE_NAMES = [
 
 export default function DAppPortal() {
   const { walletAddress, connectWallet, disconnectWallet, txStatus, setTxStatus, historyLogs,
+    getWalletBalance,
     createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain,
     initializeMarketOnChain, claimPayoutOnChain, requestResolutionOnChain,
     resolveMarketOnChain, claimDecRewardsOnChain,
@@ -261,13 +262,10 @@ export default function DAppPortal() {
         }
       }
 
-      // Fetch wallet balance
+      // Fetch wallet balance through the authenticated provider
       try {
-        const balHex = await (window as any).ethereum.request({
-          method: 'eth_getBalance',
-          params: [walletAddress, 'latest']
-        })
-        if (balHex) setWalletBalance(BigInt(balHex).toString())
+        const bal = await getWalletBalance(walletAddress)
+        setWalletBalance(bal)
       } catch { }
 
       // User positions
@@ -534,11 +532,7 @@ export default function DAppPortal() {
           </Link>
           <LanguageSelector />
           {walletAddress ? (
-            <>
-              <button onClick={() => scanBlockchainRegistry()} disabled={isScanning}
-                className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors disabled:opacity-50" title="Refresh">
-                <RefreshCw className={`size-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-              </button>
+            <>        
               <div className="flex items-center bg-purple-950/30 border border-purple-900/40 rounded-full pr-1.5 pl-4 py-1.5 gap-3">
                 <span className="font-mono text-[10px] text-emerald-400">{formatEther(walletBalance)} tITL</span>
                 <span className="w-px h-4 bg-purple-900/40" />

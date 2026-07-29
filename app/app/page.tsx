@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useWeb3 } from '../context/Web3Context'
 import { ethers } from 'ethers'
-import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Menu, X, LogOut, ArrowRight, Users, Upload, Cpu, Gavel, CheckCircle2, Coins, Trophy, Award, Globe } from 'lucide-react'
+import { Layers, Hourglass, PlusCircle, Shield, History, Wallet, Menu, X, LogOut, ArrowRight, Users, Upload, Cpu, Gavel, CheckCircle2, Coins, Trophy, Award, Globe, RefreshCw } from 'lucide-react'
 import { Logo } from '@/components/logo'
 import Link from 'next/link'
 import { getValidToken } from '@/lib/interlinkAuth'
@@ -40,6 +40,7 @@ interface SmartMarket {
   rejectionVotes: number
   proposalFinalized: boolean
   proposalDecision: number
+  hasCurrentWalletVoted: boolean
   resolutionVotingDeadline: number
   activeDECSnapshot: number
   resolutionQuorum: number
@@ -181,7 +182,8 @@ export default function DAppPortal() {
               '',
             outcomeLabels: m.outcomeLabels || [],
             outcomePools: m.outcomePools || [],
-            outcomePrices: m.outcomePrices || []
+            outcomePrices: m.outcomePrices || [],
+            hasCurrentWalletVoted: Boolean(m.hasCurrentWalletVoted)
           }))
           setAllOnChainMarkets(baseMarkets)
         }
@@ -269,6 +271,22 @@ export default function DAppPortal() {
               proposalDecision = Number(proposalData[5])
             }
 
+            // The contract records whether this connected wallet has already
+            // voted on this proposal in hvp(marketId, walletAddress).
+            let hasCurrentWalletVoted = false
+
+            if (walletAddress) {
+              const hasVotedRaw = await ethCall(
+                iface.encodeFunctionData("hvp", [i, walletAddress])
+              )
+
+              if (hasVotedRaw) {
+                hasCurrentWalletVoted = Boolean(
+                  iface.decodeFunctionResult("hvp", hasVotedRaw)[0]
+                )
+              }
+            }
+
             tempMarkets.push({
               id: i,
               question: String(decoded[0]),
@@ -296,6 +314,7 @@ export default function DAppPortal() {
               rejectionVotes,
               proposalFinalized,
               proposalDecision,
+              hasCurrentWalletVoted,
               resolutionVotingDeadline: 0,
               activeDECSnapshot: 0,
               resolutionQuorum: 0,
@@ -423,7 +442,19 @@ export default function DAppPortal() {
 
   const visibleTabs = getVisibleTabs()
 
-  const handleTabSelect = (tab: TabType) => { setActiveTab(tab); setMobileMenuOpen(false) }
+  const handleTabSelect = (tab: TabType) => {
+    setActiveTab(tab)
+    setMobileMenuOpen(false)
+  }
+
+  const handleRefreshDApp = async () => {
+    setMobileMenuOpen(false)
+    setToastMsg('Refreshing dApp data...')
+
+    await scanBlockchainRegistry()
+
+    setToastMsg('dApp refreshed successfully.')
+  }
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -541,6 +572,14 @@ export default function DAppPortal() {
     if (ok) scanBlockchainRegistry()
   }
 
+  const handleProposalVote = async (
+    marketId: number,
+    support: boolean
+  ) => {
+    await castVoteOnChain(marketId, support)
+    await scanBlockchainRegistry()
+  }
+
   const handleRequestResolution = async (marketId: number) => {
     const ok = await requestResolutionOnChain(marketId)
     if (ok) scanBlockchainRegistry()
@@ -624,23 +663,56 @@ export default function DAppPortal() {
   return (
     <div className="min-h-screen bg-[#060117] text-slate-100 font-sans antialiased overflow-x-hidden pb-12">
       <header className="fixed top-0 inset-x-0 h-20 bg-[#0d0022]/90 backdrop-blur-md border-b border-purple-950/40 z-40 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto h-full flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-2.5 group">
+        <div className="max-w-7xl mx-auto h-full flex items-center gap-2 sm:gap-4">
+          <Link
+            href="/"
+            aria-label="Go to InterPredict homepage"
+            className="flex shrink-0 items-center gap-2.5 group"
+          >
             <Logo className="size-9 rounded-xl" />
-            <span className="hidden sm:inline font-heading text-lg font-bold tracking-tight text-white group-hover:text-primary transition-colors">InterPredict</span>
+            <span className="hidden sm:inline font-heading text-lg font-bold tracking-tight text-white group-hover:text-primary transition-colors">
+              InterPredict
+            </span>
           </Link>
-          <LanguageSelector />
+
+          <div
+            className="
+              ml-auto shrink-0
+              [&_button]:max-sm:w-10
+              [&_button]:max-sm:min-w-10
+              [&_button]:max-sm:px-2
+              [&_button]:max-sm:justify-center
+              [&_button>span:last-child]:max-sm:hidden
+            "
+          >
+            <LanguageSelector />
+          </div>
+
           {walletAddress ? (
-            <>
-              <div className="flex items-center bg-purple-950/30 border border-purple-900/40 rounded-full pr-1.5 pl-4 py-1.5 gap-3">
-                <span className="font-mono text-[10px] text-emerald-400">{formatEther(walletBalance)} tITL</span>
-                <span className="w-px h-4 bg-purple-900/40" />
-                <span className="font-mono text-xs text-purple-300">{`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}</span>
-                <button onClick={disconnectWallet} className="p-2 bg-purple-900/40 hover:bg-rose-950/40 rounded-full text-slate-400 hover:text-rose-400 transition-colors"><LogOut className="size-3.5" /></button>
-              </div>
-            </>
+            <div className="min-w-0 flex shrink items-center bg-purple-950/30 border border-purple-900/40 rounded-full px-1.5 sm:pr-1.5 sm:pl-4 py-1.5 gap-1.5 sm:gap-3">
+              <span className="hidden min-[390px]:inline font-mono text-[10px] text-emerald-400 whitespace-nowrap">
+                {formatEther(walletBalance)} tITL
+              </span>
+              <span className="hidden sm:block w-px h-4 bg-purple-900/40" />
+              <span className="hidden sm:inline font-mono text-xs text-purple-300 whitespace-nowrap">
+                {`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}
+              </span>
+              <button
+                onClick={disconnectWallet}
+                aria-label="Disconnect wallet"
+                className="shrink-0 p-2 bg-purple-900/40 hover:bg-rose-950/40 rounded-full text-slate-400 hover:text-rose-400 transition-colors"
+              >
+                <LogOut className="size-3.5" />
+              </button>
+            </div>
           ) : (
-            <button onClick={connectWallet} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary to-purple-600 text-xs sm:text-sm font-semibold rounded-full border border-purple-500/20 shadow-lg"><Wallet className="size-3.5" /><span>{t('connectBtn')}</span></button>
+            <button
+              onClick={connectWallet}
+              className="shrink-0 flex items-center gap-2 px-3 sm:px-5 py-2.5 bg-gradient-to-r from-primary to-purple-600 text-xs sm:text-sm font-semibold rounded-full border border-purple-500/20 shadow-lg"
+            >
+              <Wallet className="size-3.5" />
+              <span className="hidden min-[360px]:inline">{t('connectBtn')}</span>
+            </button>
           )}
         </div>
       </header>
@@ -653,6 +725,17 @@ export default function DAppPortal() {
           </button>
           {mobileMenuOpen && (
             <div className="absolute top-full inset-x-0 mt-2 bg-[#0d0022] border border-purple-950/80 rounded-xl p-2 shadow-2xl space-y-1 z-50">
+              <button
+                onClick={handleRefreshDApp}
+                disabled={isScanning}
+                className="w-full flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-semibold text-primary hover:bg-purple-950/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <RefreshCw className={`size-4 ${isScanning ? 'animate-spin' : ''}`} />
+                <span>{isScanning ? 'Refreshing dApp...' : 'Refresh dApp'}</span>
+              </button>
+
+              <div className="h-px bg-purple-950/60 my-1" />
+
               {visibleTabs.map((tab) => (
                 <button key={tab} onClick={() => handleTabSelect(tab)} className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-primary text-white' : 'text-slate-400 hover:bg-purple-950/40'}`}>{getTabLabel(tab)}</button>
               ))}
@@ -661,6 +744,17 @@ export default function DAppPortal() {
         </div>
 
         <aside className="hidden lg:flex flex-col gap-1.5 lg:col-span-1">
+          <button
+            onClick={handleRefreshDApp}
+            disabled={isScanning}
+            className="flex items-center gap-2.5 px-4 py-3.5 rounded-xl font-semibold text-sm border border-purple-500/20 bg-purple-950/20 text-primary hover:bg-purple-950/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            <RefreshCw className={`size-4 shrink-0 ${isScanning ? 'animate-spin' : ''}`} />
+            <span>{isScanning ? 'Refreshing dApp...' : 'Refresh dApp'}</span>
+          </button>
+
+          <div className="h-px bg-purple-950/50 my-1" />
+
           {visibleTabs.map((tab) => {
             const Icon = { 'MarketPlace': Layers, 'Market Proposals': Hourglass, 'Pending Markets': Hourglass, 'Make Market': PlusCircle, 'Join DEC': Shield, 'History': History, 'DEC Requests': Shield, 'DEC Members': Users, 'My Votes': Cpu, 'Unresolved Markets': Gavel, 'Resolved Markets': CheckCircle2, 'DEC Rewards': Coins, 'Creator Dashboard': Award }[tab]
             return (
@@ -822,10 +916,31 @@ export default function DAppPortal() {
                         {market.state === 0 ? (
                           <button onClick={() => handleEnterProposalVoting(market.id)} className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg uppercase">Enter DEC Voting</button>
                         ) : votingOpen ? (
-                          <div className="grid grid-cols-2 gap-3">
-                            <button onClick={() => castVoteOnChain(market.id, true)} className="py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg">Approve</button>
-                            <button onClick={() => castVoteOnChain(market.id, false)} className="py-2.5 bg-rose-600 text-white text-xs font-bold rounded-lg">Reject</button>
-                          </div>
+                          market.hasCurrentWalletVoted ? (
+                            <div className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-center">
+                              <p className="text-xs font-bold uppercase text-emerald-400">
+                                Vote Submitted
+                              </p>
+                              <p className="mt-1 text-[10px] font-mono text-slate-400">
+                                This wallet has already voted on this proposal.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-3">
+                              <button
+                                onClick={() => handleProposalVote(market.id, true)}
+                                className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => handleProposalVote(market.id, false)}
+                                className="py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg"
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          )
                         ) : (
                           <button onClick={() => handleFinalizeProposalVoting(market.id)} className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg uppercase">Finalize Voting</button>
                         )}

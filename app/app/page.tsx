@@ -88,11 +88,11 @@ const STATE_NAMES = [
 function getOutcomePercentage(market: SmartMarket, outcomeIndex: number): string {
   try {
     const pools = Array.isArray(market.outcomePools) ? market.outcomePools : []
-    const totalPool = pools.reduce((sum, value) => sum + BigInt(value || '0'), 0n)
+    const totalPool = pools.reduce((sum, value) => sum + BigInt(value || '0'), BigInt(0))
 
-    if (totalPool > 0n) {
+    if (totalPool > BigInt(0)) {
       const selectedPool = BigInt(pools[outcomeIndex] || '0')
-      const basisPoints = (selectedPool * 10000n) / totalPool
+      const basisPoints = (selectedPool * BigInt(10000)) / totalPool
       return (Number(basisPoints) / 100).toFixed(2)
     }
 
@@ -110,9 +110,15 @@ function getOutcomePercentage(market: SmartMarket, outcomeIndex: number): string
 
 function getTotalMarketVolume(market: SmartMarket): string {
   try {
+    const contractTotalVolume = BigInt(market.totalVolume || '0')
+
+    if (contractTotalVolume > BigInt(0)) {
+      return Number(ethers.formatEther(contractTotalVolume)).toFixed(1)
+    }
+
     const pools = Array.isArray(market.outcomePools) ? market.outcomePools : []
-    const totalPool = pools.reduce((sum, value) => sum + BigInt(value || '0'), 0n)
-    return Number(formatEther(totalPool)).toFixed(1)
+    const totalPool = pools.reduce((sum, value) => sum + BigInt(value || '0'), BigInt(0))
+    return Number(ethers.formatEther(totalPool)).toFixed(1)
   } catch (error) {
     console.warn(`Unable to calculate total volume for market ${market.id}:`, error)
     return '0.0'

@@ -237,7 +237,37 @@ export default function DAppPortal() {
             const poolsRaw = await ethCall(iface.encodeFunctionData("gP", [i]))
             const pools = poolsRaw ? Array.from(iface.decodeFunctionResult("gP", poolsRaw)[0] as string[]).map((v: any) => v.toString()) : []
             const pricesRaw = await ethCall(iface.encodeFunctionData("gPr2", [i]))
-            const prices = pricesRaw ? Array.from(iface.decodeFunctionResult("gPr2", pricesRaw)[0] as string[]).map((v: any) => v.toString()) : []
+            const prices = pricesRaw
+              ? Array.from(
+                iface.decodeFunctionResult("gPr2", pricesRaw)[0] as bigint[]
+              ).map((v) => v.toString())
+              : []
+
+            // Proposal-voting information.
+            // mv(id) returns:
+            // pvs, pvd, apv, rjv, pf, pd, pft, ra, rr, rc
+            const proposalRaw = await ethCall(
+              iface.encodeFunctionData("mv", [i])
+            )
+
+            let proposalVotingDeadline = 0
+            let approvalVotes = 0
+            let rejectionVotes = 0
+            let proposalFinalized = false
+            let proposalDecision = 0
+
+            if (proposalRaw) {
+              const proposalData = iface.decodeFunctionResult(
+                "mv",
+                proposalRaw
+              )
+
+              proposalVotingDeadline = Number(proposalData[1])
+              approvalVotes = Number(proposalData[2])
+              rejectionVotes = Number(proposalData[3])
+              proposalFinalized = Boolean(proposalData[4])
+              proposalDecision = Number(proposalData[5])
+            }
 
             tempMarkets.push({
               id: i,
@@ -261,11 +291,11 @@ export default function DAppPortal() {
               creatorSeedClaimed: '0',
               cancelled: false,
               cancelReason: '',
-              proposalVotingDeadline: 0,
-              approvalVotes: 0,
-              rejectionVotes: 0,
-              proposalFinalized: false,
-              proposalDecision: 0,
+              proposalVotingDeadline,
+              approvalVotes,
+              rejectionVotes,
+              proposalFinalized,
+              proposalDecision,
               resolutionVotingDeadline: 0,
               activeDECSnapshot: 0,
               resolutionQuorum: 0,
@@ -501,8 +531,13 @@ export default function DAppPortal() {
     }
   }
 
-  const handleFinalizeProposal = async (marketId: number) => {
+  const handleEnterProposalVoting = async (marketId: number) => {
     const ok = await initializeMarketOnChain(marketId)
+    if (ok) scanBlockchainRegistry()
+  }
+
+  const handleFinalizeProposalVoting = async (marketId: number) => {
+    const ok = await finalizeProposalVotingOnChain(marketId)
     if (ok) scanBlockchainRegistry()
   }
 
@@ -756,18 +791,43 @@ export default function DAppPortal() {
                       <div key={market.id} className="bg-secondary/30 border border-purple-500/20 rounded-xl p-4 sm:p-5 w-full max-w-xl">
                         <div className="flex justify-between items-center mb-2">
                           <span className="text-xs font-mono text-primary font-bold">Proposal #{market.id}</span>
-                          <span className="text-[11px] font-mono text-yellow-400">{votingOpen ? 'Voting Active' : 'Awaiting Entry'}</span>
+                          <span className="text-[11px] font-mono text-yellow-400">
+                            {market.state === 0
+                              ? 'Awaiting Entry'
+                              : votingOpen
+                                ? 'Voting Active'
+                                : 'Voting Ended'}
+                          </span>
                         </div>
                         <p className="text-sm font-semibold mb-3 text-slate-200">{market.question}</p>
+
+                        {market.state === 1 && market.proposalVotingDeadline > 0 && (
+                          <div className="mb-3 rounded-lg border border-purple-900/30 bg-black/20 p-3 text-[10px] font-mono">
+                            <div className="flex flex-wrap justify-between gap-2 text-slate-400">
+                              <span>
+                                Approve: <span className="text-emerald-400">{market.approvalVotes}</span>
+                              </span>
+                              <span>
+                                Reject: <span className="text-rose-400">{market.rejectionVotes}</span>
+                              </span>
+                            </div>
+                            <p className="mt-2 text-purple-300">
+                              {votingOpen
+                                ? `Voting ends in ${formatCountdown(market.proposalVotingDeadline)}`
+                                : `Voting ended ${formatExpiryDate(market.proposalVotingDeadline)}`}
+                            </p>
+                          </div>
+                        )}
+
                         {market.state === 0 ? (
-                          <button onClick={() => handleFinalizeProposal(market.id)} className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg uppercase">Enter DEC Voting</button>
+                          <button onClick={() => handleEnterProposalVoting(market.id)} className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg uppercase">Enter DEC Voting</button>
                         ) : votingOpen ? (
                           <div className="grid grid-cols-2 gap-3">
                             <button onClick={() => castVoteOnChain(market.id, true)} className="py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg">Approve</button>
                             <button onClick={() => castVoteOnChain(market.id, false)} className="py-2.5 bg-rose-600 text-white text-xs font-bold rounded-lg">Reject</button>
                           </div>
                         ) : (
-                          <button onClick={() => handleFinalizeProposal(market.id)} className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg uppercase">Finalize Voting</button>
+                          <button onClick={() => handleFinalizeProposalVoting(market.id)} className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg uppercase">Finalize Voting</button>
                         )}
                       </div>
                     )

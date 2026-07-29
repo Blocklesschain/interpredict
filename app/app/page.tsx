@@ -11,6 +11,7 @@ import contractABI from '@/lib/interpredictAbi.json'
 import { LanguageSelector } from '@/components/LanguageSelector'
 
 type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History' | 'DEC Members' | 'My Votes' | 'Unresolved Markets' | 'Resolved Markets' | 'DEC Rewards' | 'Creator Dashboard'
+  | 'DEC Requests'
 
 interface SmartMarket {
   id: number
@@ -78,7 +79,7 @@ const STATE_NAMES = [
 export default function DAppPortal() {
   const { walletAddress, connectWallet, disconnectWallet, txStatus, setTxStatus, historyLogs,
     getWalletBalance,
-    createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain,
+    createMarketOnChain, joinDecOnChain, approveDecRequestOnChain, castVoteOnChain, placeBetOnChain,
     initializeMarketOnChain, claimPayoutOnChain, requestResolutionOnChain,
     resolveMarketOnChain, claimDecRewardsOnChain,
     claimCreatorFeesOnChain, claimCreatorSeedOnChain,
@@ -107,6 +108,7 @@ export default function DAppPortal() {
 
   const [allOnChainMarkets, setAllOnChainMarkets] = useState<SmartMarket[]>([])
   const [blockchainDecList, setBlockchainDecList] = useState<string[]>([])
+  const [pendingDecRequests, setPendingDecRequests] = useState<{ address: string; requestedAt: string }[]>([])
   const [myPositions, setMyPositions] = useState<MyPosition[]>([])
   const [isScanning, setIsScanning] = useState<boolean>(false)
   const [oracleAddress, setOracleAddress] = useState<string | null>(null)
@@ -157,10 +159,19 @@ export default function DAppPortal() {
             if (decData.allDecMembers?.length) setBlockchainDecList(decData.allDecMembers)
           }
         } catch (e) { console.warn('DEC API failed:', e) }
+        if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
+          try {
+            const reqRes = await fetch('/api/dec-requests', { cache: 'no-store' })
+            if (reqRes.ok) {
+              const reqData = await reqRes.json()
+              setPendingDecRequests(reqData.pending || [])
+            }
+          } catch (e) { console.warn('DEC requests fetch failed:', e) }
+        }
       }
 
       const shouldUsePublicAPI = !walletAddress || typeof window === 'undefined' || !(window as any).ethereum
-      if (shouldUsePublicAPI) { setIsScanning(false); return }
+      if (shouldUsePublicAPI) return
 
       const iface = new ethers.Interface(contractABI)
       const ethCall = async (data: string): Promise<string | null> => {
@@ -297,7 +308,7 @@ export default function DAppPortal() {
     } finally {
       setIsScanning(false)
     }
-  }, [walletAddress, hasJoinedDEC])
+  }, [walletAddress])
 
   useEffect(() => { scanBlockchainRegistry() }, [scanBlockchainRegistry])
 
@@ -339,6 +350,7 @@ export default function DAppPortal() {
     tabs.push('History')
     tabs.push('Creator Dashboard')
     if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) tabs.push('DEC Members')
+    if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) tabs.push('DEC Requests')
     return tabs
   }
 
@@ -482,12 +494,20 @@ export default function DAppPortal() {
     if (ok) scanBlockchainRegistry()
   }
 
+  const handleApproveDecRequest = async (address: string) => {
+    const ok = await approveDecRequestOnChain(address)
+    if (ok) {
+      setPendingDecRequests((prev) => prev.filter(r => r.address.toLowerCase() !== address.toLowerCase()))
+      scanBlockchainRegistry()
+    }
+  }
+
   const getTabLabel = (tab: TabType): string => {
     const map: Record<TabType, string> = {
       'MarketPlace': t('marketPlace'), 'Pending Markets': t('pendingMarkets'),
       'Market Proposals': 'Market Proposals', 'Make Market': t('makeMarket'),
       'Join DEC': t('joinDec'), 'History': t('history'), 'DEC Members': t('adminPanel'),
-      'My Votes': 'My Votes', 'Unresolved Markets': 'Unresolved Markets',
+      'DEC Requests': 'DEC Requests', 'My Votes': 'My Votes', 'Unresolved Markets': 'Unresolved Markets',
       'Resolved Markets': 'Resolved Markets', 'DEC Rewards': 'DEC Rewards',
       'Creator Dashboard': 'Creator Dashboard'
     }
@@ -532,7 +552,7 @@ export default function DAppPortal() {
           </Link>
           <LanguageSelector />
           {walletAddress ? (
-            <>        
+            <>
               <div className="flex items-center bg-purple-950/30 border border-purple-900/40 rounded-full pr-1.5 pl-4 py-1.5 gap-3">
                 <span className="font-mono text-[10px] text-emerald-400">{formatEther(walletBalance)} tITL</span>
                 <span className="w-px h-4 bg-purple-900/40" />
@@ -563,7 +583,7 @@ export default function DAppPortal() {
 
         <aside className="hidden lg:flex flex-col gap-1.5 lg:col-span-1">
           {visibleTabs.map((tab) => {
-            const Icon = { 'MarketPlace': Layers, 'Market Proposals': Hourglass, 'Pending Markets': Hourglass, 'Make Market': PlusCircle, 'Join DEC': Shield, 'History': History, 'DEC Members': Users, 'My Votes': Cpu, 'Unresolved Markets': Gavel, 'Resolved Markets': CheckCircle2, 'DEC Rewards': Coins, 'Creator Dashboard': Award }[tab]
+            const Icon = { 'MarketPlace': Layers, 'Market Proposals': Hourglass, 'Pending Markets': Hourglass, 'Make Market': PlusCircle, 'Join DEC': Shield, 'History': History, 'DEC Requests': Shield, 'DEC Members': Users, 'My Votes': Cpu, 'Unresolved Markets': Gavel, 'Resolved Markets': CheckCircle2, 'DEC Rewards': Coins, 'Creator Dashboard': Award }[tab]
             return (
               <button key={tab} onClick={() => setActiveTab(tab)} className={`flex items-center gap-2.5 px-4 py-3.5 rounded-xl font-semibold text-sm border transition-all ${activeTab === tab ? 'bg-primary text-white border-primary/50 shadow-md' : 'text-slate-400 border-transparent hover:bg-secondary/40'}`}>
                 <Icon className="size-4 shrink-0" /><span>{getTabLabel(tab)}</span>
@@ -779,6 +799,7 @@ export default function DAppPortal() {
                 <Shield className="size-10 mx-auto text-primary mb-3" />
                 <p className="text-sm font-semibold mb-1 text-slate-200">{t('assessorTitle')}</p>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">DEC membership requires admin approval. Contact the team to be added.</p>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">Submit a request to join the DEC Committee. An admin will review and approve it.</p>
                 <button onClick={handleJoinCommitteeSubmit} className="px-6 py-2.5 bg-primary text-white font-bold text-xs rounded-xl">{t('assessorBtn')}</button>
               </div>
             )}
@@ -994,6 +1015,29 @@ export default function DAppPortal() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'DEC Requests' && walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase() && (
+              <div className="space-y-4 w-full">
+                <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-4 font-mono">● Pending DEC Requests</h4>
+                {pendingDecRequests.length === 0 ? (
+                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No pending requests.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {pendingDecRequests.map((req) => (
+                      <div key={req.address} className="bg-secondary/30 border border-border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-mono text-slate-200">{req.address}</p>
+                          <p className="text-[10px] text-slate-500 font-mono">Requested: {new Date(req.requestedAt).toLocaleString()}</p>
+                        </div>
+                        <button onClick={() => handleApproveDecRequest(req.address)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg uppercase shrink-0">
+                          Approve
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

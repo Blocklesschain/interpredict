@@ -6,11 +6,11 @@ const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '0x3E5936F1
 const RPC_URL = 'https://evm-rpc.test-net.interlinklabs.ai/v1/rpc'
 
 const iface = new ethers.Interface([
-  'function isActiveDecMember(address) view returns (bool)',
-  'function getAllDecMembers() view returns (address[])',
-  'function decMembers(address) view returns (bool active, uint256 proposalVotes, uint256 resolutionVotes, uint256 totalParticipation, uint256 honestVotes, uint256 incorrectVotes, uint256 reputation, uint256 totalRewardsEarned, uint256 totalRewardsClaimed, uint256 unclaimedRewards, uint256 joinTimestamp)',
-  'function decRewardThreshold() view returns (uint256)',
-  'function decRewardPool() view returns (uint256)'
+  'function iad(address) view returns (bool)',
+  'function gAD() view returns (address[])',
+  'function gDMI(address) view returns (tuple(bool act, uint256 pv, uint256 rv, uint256 tp, uint256 hv, uint256 iv, uint256 rep, uint256 tre, uint256 trc, uint256 ur))',
+  'function drt() view returns (uint256)',
+  'function drp() view returns (uint256)'
 ])
 
 async function rpcCall(accessToken: string, data: string, id: number = 1) {
@@ -44,9 +44,9 @@ export async function GET(request: NextRequest) {
     const accessToken = await getValidServiceToken()
 
     // Check active DEC membership
-    const isActiveResult = await rpcCall(accessToken, iface.encodeFunctionData('isActiveDecMember', [address]), 1)
+    const isActiveResult = await rpcCall(accessToken, iface.encodeFunctionData('iad', [address]), 1)
     const isActiveMember = isActiveResult && isActiveResult !== '0x'
-      ? iface.decodeFunctionResult('isActiveDecMember', isActiveResult)[0]
+      ? iface.decodeFunctionResult('iad', isActiveResult)[0]
       : false
 
     // Check admin
@@ -56,21 +56,20 @@ export async function GET(request: NextRequest) {
     // Get DEC member info if member
     let memberInfo = null
     if (isActiveMember || isAdmin) {
-      const memberResult = await rpcCall(accessToken, iface.encodeFunctionData('decMembers', [address]), 2)
+      const memberResult = await rpcCall(accessToken, iface.encodeFunctionData('gDMI', [address]), 2)
       if (memberResult && memberResult !== '0x') {
-        const decoded = iface.decodeFunctionResult('decMembers', memberResult)
+        const decoded = iface.decodeFunctionResult('gDMI', memberResult)[0]
         memberInfo = {
-          active: decoded[0],
-          proposalVotes: Number(decoded[1]),
-          resolutionVotes: Number(decoded[2]),
-          totalParticipation: Number(decoded[3]),
-          honestVotes: Number(decoded[4]),
-          incorrectVotes: Number(decoded[5]),
-          reputation: Number(decoded[6]),
-          totalRewardsEarned: decoded[7].toString(),
-          totalRewardsClaimed: decoded[8].toString(),
-          unclaimedRewards: decoded[9].toString(),
-          joinTimestamp: Number(decoded[10])
+          active: decoded.act,
+          proposalVotes: Number(decoded.pv),
+          resolutionVotes: Number(decoded.rv),
+          totalParticipation: Number(decoded.tp),
+          honestVotes: Number(decoded.hv),
+          incorrectVotes: Number(decoded.iv),
+          reputation: Number(decoded.rep),
+          totalRewardsEarned: decoded.tre.toString(),
+          totalRewardsClaimed: decoded.trc.toString(),
+          unclaimedRewards: decoded.ur.toString()
         }
       }
     }
@@ -78,19 +77,19 @@ export async function GET(request: NextRequest) {
     // Get all DEC members (admin only)
     let allDecMembers: string[] = []
     if (isAdmin) {
-      const membersResult = await rpcCall(accessToken, iface.encodeFunctionData('getAllDecMembers'), 3)
+      const membersResult = await rpcCall(accessToken, iface.encodeFunctionData('gAD'), 3)
       if (membersResult && membersResult !== '0x') {
-        const members = iface.decodeFunctionResult('getAllDecMembers', membersResult)[0]
+        const members = iface.decodeFunctionResult('gAD', membersResult)[0]
         allDecMembers = Array.from(members as string[])
       }
     }
 
     // Get reward threshold and pool
-    const thresholdResult = await rpcCall(accessToken, iface.encodeFunctionData('decRewardThreshold'), 4)
-    const threshold = thresholdResult ? Number(iface.decodeFunctionResult('decRewardThreshold', thresholdResult)[0]) : 0
+    const thresholdResult = await rpcCall(accessToken, iface.encodeFunctionData('drt'), 4)
+    const threshold = thresholdResult ? Number(iface.decodeFunctionResult('drt', thresholdResult)[0]) : 0
 
-    const poolResult = await rpcCall(accessToken, iface.encodeFunctionData('decRewardPool'), 5)
-    const pool = poolResult ? iface.decodeFunctionResult('decRewardPool', poolResult)[0].toString() : '0'
+    const poolResult = await rpcCall(accessToken, iface.encodeFunctionData('drp'), 5)
+    const pool = poolResult ? iface.decodeFunctionResult('drp', poolResult)[0].toString() : '0'
 
     return NextResponse.json({
       isDecMember: isActiveMember,

@@ -85,6 +85,40 @@ const STATE_NAMES = [
   'Admin Ver', 'Confirmed', 'Finalized', 'Resolved'
 ]
 
+function getOutcomePercentage(market: SmartMarket, outcomeIndex: number): string {
+  try {
+    const pools = Array.isArray(market.outcomePools) ? market.outcomePools : []
+    const totalPool = pools.reduce((sum, value) => sum + BigInt(value || '0'), 0n)
+
+    if (totalPool > 0n) {
+      const selectedPool = BigInt(pools[outcomeIndex] || '0')
+      const basisPoints = (selectedPool * 10000n) / totalPool
+      return (Number(basisPoints) / 100).toFixed(2)
+    }
+
+    const contractPrice = Number(market.outcomePrices?.[outcomeIndex] || 0)
+    if (Number.isFinite(contractPrice) && contractPrice > 0) {
+      return (contractPrice <= 1 ? contractPrice * 100 : contractPrice / 1e16).toFixed(2)
+    }
+  } catch (error) {
+    console.warn(`Unable to calculate market depth for market ${market.id}:`, error)
+  }
+
+  return '0.00'
+}
+
+
+function getTotalMarketVolume(market: SmartMarket): string {
+  try {
+    const pools = Array.isArray(market.outcomePools) ? market.outcomePools : []
+    const totalPool = pools.reduce((sum, value) => sum + BigInt(value || '0'), 0n)
+    return Number(formatEther(totalPool)).toFixed(1)
+  } catch (error) {
+    console.warn(`Unable to calculate total volume for market ${market.id}:`, error)
+    return '0.0'
+  }
+}
+
 function MarketThumbnail({
   src,
   question,
@@ -744,16 +778,24 @@ export default function DAppPortal() {
                             <span className="text-slate-400">Expires: <span className="text-slate-300">{formatExpiryDate(market.marketEndTime)}</span></span>
                             <span className="text-purple-300">⏳ {formatCountdown(market.marketEndTime)}</span>
                           </div>
-                          {/* Outcome prices */}
+                          {/* Market depth */}
                           {market.outcomeLabels?.length > 0 && (
-                            <div className="mb-3 grid grid-cols-2 gap-2">
-                              {market.outcomeLabels.map((label, oi) => (
-                                <div key={oi} className="bg-black/20 border border-purple-900/30 rounded-lg p-2 text-center">
-                                  <p className="text-[10px] font-mono text-slate-400">{label}</p>
-                                  <p className="text-xs font-bold text-slate-200">{market.outcomePrices?.[oi] ? (Number(market.outcomePrices[oi]) / 1e16).toFixed(2) : '0'}%</p>
-                                  <p className="text-[9px] font-mono text-slate-500">{formatEther(market.outcomePools?.[oi] || '0')} tITL</p>
-                                </div>
-                              ))}
+                            <div className="mb-3 space-y-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                {market.outcomeLabels.map((label, oi) => (
+                                  <div key={oi} className="bg-black/20 border border-purple-900/30 rounded-lg p-2 text-center">
+                                    <p className="text-[10px] font-mono text-slate-400">{label}</p>
+                                    <p className="text-xs font-bold text-slate-200">{getOutcomePercentage(market, oi)}%</p>
+                                    <p className="text-[9px] font-mono text-slate-500">
+                                      {Number(formatEther(market.outcomePools?.[oi] || '0')).toFixed(1)} tITL
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="flex items-center justify-between rounded-lg border border-purple-900/30 bg-black/20 px-3 py-2">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Volume</span>
+                                <span className="text-xs font-bold font-mono text-purple-300">{getTotalMarketVolume(market)} tITL</span>
+                              </div>
                             </div>
                           )}
                           <div className="mb-4">

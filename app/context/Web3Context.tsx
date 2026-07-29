@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { ethers } from 'ethers'
 import { translations, LocaleType } from './translations'
 import { getValidToken } from '@/lib/interlinkAuth'
@@ -310,6 +310,69 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Loads the DEC directory from the authenticated server API.
+  // The API returns allDecMembers for the connected admin wallet.
+  const refreshDecMembers = useCallback(async (
+    address: string | null = walletAddress
+  ): Promise<string[]> => {
+    if (!address) {
+      setDecMembers([])
+      return []
+    }
+
+    try {
+      const response = await fetch(
+        `/api/dec-membership?address=${encodeURIComponent(address)}`,
+        {
+          method: 'GET',
+          cache: 'no-store'
+        }
+      )
+
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(
+          result?.error || 'Failed to load DEC member directory'
+        )
+      }
+
+      const members = Array.isArray(result?.allDecMembers)
+        ? result.allDecMembers.filter(
+          (member: unknown): member is string =>
+            typeof member === 'string' && ethers.isAddress(member)
+        )
+        : []
+
+      // Remove accidental duplicates while preserving the original order.
+      const uniqueMembers: string[] = Array.from(
+        new Map<string, string>(
+          members.map((member: string): [string, string] => [
+            member.toLowerCase(),
+            ethers.getAddress(member)
+          ])
+        ).values()
+      )
+
+      setDecMembers(uniqueMembers)
+      return uniqueMembers
+    } catch (err) {
+      console.error('[Web3Context] Failed to refresh DEC directory:', err)
+      setDecMembers([])
+      return []
+    }
+  }, [walletAddress])
+
+  // Load or clear the directory whenever the connected wallet changes.
+  useEffect(() => {
+    if (!walletAddress) {
+      setDecMembers([])
+      return
+    }
+
+    void refreshDecMembers(walletAddress)
+  }, [walletAddress, refreshDecMembers])
+
   const sendTxSafely = async (
     method: string,
     args: any[],
@@ -533,6 +596,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
       if (isAlreadyActive) {
         await clearPendingRequest()
+        await refreshDecMembers(walletAddress)
 
         setTxStatus(
           `${address} is already an active DEC member. The stale request was removed.`
@@ -573,6 +637,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       }
 
       await clearPendingRequest()
+      await refreshDecMembers(walletAddress)
 
       setTxStatus(
         alreadyHasRole

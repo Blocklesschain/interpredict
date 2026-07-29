@@ -74,6 +74,16 @@ const MarketState = {
   Resolved: 13
 } as const
 
+function getReadableContractError(err: any): string {
+  const message = String(err?.shortMessage || err?.reason || err?.info?.error?.message || err?.message || err || '')
+
+  if (message.includes('user rejected') || err?.code === 4001 || err?.code === 'ACTION_REJECTED') return 'Transaction was cancelled in your wallet.'
+  if (message.includes('insufficient funds')) return 'Your wallet does not have enough tITL to complete this transaction.'
+  if (message.includes('already voted')) return 'This wallet has already voted on this resolution.'
+  if (message.includes('execution reverted: !') || message.includes('reason=\"!\"')) return 'The contract rejected this action because one of its eligibility or state requirements was not met.'
+  return message
+}
+
 function formatTxError(err: any): string {
   const parts: string[] = []
   if (err?.message) parts.push(err.message)
@@ -82,7 +92,9 @@ function formatTxError(err: any): string {
   if (err?.data && typeof err.data === 'string') parts.push(`data=${err.data}`)
   if (err?.info?.error?.message) parts.push(`rpc=${err.info.error.message}`)
   if (err?.info?.responseStatus) parts.push(`httpStatus=${err.info.responseStatus}`)
-  return parts.length > 0 ? parts.join(' | ') : String(err)
+  const technical = parts.length > 0 ? parts.join(' | ') : String(err)
+  const readable = getReadableContractError(err)
+  return readable && readable !== technical ? `${readable} (${technical})` : technical
 }
 
 export function Web3Provider({ children }: { children: React.ReactNode }) {
@@ -776,70 +788,139 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
   const requestResolutionOnChain = async (marketId: number): Promise<boolean> => {
     try {
-      setTxStatus("Requesting market resolution...")
+      setTxStatus("Checking resolution eligibility...")
+
+      const { contract: readContract, provider } = await getContractInstance()
+      const { signer } = await getSignerContract()
+      const activeWallet = await signer.getAddress()
+      const state = Number(await readContract.ms(marketId))
+      const market = await readContract.mb(marketId)
+      const endTime = Number(market.et ?? market[7])
+      const latestBlock = await provider.getBlock('latest')
+      const chainTime = Number(latestBlock?.timestamp || Math.floor(Date.now() / 1000))
+
+      if (![MarketState.Active, MarketState.Closed, MarketState.Unresolved].includes(state as any)) {
+        if (state >= MarketState.ResReq) throw new Error('Resolution has already been requested for this market.')
+        throw new Error(`This market cannot request resolution while it is in state ${state}.`)
+      }
+
+      if (chainTime < endTime) {
+        throw new Error('This market has not ended on-chain yet.')
+      }
+
+      const creator = String(market.cr ?? market[6]).toLowerCase()
+      const isCreator = creator === activeWallet.toLowerCase()
+      const isTrader = Boolean(await readContract.ht(marketId, activeWallet))
+      const isActiveDec = Boolean(await readContract.iad(activeWallet))
+
+      if (!isCreator && !isTrader && !isActiveDec) {
+        throw new Error('Only a trader, the market creator, or an active DEC member can request resolution.')
+      }
+
+      setTxStatus("Eligibility confirmed. Requesting market resolution...")
       await sendTxSafely('rR', [marketId])
-      setTxStatus("Resolution requested! DEC voting open for 3 hours.")
+      setTxStatus("Resolution requested successfully. The market is now available for DEC resolution voting.")
       return true
     } catch (err: any) {
-      const detail = formatTxError(err)
+      const detail = getReadableContractError(err)
       console.error('requestResolutionOnChain failed:', err)
-      setTxStatus(`Error: ${detail}`)
+      setTxStatus(`Resolution Error: ${detail}`)
       return false
     }
   }
 
   const resolveMarketOnChain = async (marketId: number, winningOutcome: number): Promise<boolean> => {
     try {
-      setTxStatus("Confirming outcome as admin verifier...")
       const { contract } = await getContractInstance()
-
       const state = Number(await contract.ms(marketId))
+      const labels = await contract.gL(marketId)
 
-      if (state === MarketState.DECResVoting) {
-        setTxStatus("Finalizing resolution voting first...")
-        await sendTxSafely('fRV', [marketId])
+      if (winningOutcome < 0 || winningOutcome >= labels.length) {
+        throw new Error('The selected winning outcome is invalid for this market.')
       }
 
-      // Admin verification of the winning outcome
-      await sendTxSafely('cO', [marketId, winningOutcome, ""])
+      if (state === MarketState.AdminVer) {
+        setTxStatus("Confirming the winning outcome as admin verifier...")
+        await sendTxSafely('cO', [marketId, winningOutcome, ""])
+        setTxStatus("Outcome confirmed. The market is ready for finalization.")
+        return true
+      }
 
-      setTxStatus("Outcome confirmed! Finalizing market...")
-      await sendTxSafely('fM', [marketId])
+      if (state === MarketState.Confirmed) {
+        setTxStatus("Finalizing confirmed market...")
+        await sendTxSafely('fM', [marketId])
+        setTxStatus("Market finalized successfully. Winning positions can now be claimed.")
+        return true
+      }
 
-      setTxStatus("Market resolved and finalized!")
-      return true
+      throw new Error('This admin action is not available for the market’s current resolution state.')
     } catch (err: any) {
-      const detail = formatTxError(err)
+      const detail = getReadableContractError(err)
       console.error('resolveMarketOnChain failed:', err)
-      setTxStatus(`Error: ${detail}`)
+      setTxStatus(`Resolution Error: ${detail}`)
       return false
     }
   }
 
   const voteOnResolutionOnChain = async (marketId: number, outcomeIndex: number): Promise<boolean> => {
     try {
+      setTxStatus("Checking DEC resolution voting eligibility...")
+      const { contract } = await getContractInstance()
+      const { signer } = await getSignerContract()
+      const activeWallet = await signer.getAddress()
+      const state = Number(await contract.ms(marketId))
+
+      if (state !== MarketState.DECResVoting) {
+        throw new Error('This market is not currently accepting DEC resolution votes.')
+      }
+      if (!Boolean(await contract.iad(activeWallet))) {
+        throw new Error('Only active DEC members can vote on market resolutions.')
+      }
+      if (Boolean(await contract.hvr(marketId, activeWallet))) {
+        throw new Error('This wallet has already voted on this resolution.')
+      }
+
+      const labels = await contract.gL(marketId)
+      if (outcomeIndex < 0 || outcomeIndex >= labels.length) {
+        throw new Error('The selected outcome is invalid for this market.')
+      }
+
       setTxStatus("Casting resolution vote...")
       await sendTxSafely('vOR', [marketId, outcomeIndex])
-      setTxStatus("Resolution vote cast!")
+      setTxStatus("Resolution vote submitted successfully.")
       return true
     } catch (err: any) {
-      const detail = formatTxError(err)
+      const detail = getReadableContractError(err)
       console.error('voteOnResolutionOnChain failed:', err)
-      setTxStatus(`Error: ${detail}`)
+      setTxStatus(`Resolution Vote Error: ${detail}`)
       return false
     }
   }
 
   const finalizeResolutionVotingOnChain = async (marketId: number): Promise<boolean> => {
     try {
-      setTxStatus("Finalizing resolution voting...")
+      setTxStatus("Checking DEC resolution vote totals...")
+      const { contract } = await getContractInstance()
+      const state = Number(await contract.ms(marketId))
+      const resolution = await contract.mr(marketId)
+      const totalVotes = Number(resolution.trv ?? resolution[2])
+      const quorum = Number(resolution.quorum ?? resolution[1])
+
+      if (state !== MarketState.DECResVoting) {
+        throw new Error('This market is not in DEC resolution voting.')
+      }
+      if (totalVotes < quorum) {
+        throw new Error(`Resolution quorum has not been reached. ${totalVotes} of ${quorum} required votes have been submitted.`)
+      }
+
+      setTxStatus("Finalizing DEC resolution voting...")
       await sendTxSafely('fRV', [marketId])
-      setTxStatus("Resolution voting finalized!")
+      setTxStatus("DEC resolution voting finalized. The market is awaiting admin verification.")
       return true
     } catch (err: any) {
-      const detail = formatTxError(err)
+      const detail = getReadableContractError(err)
       console.error('finalizeResolutionVotingOnChain failed:', err)
-      setTxStatus(`Error: ${detail}`)
+      setTxStatus(`Resolution Finalization Error: ${detail}`)
       return false
     }
   }

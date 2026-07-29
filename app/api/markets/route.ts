@@ -551,6 +551,11 @@ async function loadMarket(
       Date.now() / 1000
     )
 
+  const canRequestResolution =
+    (state === MarketState.Active && marketEndTime <= nowSec) ||
+    state === MarketState.Closed ||
+    state === MarketState.Unresolved
+
   return {
     id: marketId,
     marketId,
@@ -775,6 +780,26 @@ async function loadMarket(
       state ===
       MarketState.Active,
 
+    canRequestResolution,
+
+    isInDECResolutionVoting:
+      state ===
+      MarketState.DECResolutionVoting,
+
+    isAwaitingAdminVerification:
+      state ===
+      MarketState.AdminVerification,
+
+    isOutcomeConfirmed:
+      state ===
+      MarketState.Confirmed,
+
+    isFinalized:
+      state ===
+      MarketState.Finalized ||
+      state ===
+      MarketState.Resolved,
+
     isPendingResolution:
       [
         MarketState.Closed,
@@ -909,6 +934,33 @@ export async function GET() {
         ].includes(market.state)
       )
 
+    const awaitingResolutionMarkets =
+      allMarkets.filter(market =>
+        market.canRequestResolution ||
+        market.state === MarketState.ResolutionRequested
+      )
+
+    const resolutionVotingMarkets =
+      allMarkets.filter(market =>
+        market.state === MarketState.DECResolutionVoting
+      )
+
+    const adminVerificationMarkets =
+      allMarkets.filter(market =>
+        market.state === MarketState.AdminVerification
+      )
+
+    const confirmedMarkets =
+      allMarkets.filter(market =>
+        market.state === MarketState.Confirmed
+      )
+
+    const finalizedMarkets =
+      allMarkets.filter(market =>
+        market.state === MarketState.Finalized ||
+        market.state === MarketState.Resolved
+      )
+
     const resolvedMarkets =
       allMarkets.filter(market =>
         [
@@ -936,6 +988,11 @@ export async function GET() {
       activeMarkets,
       pendingProposals,
       unresolvedMarkets,
+      awaitingResolutionMarkets,
+      resolutionVotingMarkets,
+      adminVerificationMarkets,
+      confirmedMarkets,
+      finalizedMarkets,
       resolvedMarkets,
       rejectedMarkets,
       cancelledMarkets,
@@ -951,6 +1008,21 @@ export async function GET() {
 
         unresolved:
           unresolvedMarkets.length,
+
+        awaitingResolution:
+          awaitingResolutionMarkets.length,
+
+        resolutionVoting:
+          resolutionVotingMarkets.length,
+
+        adminVerification:
+          adminVerificationMarkets.length,
+
+        confirmed:
+          confirmedMarkets.length,
+
+        finalized:
+          finalizedMarkets.length,
 
         resolved:
           resolvedMarkets.length,

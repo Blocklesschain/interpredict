@@ -11,7 +11,7 @@ import contractABI from '@/lib/interpredictAbi.json'
 import { LanguageSelector } from '@/components/LanguageSelector'
 
 type TabType = 'MarketPlace' | 'Market Proposals' | 'Pending Markets' | 'Make Market' | 'Join DEC' | 'History' | 'DEC Members' | 'My Votes' | 'Unresolved Markets' | 'Resolved Markets' | 'DEC Rewards' | 'Creator Dashboard'
-  | 'DEC Requests'
+  | 'DEC Requests' | 'DEC Resolution Voting' | 'Resolution Centre'
 
 interface SmartMarket {
   id: number
@@ -41,6 +41,7 @@ interface SmartMarket {
   proposalFinalized: boolean
   proposalDecision: number
   hasCurrentWalletVoted: boolean
+  hasCurrentWalletVotedOnResolution: boolean
   resolutionVotingDeadline: number
   activeDECSnapshot: number
   resolutionQuorum: number
@@ -183,7 +184,8 @@ export default function DAppPortal() {
             outcomeLabels: m.outcomeLabels || [],
             outcomePools: m.outcomePools || [],
             outcomePrices: m.outcomePrices || [],
-            hasCurrentWalletVoted: Boolean(m.hasCurrentWalletVoted)
+            hasCurrentWalletVoted: Boolean(m.hasCurrentWalletVoted),
+            hasCurrentWalletVotedOnResolution: Boolean(m.hasCurrentWalletVotedOnResolution)
           }))
           setAllOnChainMarkets(baseMarkets)
         }
@@ -287,6 +289,48 @@ export default function DAppPortal() {
               }
             }
 
+            // Resolution lifecycle information.
+            const resolutionRaw = await ethCall(
+              iface.encodeFunctionData("mr", [i])
+            )
+
+            let activeDECSnapshot = 0
+            let resolutionQuorum = 0
+            let totalResolutionVotes = 0
+            let decSelectedOutcome = 0
+            let confirmedOutcome = 0
+            let outcomeConfirmed = false
+            let finalized = false
+
+            if (resolutionRaw) {
+              const resolutionData = iface.decodeFunctionResult(
+                "mr",
+                resolutionRaw
+              )
+
+              activeDECSnapshot = Number(resolutionData[0])
+              resolutionQuorum = Number(resolutionData[1])
+              totalResolutionVotes = Number(resolutionData[2])
+              decSelectedOutcome = Number(resolutionData[3])
+              confirmedOutcome = Number(resolutionData[3])
+              outcomeConfirmed = Boolean(resolutionData[4])
+              finalized = Boolean(resolutionData[5])
+            }
+
+            let hasCurrentWalletVotedOnResolution = false
+
+            if (walletAddress) {
+              const hasResolutionVotedRaw = await ethCall(
+                iface.encodeFunctionData("hvr", [i, walletAddress])
+              )
+
+              if (hasResolutionVotedRaw) {
+                hasCurrentWalletVotedOnResolution = Boolean(
+                  iface.decodeFunctionResult("hvr", hasResolutionVotedRaw)[0]
+                )
+              }
+            }
+
             tempMarkets.push({
               id: i,
               question: String(decoded[0]),
@@ -315,14 +359,15 @@ export default function DAppPortal() {
               proposalFinalized,
               proposalDecision,
               hasCurrentWalletVoted,
+              hasCurrentWalletVotedOnResolution,
               resolutionVotingDeadline: 0,
-              activeDECSnapshot: 0,
-              resolutionQuorum: 0,
-              totalResolutionVotes: 0,
-              decSelectedOutcome: 0,
-              confirmedOutcome: 0,
-              outcomeConfirmed: false,
-              finalized: false
+              activeDECSnapshot,
+              resolutionQuorum,
+              totalResolutionVotes,
+              decSelectedOutcome,
+              confirmedOutcome,
+              outcomeConfirmed,
+              finalized
             })
           }
         }
@@ -429,14 +474,20 @@ export default function DAppPortal() {
     else tabs.push('Pending Markets')
     tabs.push('My Votes')
     tabs.push('Make Market')
-    if (hasJoinedDEC) tabs.push('DEC Rewards')
+    if (hasJoinedDEC) {
+      tabs.push('DEC Resolution Voting')
+      tabs.push('DEC Rewards')
+    }
     if (!hasJoinedDEC) tabs.push('Join DEC')
     tabs.push('Unresolved Markets')
     tabs.push('Resolved Markets')
     tabs.push('History')
     tabs.push('Creator Dashboard')
     if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) tabs.push('DEC Members')
-    if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) tabs.push('DEC Requests')
+    if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
+      tabs.push('DEC Requests')
+      tabs.push('Resolution Centre')
+    }
     return tabs
   }
 
@@ -585,9 +636,19 @@ export default function DAppPortal() {
     if (ok) scanBlockchainRegistry()
   }
 
+  const handleResolutionVote = async (marketId: number, outcomeIndex: number) => {
+    const ok = await voteOnResolutionOnChain(marketId, outcomeIndex)
+    if (ok) await scanBlockchainRegistry()
+  }
+
+  const handleFinalizeResolutionVoting = async (marketId: number) => {
+    const ok = await finalizeResolutionVotingOnChain(marketId)
+    if (ok) await scanBlockchainRegistry()
+  }
+
   const handleResolveMarket = async (marketId: number, winningOutcome: number) => {
     const ok = await resolveMarketOnChain(marketId, winningOutcome)
-    if (ok) scanBlockchainRegistry()
+    if (ok) await scanBlockchainRegistry()
   }
 
   const handleClaimDecRewards = async () => {
@@ -618,7 +679,8 @@ export default function DAppPortal() {
       'MarketPlace': t('marketPlace'), 'Pending Markets': t('pendingMarkets'),
       'Market Proposals': 'Market Proposals', 'Make Market': t('makeMarket'),
       'Join DEC': t('joinDec'), 'History': t('history'), 'DEC Members': t('adminPanel'),
-      'DEC Requests': 'DEC Requests', 'My Votes': 'My Votes', 'Unresolved Markets': 'Unresolved Markets',
+      'DEC Requests': 'DEC Requests', 'DEC Resolution Voting': 'DEC Resolution Voting',
+      'Resolution Centre': 'Resolution Centre', 'My Votes': 'My Votes', 'Unresolved Markets': 'Unresolved Markets',
       'Resolved Markets': 'Resolved Markets', 'DEC Rewards': 'DEC Rewards',
       'Creator Dashboard': 'Creator Dashboard'
     }
@@ -628,8 +690,18 @@ export default function DAppPortal() {
   const activeMarkets = allOnChainMarkets.filter(m => m.state === 5 && m.marketEndTime > nowSec)
   const inactiveMarkets = allOnChainMarkets.filter(m => (m.state === 5 && m.marketEndTime <= nowSec) || m.state >= 6)
   const pendingProposals = allOnChainMarkets.filter(m => m.state === 0 || m.state === 1)
-  const unresolvedMarkets = allOnChainMarkets.filter(m => m.state === 5 && m.marketEndTime <= nowSec)
-  const resolvedMarkets = allOnChainMarkets.filter(m => m.state >= 11)
+  const awaitingResolutionMarkets = allOnChainMarkets.filter(m =>
+    (m.state === 5 && m.marketEndTime <= nowSec) ||
+    m.state === 6 ||
+    m.state === 7 ||
+    m.state === 8
+  )
+  const resolutionVotingMarkets = allOnChainMarkets.filter(m => m.state === 9)
+  const adminVerificationMarkets = allOnChainMarkets.filter(m => m.state === 10)
+  const confirmedMarkets = allOnChainMarkets.filter(m => m.state === 11)
+  const finalizedMarkets = allOnChainMarkets.filter(m => m.state === 12 || m.state === 13)
+  const unresolvedMarkets = allOnChainMarkets.filter(m => m.state >= 6 && m.state <= 11 || (m.state === 5 && m.marketEndTime <= nowSec))
+  const resolvedMarkets = finalizedMarkets
   const creatorMarkets = allOnChainMarkets.filter(m => m.creator?.toLowerCase() === walletAddress?.toLowerCase())
 
   const activePositions = myPositions.filter(p => p.marketState === 5 && p.marketEndTime > nowSec)
@@ -756,7 +828,7 @@ export default function DAppPortal() {
           <div className="h-px bg-purple-950/50 my-1" />
 
           {visibleTabs.map((tab) => {
-            const Icon = { 'MarketPlace': Layers, 'Market Proposals': Hourglass, 'Pending Markets': Hourglass, 'Make Market': PlusCircle, 'Join DEC': Shield, 'History': History, 'DEC Requests': Shield, 'DEC Members': Users, 'My Votes': Cpu, 'Unresolved Markets': Gavel, 'Resolved Markets': CheckCircle2, 'DEC Rewards': Coins, 'Creator Dashboard': Award }[tab]
+            const Icon = { 'MarketPlace': Layers, 'Market Proposals': Hourglass, 'Pending Markets': Hourglass, 'Make Market': PlusCircle, 'Join DEC': Shield, 'History': History, 'DEC Requests': Shield, 'DEC Members': Users, 'My Votes': Cpu, 'Unresolved Markets': Gavel, 'DEC Resolution Voting': Users, 'Resolution Centre': Shield, 'Resolved Markets': CheckCircle2, 'DEC Rewards': Coins, 'Creator Dashboard': Award }[tab]
             return (
               <button key={tab} onClick={() => setActiveTab(tab)} className={`flex items-center gap-2.5 px-4 py-3.5 rounded-xl font-semibold text-sm border transition-all ${activeTab === tab ? 'bg-primary text-white border-primary/50 shadow-md' : 'text-slate-400 border-transparent hover:bg-secondary/40'}`}>
                 <Icon className="size-4 shrink-0" /><span>{getTabLabel(tab)}</span>
@@ -1094,6 +1166,14 @@ export default function DAppPortal() {
                                   ) : (
                                     <p className="text-[11px] font-mono text-rose-400">No payout available.</p>
                                   )
+                                ) : pos.marketState === 9 ? (
+                                  <div className="w-full py-2.5 bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-xs font-bold rounded-lg uppercase text-center">DEC Resolution Voting</div>
+                                ) : pos.marketState === 10 ? (
+                                  <div className="w-full py-2.5 bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-bold rounded-lg uppercase text-center">Awaiting Admin Verification</div>
+                                ) : pos.marketState === 11 ? (
+                                  <div className="w-full py-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold rounded-lg uppercase text-center">Outcome Confirmed</div>
+                                ) : pos.marketState === 8 ? (
+                                  <div className="w-full py-2.5 bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-bold rounded-lg uppercase text-center">Resolution Requested</div>
                                 ) : (
                                   <button onClick={() => handleRequestResolution(pos.marketId)} className="w-full py-2.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-lg uppercase">Request Resolution</button>
                                 )}
@@ -1113,32 +1193,27 @@ export default function DAppPortal() {
               <div className="space-y-4 w-full">
                 {!walletAddress ? (
                   <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">Connect your wallet.</div>
-                ) : unresolvedMarkets.length === 0 ? (
-                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No markets awaiting resolution.</div>
+                ) : awaitingResolutionMarkets.length === 0 ? (
+                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No markets awaiting a resolution request.</div>
                 ) : (
                   <>
-                    <p className="text-[10px] text-slate-500 mb-2">
-                      {isOracle ? 'Ended markets awaiting settlement. Choose the winning outcome.' : 'These markets have ended and need settlement.'}
-                    </p>
-                    {unresolvedMarkets.map((market) => (
+                    <p className="text-[10px] text-slate-500 mb-2">Expired markets that can still enter the resolution process.</p>
+                    {awaitingResolutionMarkets.map((market) => (
                       <div key={market.id} className="bg-secondary/30 border border-yellow-500/20 rounded-xl p-4 sm:p-5 w-full max-w-xl">
                         <div className="flex justify-between items-center mb-2">
                           <span className="text-xs font-mono text-primary font-bold">Market #{market.id}</span>
-                          <span className="text-[11px] font-mono text-yellow-400">Ended</span>
+                          <span className="text-[11px] font-mono text-yellow-400">{STATE_NAMES[market.state] || 'Ended'}</span>
                         </div>
-                        <p className="text-sm font-semibold mb-3 text-slate-200">{market.question}</p>
+                        <p className="text-sm font-semibold mb-2 text-slate-200">{market.question}</p>
+                        {market.resolutionCriteria && <p className="text-[11px] text-slate-400 mb-3">Criteria: {market.resolutionCriteria}</p>}
                         <div className="flex flex-wrap gap-3 text-[11px] font-mono text-slate-400 mb-2">
                           {market.outcomeLabels?.map((label, oi) => (
                             <span key={oi}>{label}: {formatEther(market.outcomePools?.[oi] || '0')} tITL</span>
                           ))}
                         </div>
                         <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(market.marketEndTime)}</p>
-                        {isOracle ? (
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {market.outcomeLabels?.map((label, oi) => (
-                              <button key={oi} onClick={() => handleResolveMarket(market.id, oi)} className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg uppercase">{label}</button>
-                            ))}
-                          </div>
+                        {market.state === 8 ? (
+                          <div className="w-full py-2.5 bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-bold rounded-lg uppercase text-center">Resolution Requested</div>
                         ) : (
                           <button onClick={() => handleRequestResolution(market.id)} className="w-full py-2.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-lg uppercase">Request Resolution</button>
                         )}
@@ -1146,6 +1221,95 @@ export default function DAppPortal() {
                     ))}
                   </>
                 )}
+              </div>
+            )}
+
+            {/* DEC RESOLUTION VOTING */}
+            {activeTab === 'DEC Resolution Voting' && hasJoinedDEC && (
+              <div className="space-y-4 w-full">
+                <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4 max-w-xl">
+                  <h3 className="text-sm font-bold text-slate-200">Resolution Voting Queue</h3>
+                  <p className="text-[11px] text-slate-400 mt-1">Review the market criteria carefully and vote for the outcome supported by the available evidence.</p>
+                </div>
+                {resolutionVotingMarkets.length === 0 ? (
+                  <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No markets are currently in DEC resolution voting.</div>
+                ) : resolutionVotingMarkets.map((market) => (
+                  <div key={market.id} className="bg-secondary/30 border border-purple-500/25 rounded-xl p-4 sm:p-5 w-full max-w-xl">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs font-mono text-primary font-bold">Market #{market.id}</span>
+                      <span className="text-[11px] font-mono text-purple-300">DEC Resolution Voting</span>
+                    </div>
+                    <p className="text-sm font-semibold mb-2 text-slate-200">{market.question}</p>
+                    {market.resolutionCriteria && <p className="text-[11px] text-slate-400 mb-3">Criteria: {market.resolutionCriteria}</p>}
+                    <div className="grid grid-cols-3 gap-2 mb-4 text-center text-[10px] font-mono">
+                      <div className="rounded-lg bg-black/20 border border-purple-900/30 p-2"><span className="block text-slate-500">Votes</span><strong className="text-slate-200">{market.totalResolutionVotes}</strong></div>
+                      <div className="rounded-lg bg-black/20 border border-purple-900/30 p-2"><span className="block text-slate-500">Quorum</span><strong className="text-slate-200">{market.resolutionQuorum}</strong></div>
+                      <div className="rounded-lg bg-black/20 border border-purple-900/30 p-2"><span className="block text-slate-500">Snapshot</span><strong className="text-slate-200">{market.activeDECSnapshot}</strong></div>
+                    </div>
+                    {market.hasCurrentWalletVotedOnResolution ? (
+                      <div className="w-full py-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold rounded-lg uppercase text-center">Vote Submitted</div>
+                    ) : (
+                      <div className={`grid gap-2 ${market.outcomeLabels?.length === 2 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
+                        {market.outcomeLabels?.map((label, oi) => (
+                          <button key={oi} onClick={() => handleResolutionVote(market.id, oi)} className="py-2.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-lg uppercase">Vote {label}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ADMIN RESOLUTION CENTRE */}
+            {activeTab === 'Resolution Centre' && isOracle && (
+              <div className="space-y-7 w-full">
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 max-w-xl">
+                  <h3 className="text-sm font-bold text-slate-200">Admin Resolution Centre</h3>
+                  <p className="text-[11px] text-slate-400 mt-1">Finalize DEC voting, verify the selected outcome, and complete market settlement according to the current on-chain state.</p>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">DEC Voting in Progress</h3>
+                  <div className="space-y-4">
+                    {resolutionVotingMarkets.length === 0 ? <div className="p-6 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No DEC resolution votes to finalize.</div> : resolutionVotingMarkets.map((market) => (
+                      <div key={market.id} className="bg-secondary/30 border border-yellow-500/20 rounded-xl p-4 sm:p-5 max-w-xl">
+                        <p className="text-sm font-semibold text-slate-200">{market.question}</p>
+                        <p className="text-[11px] text-slate-400 mt-2 mb-3">Votes {market.totalResolutionVotes} / Quorum {market.resolutionQuorum}</p>
+                        <button onClick={() => handleFinalizeResolutionVoting(market.id)} className="w-full py-2.5 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold rounded-lg uppercase">Finalize DEC Resolution Voting</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Awaiting Admin Verification</h3>
+                  <div className="space-y-4">
+                    {adminVerificationMarkets.length === 0 ? <div className="p-6 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No markets awaiting admin verification.</div> : adminVerificationMarkets.map((market) => (
+                      <div key={market.id} className="bg-secondary/30 border border-blue-500/20 rounded-xl p-4 sm:p-5 max-w-xl">
+                        <p className="text-sm font-semibold mb-2 text-slate-200">{market.question}</p>
+                        <p className="text-[11px] text-slate-400 mb-3">DEC selected: <strong className="text-blue-300">{market.outcomeLabels?.[market.decSelectedOutcome] || `Outcome ${market.decSelectedOutcome}`}</strong></p>
+                        <div className={`grid gap-2 ${market.outcomeLabels?.length === 2 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
+                          {market.outcomeLabels?.map((label, oi) => (
+                            <button key={oi} onClick={() => handleResolveMarket(market.id, oi)} className="py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg uppercase">Confirm {label}</button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Outcome Confirmed</h3>
+                  <div className="space-y-4">
+                    {confirmedMarkets.length === 0 ? <div className="p-6 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No confirmed markets awaiting finalization.</div> : confirmedMarkets.map((market) => (
+                      <div key={market.id} className="bg-secondary/30 border border-emerald-500/20 rounded-xl p-4 sm:p-5 max-w-xl">
+                        <p className="text-sm font-semibold text-slate-200">{market.question}</p>
+                        <p className="text-[11px] text-emerald-300 mt-2 mb-3">Confirmed outcome: {market.outcomeLabels?.[market.confirmedOutcome] || `Outcome ${market.confirmedOutcome}`}</p>
+                        <button onClick={() => handleResolveMarket(market.id, market.confirmedOutcome)} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg uppercase">Finalize Market</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 

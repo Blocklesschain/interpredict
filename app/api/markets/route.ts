@@ -12,36 +12,27 @@ const CONTRACT_ADDRESS =
 const RPC_URL =
   'https://evm-rpc.test-net.interlinklabs.ai/v1/rpc'
 
-/*
- * These function names and return values match the deployed
- * Solidity contract supplied by you.
- */
+const MAX_RPC_ATTEMPTS = 4
+const INITIAL_RETRY_DELAY_MS = 700
+const MARKET_DELAY_MS = 350
+
 const iface = new ethers.Interface([
-  // Total number of markets
   'function tm() view returns (uint256)',
 
-  // Base market context: mapping(uint256 => MCtx) public mb
   'function mb(uint256) view returns (string q, string d, uint8 cat, string cc, string tu, uint8 o, address cr, uint256 et, string rc, string pe, string be)',
 
-  // Proposal voting data: mapping(uint256 => MV) public mv
   'function mv(uint256) view returns (uint256 pvs, uint256 pvd, uint256 apv, uint256 rjv, bool pf, uint8 pd, uint256 pft, uint256 ra, address rr, bool rc)',
 
-  // Resolution data: mapping(uint256 => MR) public mr
   'function mr(uint256) view returns (uint256 snap, uint256 quorum, uint256 trv, uint8 co, bool oc, bool fin)',
 
-  // Market financial/activity data: mapping(uint256 => MF) public mf
   'function mf(uint256) view returns (uint256 tv, uint256 pc, uint256 cfe, uint256 cfc, uint256 csc, bool can, string cr, uint256 ct)',
 
-  // Market state: mapping(uint256 => State) public ms
   'function ms(uint256) view returns (uint8)',
 
-  // Outcome labels
   'function gL(uint256) view returns (string[])',
 
-  // Outcome liquidity pools
   'function gP(uint256) view returns (uint256[])',
 
-  // Outcome prices
   'function gPr2(uint256) view returns (uint256[])'
 ])
 
@@ -100,10 +91,7 @@ const CATEGORY_NAMES = [
   'Other'
 ]
 
-const ORIGIN_NAMES = [
-  'Community',
-  'Team'
-]
+const ORIGIN_NAMES = ['Community', 'Team']
 
 const PROPOSAL_DECISION_NAMES = [
   'None',
@@ -151,86 +139,242 @@ function bigintToString(value: unknown): string {
   return BigInt(value as bigint).toString()
 }
 
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, milliseconds)
+  })
+}
+
+function extractRpcErrorMessage(
+  error: RpcResponse['error']
+): string {
+  if (!error) {
+    return 'RPC call failed'
+  }
+
+  let message =
+    error.message ||
+    'RPC call failed'
+
+  if (typeof error.data === 'string') {
+    message = error.data
+  } else if (
+    typeof error.data === 'object' &&
+    error.data !== null &&
+    'message' in error.data
+  ) {
+    const nestedMessage = (
+      error.data as {
+        message?: unknown
+      }
+    ).message
+
+    if (nestedMessage !== undefined) {
+      message = String(nestedMessage)
+    }
+  }
+
+  return message
+}
+
+function isRateLimitError(
+  responseStatus: number,
+  json?: RpcResponse,
+  responseText?: string
+): boolean {
+  if (responseStatus === 429) {
+    return true
+  }
+
+  if (json?.error?.code === -32029) {
+    return true
+  }
+
+  const combinedMessage = [
+    json?.error?.message,
+    responseText
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  return (
+    combinedMessage.includes('rate limit') ||
+    combinedMessage.includes('too many requests')
+  )
+}
+
 async function rpcCall(
   accessToken: string,
   data: string,
   callName: string,
   id: number
 ): Promise<string> {
-  const response = await fetch(RPC_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id,
-      method: 'eth_call',
-      params: [
-        {
-          to: CONTRACT_ADDRESS,
-          data
-        },
-        'latest'
-      ]
-    }),
-    cache: 'no-store'
-  })
+  let lastError = `${callName} failed`
 
-  const responseText = await response.text()
-
-  let json: RpcResponse
-
-  try {
-    json = JSON.parse(responseText) as RpcResponse
-  } catch {
-    throw new Error(
-      `${callName} returned invalid JSON: ${responseText.slice(0, 300)}`
-    )
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      `${callName} returned HTTP ${response.status}: ${responseText.slice(
-        0,
-        300
-      )}`
-    )
-  }
-
-  if (json.error) {
-    let errorDetails = json.error.message || 'RPC call failed'
-
-    if (json.error.data) {
-      if (
-        typeof json.error.data === 'object' &&
-        json.error.data !== null &&
-        'message' in json.error.data
-      ) {
-        errorDetails =
-          String(
-            (json.error.data as { message?: unknown }).message
-          ) || errorDetails
-      } else if (typeof json.error.data === 'string') {
-        errorDetails = json.error.data
-      }
-    }
-
-    throw new Error(`${callName} failed: ${errorDetails}`)
-  }
-
-  if (
-    typeof json.result !== 'string' ||
-    json.result === '' ||
-    json.result === '0x'
+  for (
+    let attempt = 1;
+    attempt <= MAX_RPC_ATTEMPTS;
+    attempt++
   ) {
-    throw new Error(
-      `${callName} returned empty data. Check the deployed contract address and ABI.`
-    )
+    try {
+      const response = await fetch(RPC_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id,
+          method: 'eth_call',
+          params: [
+            {
+              to: CONTRACT_ADDRESS,
+              data
+            },
+            'latest'
+          ]
+        }),
+        cache: 'no-store'
+      })
+
+      const responseText =
+        await response.text()
+
+      let json: RpcResponse | undefined
+
+      try {
+        json = JSON.parse(
+          responseText
+        ) as RpcResponse
+      } catch {
+        if (
+          response.status === 429 &&
+          attempt < MAX_RPC_ATTEMPTS
+        ) {
+          const retryDelay =
+            INITIAL_RETRY_DELAY_MS *
+            attempt
+
+          console.warn(
+            `${callName} was rate limited. Retrying in ${retryDelay}ms. Attempt ${attempt}/${MAX_RPC_ATTEMPTS}.`
+          )
+
+          await sleep(retryDelay)
+          continue
+        }
+
+        throw new Error(
+          `${callName} returned invalid JSON: ${responseText.slice(
+            0,
+            300
+          )}`
+        )
+      }
+
+      const rateLimited =
+        isRateLimitError(
+          response.status,
+          json,
+          responseText
+        )
+
+      if (
+        rateLimited &&
+        attempt < MAX_RPC_ATTEMPTS
+      ) {
+        const retryAfterHeader =
+          response.headers.get('retry-after')
+
+        const retryAfterSeconds =
+          retryAfterHeader
+            ? Number(retryAfterHeader)
+            : 0
+
+        const retryDelay =
+          Number.isFinite(retryAfterSeconds) &&
+            retryAfterSeconds > 0
+            ? retryAfterSeconds * 1000
+            : INITIAL_RETRY_DELAY_MS *
+            attempt
+
+        console.warn(
+          `${callName} was rate limited. Retrying in ${retryDelay}ms. Attempt ${attempt}/${MAX_RPC_ATTEMPTS}.`
+        )
+
+        await sleep(retryDelay)
+        continue
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          `${callName} returned HTTP ${response.status}: ${responseText.slice(
+            0,
+            300
+          )}`
+        )
+      }
+
+      if (json.error) {
+        const errorDetails =
+          extractRpcErrorMessage(
+            json.error
+          )
+
+        throw new Error(
+          `${callName} failed: ${errorDetails}`
+        )
+      }
+
+      if (
+        typeof json.result !== 'string' ||
+        json.result === '' ||
+        json.result === '0x'
+      ) {
+        throw new Error(
+          `${callName} returned empty data. Check the deployed contract address and ABI.`
+        )
+      }
+
+      return json.result
+    } catch (error: unknown) {
+      lastError =
+        getErrorMessage(error)
+
+      const looksRateLimited =
+        lastError
+          .toLowerCase()
+          .includes('rate limit') ||
+        lastError
+          .toLowerCase()
+          .includes('too many requests') ||
+        lastError.includes('429') ||
+        lastError.includes('-32029')
+
+      if (
+        looksRateLimited &&
+        attempt < MAX_RPC_ATTEMPTS
+      ) {
+        const retryDelay =
+          INITIAL_RETRY_DELAY_MS *
+          attempt
+
+        console.warn(
+          `${callName} failed due to rate limiting. Retrying in ${retryDelay}ms. Attempt ${attempt}/${MAX_RPC_ATTEMPTS}.`
+        )
+
+        await sleep(retryDelay)
+        continue
+      }
+
+      throw error
+    }
   }
 
-  return json.result
+  throw new Error(
+    `${lastError}. Maximum retry attempts reached.`
+  )
 }
 
 async function readFunction(
@@ -240,17 +384,19 @@ async function readFunction(
   requestId: number,
   callName: string
 ): Promise<ethers.Result> {
-  const data = iface.encodeFunctionData(
-    functionName,
-    args
-  )
+  const data =
+    iface.encodeFunctionData(
+      functionName,
+      args
+    )
 
-  const rawResult = await rpcCall(
-    accessToken,
-    data,
-    callName,
-    requestId
-  )
+  const rawResult =
+    await rpcCall(
+      accessToken,
+      data,
+      callName,
+      requestId
+    )
 
   try {
     return iface.decodeFunctionResult(
@@ -271,127 +417,139 @@ async function loadMarket(
   marketId: number
 ) {
   /*
-   * The public mappings are independent, so they can safely
-   * be loaded concurrently.
+   * Calls are deliberately sequential to avoid flooding
+   * the InterLink authenticated RPC endpoint.
    */
-  const [
-    baseResult,
-    votingResult,
-    resolutionResult,
-    financialResult,
-    stateResult,
-    labelsResult,
-    poolsResult,
-    pricesResult
-  ] = await Promise.all([
-    readFunction(
+  const baseResult =
+    await readFunction(
       accessToken,
       'mb',
       [marketId],
       marketId * 10 + 1,
       `mb(${marketId})`
-    ),
+    )
 
-    readFunction(
+  const votingResult =
+    await readFunction(
       accessToken,
       'mv',
       [marketId],
       marketId * 10 + 2,
       `mv(${marketId})`
-    ),
+    )
 
-    readFunction(
+  const resolutionResult =
+    await readFunction(
       accessToken,
       'mr',
       [marketId],
       marketId * 10 + 3,
       `mr(${marketId})`
-    ),
+    )
 
-    readFunction(
+  const financialResult =
+    await readFunction(
       accessToken,
       'mf',
       [marketId],
       marketId * 10 + 4,
       `mf(${marketId})`
-    ),
+    )
 
-    readFunction(
+  const stateResult =
+    await readFunction(
       accessToken,
       'ms',
       [marketId],
       marketId * 10 + 5,
       `ms(${marketId})`
-    ),
+    )
 
-    readFunction(
+  const labelsResult =
+    await readFunction(
       accessToken,
       'gL',
       [marketId],
       marketId * 10 + 6,
       `gL(${marketId})`
-    ),
+    )
 
-    readFunction(
+  const poolsResult =
+    await readFunction(
       accessToken,
       'gP',
       [marketId],
       marketId * 10 + 7,
       `gP(${marketId})`
-    ),
+    )
 
-    readFunction(
+  const pricesResult =
+    await readFunction(
       accessToken,
       'gPr2',
       [marketId],
       marketId * 10 + 8,
       `gPr2(${marketId})`
     )
-  ])
 
   const base = baseResult
   const voting = votingResult
   const resolution = resolutionResult
   const financial = financialResult
 
-  const state = Number(stateResult[0])
-  const category = Number(base.cat ?? base[2])
-  const origin = Number(base.o ?? base[5])
-  const proposalDecision = Number(
-    voting.pd ?? voting[5]
-  )
+  const state =
+    Number(stateResult[0])
 
-  const outcomeLabels = Array.from(
-    labelsResult[0] as readonly string[]
-  )
+  const category =
+    Number(base.cat ?? base[2])
 
-  const outcomePools = Array.from(
-    poolsResult[0] as readonly bigint[]
-  ).map(value => value.toString())
+  const origin =
+    Number(base.o ?? base[5])
 
-  const rawOutcomePrices = Array.from(
-    pricesResult[0] as readonly bigint[]
-  )
+  const proposalDecision =
+    Number(voting.pd ?? voting[5])
 
-  /*
-   * Solidity returns prices scaled by 1e18.
-   *
-   * outcomePricesRaw preserves the exact value.
-   * outcomePrices provides a decimal number for UI display.
-   */
+  const outcomeLabels =
+    Array.from(
+      labelsResult[0] as readonly string[]
+    )
+
+  const outcomePools =
+    Array.from(
+      poolsResult[0] as readonly bigint[]
+    ).map(value =>
+      value.toString()
+    )
+
+  const rawOutcomePrices =
+    Array.from(
+      pricesResult[0] as readonly bigint[]
+    )
+
   const outcomePricesRaw =
-    rawOutcomePrices.map(value => value.toString())
+    rawOutcomePrices.map(value =>
+      value.toString()
+    )
 
   const outcomePrices =
     rawOutcomePrices.map(value =>
-      Number(ethers.formatUnits(value, 18))
+      Number(
+        ethers.formatUnits(
+          value,
+          18
+        )
+      )
     )
 
-  const marketEndTime = bigintToNumber(
-    base.et ?? base[7]
-  )
+  const marketEndTime =
+    bigintToNumber(
+      base.et ?? base[7]
+    )
 
-  const nowSec = Math.floor(Date.now() / 1000)
+  const nowSec =
+    Math.floor(
+      Date.now() / 1000
+    )
 
   return {
     id: marketId,
@@ -406,6 +564,7 @@ async function loadMarket(
     ),
 
     category,
+
     categoryName:
       CATEGORY_NAMES[category] ||
       `Category ${category}`,
@@ -419,6 +578,7 @@ async function loadMarket(
     ),
 
     origin,
+
     originName:
       ORIGIN_NAMES[origin] ||
       `Origin ${origin}`,
@@ -442,121 +602,151 @@ async function loadMarket(
       base.be ?? base[10]
     ),
 
-    proposalVotingStart: bigintToNumber(
-      voting.pvs ?? voting[0]
-    ),
+    proposalVotingStart:
+      bigintToNumber(
+        voting.pvs ?? voting[0]
+      ),
 
-    proposalVotingDeadline: bigintToNumber(
-      voting.pvd ?? voting[1]
-    ),
+    proposalVotingDeadline:
+      bigintToNumber(
+        voting.pvd ?? voting[1]
+      ),
 
-    approvalVotes: bigintToNumber(
-      voting.apv ?? voting[2]
-    ),
+    approvalVotes:
+      bigintToNumber(
+        voting.apv ?? voting[2]
+      ),
 
-    rejectionVotes: bigintToNumber(
-      voting.rjv ?? voting[3]
-    ),
+    rejectionVotes:
+      bigintToNumber(
+        voting.rjv ?? voting[3]
+      ),
 
-    proposalFinalized: Boolean(
-      voting.pf ?? voting[4]
-    ),
+    proposalFinalized:
+      Boolean(
+        voting.pf ?? voting[4]
+      ),
 
     proposalDecision,
 
     proposalDecisionName:
       PROPOSAL_DECISION_NAMES[
       proposalDecision
-      ] || `Decision ${proposalDecision}`,
+      ] ||
+      `Decision ${proposalDecision}`,
 
     proposalFinalizationTimestamp:
       bigintToNumber(
         voting.pft ?? voting[6]
       ),
 
-    refundAmount: bigintToString(
-      voting.ra ?? voting[7]
-    ),
+    refundAmount:
+      bigintToString(
+        voting.ra ?? voting[7]
+      ),
 
     refundRecipient: String(
       voting.rr ?? voting[8]
     ),
 
-    refundCompleted: Boolean(
-      voting.rc ?? voting[9]
-    ),
+    refundCompleted:
+      Boolean(
+        voting.rc ?? voting[9]
+      ),
 
-    activeDECSnapshot: bigintToNumber(
-      resolution.snap ?? resolution[0]
-    ),
+    activeDECSnapshot:
+      bigintToNumber(
+        resolution.snap ??
+        resolution[0]
+      ),
 
-    resolutionQuorum: bigintToNumber(
-      resolution.quorum ?? resolution[1]
-    ),
+    resolutionQuorum:
+      bigintToNumber(
+        resolution.quorum ??
+        resolution[1]
+      ),
 
-    totalResolutionVotes: bigintToNumber(
-      resolution.trv ?? resolution[2]
-    ),
+    totalResolutionVotes:
+      bigintToNumber(
+        resolution.trv ??
+        resolution[2]
+      ),
 
-    confirmedOutcome: Number(
-      resolution.co ?? resolution[3]
-    ),
+    confirmedOutcome:
+      Number(
+        resolution.co ??
+        resolution[3]
+      ),
 
-    /*
-     * This contract does not store a separate
-     * decSelectedOutcome value.
-     */
-    decSelectedOutcome: Number(
-      resolution.co ?? resolution[3]
-    ),
+    decSelectedOutcome:
+      Number(
+        resolution.co ??
+        resolution[3]
+      ),
 
-    outcomeConfirmed: Boolean(
-      resolution.oc ?? resolution[4]
-    ),
+    outcomeConfirmed:
+      Boolean(
+        resolution.oc ??
+        resolution[4]
+      ),
 
-    finalized: Boolean(
-      resolution.fin ?? resolution[5]
-    ),
+    finalized:
+      Boolean(
+        resolution.fin ??
+        resolution[5]
+      ),
 
-    /*
-     * The current contract does not store a market
-     * finalization timestamp inside MR.
-     */
     finalizationTimestamp: 0,
 
-    totalVolume: bigintToString(
-      financial.tv ?? financial[0]
-    ),
+    totalVolume:
+      bigintToString(
+        financial.tv ??
+        financial[0]
+      ),
 
-    participantCount: bigintToNumber(
-      financial.pc ?? financial[1]
-    ),
+    participantCount:
+      bigintToNumber(
+        financial.pc ??
+        financial[1]
+      ),
 
-    creatorFeesEarned: bigintToString(
-      financial.cfe ?? financial[2]
-    ),
+    creatorFeesEarned:
+      bigintToString(
+        financial.cfe ??
+        financial[2]
+      ),
 
-    creatorFeesClaimed: bigintToString(
-      financial.cfc ?? financial[3]
-    ),
+    creatorFeesClaimed:
+      bigintToString(
+        financial.cfc ??
+        financial[3]
+      ),
 
-    creatorSeedClaimed: bigintToString(
-      financial.csc ?? financial[4]
-    ),
+    creatorSeedClaimed:
+      bigintToString(
+        financial.csc ??
+        financial[4]
+      ),
 
-    cancelled: Boolean(
-      financial.can ?? financial[5]
-    ),
+    cancelled:
+      Boolean(
+        financial.can ??
+        financial[5]
+      ),
 
     cancelReason: String(
-      financial.cr ?? financial[6]
+      financial.cr ??
+      financial[6]
     ),
 
-    cancelTimestamp: bigintToNumber(
-      financial.ct ?? financial[7]
-    ),
+    cancelTimestamp:
+      bigintToNumber(
+        financial.ct ??
+        financial[7]
+      ),
 
     state,
+
     stateName:
       STATE_NAMES[state] ||
       `Unknown State ${state}`,
@@ -574,13 +764,16 @@ async function loadMarket(
       nowSec >= marketEndTime,
 
     isProposed:
-      state === MarketState.Proposed,
+      state ===
+      MarketState.Proposed,
 
     isInProposalVoting:
-      state === MarketState.DECVoting,
+      state ===
+      MarketState.DECVoting,
 
     isActive:
-      state === MarketState.Active,
+      state ===
+      MarketState.Active,
 
     isPendingResolution:
       [
@@ -593,17 +786,24 @@ async function loadMarket(
       ].includes(state),
 
     isResolved:
-      state === MarketState.Finalized ||
-      state === MarketState.Resolved
+      state ===
+      MarketState.Finalized ||
+      state ===
+      MarketState.Resolved
   }
 }
 
 export async function GET() {
-  if (!ethers.isAddress(CONTRACT_ADDRESS)) {
+  if (
+    !ethers.isAddress(
+      CONTRACT_ADDRESS
+    )
+  ) {
     return NextResponse.json(
       {
         error:
           'NEXT_PUBLIC_CONTRACT_ADDRESS is missing or invalid',
+
         contractAddress:
           CONTRACT_ADDRESS
       },
@@ -613,16 +813,13 @@ export async function GET() {
     )
   }
 
-  const skippedMarkets: SkippedMarket[] = []
+  const skippedMarkets:
+    SkippedMarket[] = []
 
   try {
     const accessToken =
       await getValidServiceToken()
 
-    /*
-     * The contract uses the public variable `tm`, not
-     * a function called `totalMarkets`.
-     */
     const totalResult =
       await readFunction(
         accessToken,
@@ -633,7 +830,9 @@ export async function GET() {
       )
 
     const totalCount =
-      bigintToNumber(totalResult[0])
+      bigintToNumber(
+        totalResult[0]
+      )
 
     const allMarkets = []
 
@@ -667,12 +866,21 @@ export async function GET() {
           error: message
         })
       }
+
+      /*
+       * Small pause before loading the next market.
+       * This reduces the chance of another RPC 429.
+       */
+      if (
+        marketId <
+        totalCount - 1
+      ) {
+        await sleep(
+          MARKET_DELAY_MS
+        )
+      }
     }
 
-    /*
-     * These groups use the actual State enum positions
-     * in the uploaded Solidity contract.
-     */
     const pendingProposals =
       allMarkets.filter(market =>
         [
@@ -734,14 +942,22 @@ export async function GET() {
 
       counts: {
         all: allMarkets.length,
-        active: activeMarkets.length,
-        pending: pendingProposals.length,
+
+        active:
+          activeMarkets.length,
+
+        pending:
+          pendingProposals.length,
+
         unresolved:
           unresolvedMarkets.length,
+
         resolved:
           resolvedMarkets.length,
+
         rejected:
           rejectedMarkets.length,
+
         cancelled:
           cancelledMarkets.length
       },
@@ -759,7 +975,21 @@ export async function GET() {
         marketsSkipped:
           skippedMarkets.length,
 
-        skippedMarkets
+        skippedMarkets,
+
+        rpcConfiguration: {
+          maxAttempts:
+            MAX_RPC_ATTEMPTS,
+
+          initialRetryDelayMs:
+            INITIAL_RETRY_DELAY_MS,
+
+          marketDelayMs:
+            MARKET_DELAY_MS,
+
+          loadingMode:
+            'sequential'
+        }
       },
 
       fetchedAt:
@@ -777,11 +1007,14 @@ export async function GET() {
     return NextResponse.json(
       {
         error: message,
+
         diagnostics: {
           contractAddress:
             CONTRACT_ADDRESS,
+
           marketsSkipped:
             skippedMarkets.length,
+
           skippedMarkets
         }
       },

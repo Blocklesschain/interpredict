@@ -93,6 +93,8 @@ export default function DAppPortal() {
   })
   const [endTime, setEndTime] = useState<string>('23:59')
   const [marketImage, setMarketImage] = useState<string | null>(null)
+  const [marketImageFile, setMarketImageFile] = useState<File | null>(null)
+  const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false)
   const [selectedCategory, setSelectedCategory] = useState<number>(0)
   const [resolutionCriteria, setResolutionCriteria] = useState('')
   const [hasJoinedDEC, setHasJoinedDEC] = useState<boolean>(false)
@@ -266,7 +268,7 @@ export default function DAppPortal() {
           params: [walletAddress, 'latest']
         })
         if (balHex) setWalletBalance(BigInt(balHex).toString())
-      } catch {}
+      } catch { }
 
       // User positions
       if (tempMarkets.length > 0) {
@@ -348,7 +350,12 @@ export default function DAppPortal() {
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) { const reader = new FileReader(); reader.onloadend = () => setMarketImage(reader.result as string); reader.readAsDataURL(file) }
+    if (file) {
+      setMarketImageFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => setMarketImage(reader.result as string)
+      reader.readAsDataURL(file)
+    }
   }
 
   const addOutcomeChoice = () => outcomes.length < 4 && setOutcomes([...outcomes, ''])
@@ -363,8 +370,30 @@ export default function DAppPortal() {
     const endDateTime = new Date(endDate)
     endDateTime.setHours(hours, minutes, 0, 0)
     const marketEndTimeInSeconds = Math.floor(endDateTime.getTime() / 1000)
-    const success = await createMarketOnChain(marketDesc, marketEndTimeInSeconds, outcomes, selectedCategory, marketImage || '', resolutionCriteria)
-    if (success) { setMarketDesc(''); setOutcomes(['YES', 'NO']); setMarketImage(null); setResolutionCriteria('') }
+    let thumbnailUrl = ''
+    if (marketImageFile) {
+      setIsUploadingImage(true)
+      try {
+        const formData = new FormData()
+        formData.append('file', marketImageFile)
+        const uploadRes = await fetch('/api/upload-thumbnail', { method: 'POST', body: formData })
+        const uploadJson = await uploadRes.json()
+        if (!uploadRes.ok) {
+          setToastMsg(uploadJson.error || 'Image upload failed')
+          setIsUploadingImage(false)
+          return
+        }
+        thumbnailUrl = uploadJson.url
+      } catch (err: any) {
+        setToastMsg('Image upload failed: ' + (err.message || 'unknown error'))
+        setIsUploadingImage(false)
+        return
+      }
+      setIsUploadingImage(false)
+    }
+
+    const success = await createMarketOnChain(marketDesc, marketEndTimeInSeconds, outcomes, selectedCategory, thumbnailUrl, resolutionCriteria)
+    if (success) { setMarketDesc(''); setOutcomes(['YES', 'NO']); setMarketImage(null); setMarketImageFile(null); setResolutionCriteria('') }
   }
 
   const handleJoinCommitteeSubmit = async () => {
@@ -744,8 +773,8 @@ export default function DAppPortal() {
                   </div>
                 </div>
 
-                <button onClick={handleCreateMarketSubmit} className="w-full py-3 bg-gradient-to-r from-primary to-purple-600 text-white text-xs font-bold rounded-xl shadow-md">
-                  {walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase() ? 'Create Team Market (11 tITL)' : 'Propose Community Market (11 tITL)'}
+                <button onClick={handleCreateMarketSubmit} disabled={isUploadingImage} className="w-full py-3 bg-gradient-to-r from-primary to-purple-600 text-white text-xs font-bold rounded-xl shadow-md disabled:opacity-50">
+                  {isUploadingImage ? 'Uploading image...' : walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase() ? 'Create Team Market (11 tITL)' : 'Propose Community Market (11 tITL)'}
                 </button>
               </div>
             )}

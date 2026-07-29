@@ -280,49 +280,68 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     return { contract, provider: testnetProvider }
   }
 
-  const getWalletBalance = async (
-    address: string
-  ): Promise<string> => {
-    try {
-      const { provider } = await getContractInstance()
-      const balance = await provider.getBalance(address)
-
-      return balance.toString()
-    } catch (err) {
-      console.warn(
-        '[Web3Context] getWalletBalance failed:',
-        err
-      )
-
-      return '0'
-    }
-  }
-
   const getSignerContract = async () => {
-    if (
-      typeof window === 'undefined' ||
-      !(window as any).ethereum
-    ) {
+    if (typeof window === 'undefined' || !(window as any).ethereum) {
       throw new Error("Wallet not identified")
     }
-
     if (!walletAddress) {
       throw new Error("Wallet not connected")
     }
 
-    const browserProvider = new ethers.BrowserProvider(
-      (window as any).ethereum
-    )
-
+    const browserProvider = new ethers.BrowserProvider((window as any).ethereum)
     const signer = await browserProvider.getSigner()
-
-    const contract = new ethers.Contract(
-      CONTRACT_ADDRESS,
-      contractABI,
-      signer
-    )
-
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer)
     return { contract, signer }
+  }
+
+  // Fetches native tITL balance through our authenticated JsonRpcProvider
+  // rather than calling window.ethereum.request('eth_getBalance') directly —
+  // MetaMask's own raw RPC calls to the Interlink testnet don't carry the
+  // Bearer auth header this chain requires, so they silently fail/404.
+  const getWalletBalance = async (address: string): Promise<string> => {
+    try {
+      const { provider } = await getContractInstance()
+      const balance = await provider.getBalance(address)
+      return balance.toString()
+    } catch (err) {
+      console.warn('[Web3Context] getWalletBalance failed:', err)
+      return '0'
+    }
+  }
+
+  // Sends a contract transaction while bypassing ethers' automatic
+  // TransactionResponse construction — the Interlink RPC gateway appears to
+  // return transaction data missing signature fields (r/s/v), which makes
+  // ethers throw "missing r" (INVALID_ARGUMENT) even when the transaction
+  // itself is submitted and mined successfully.
+  //
+  // Instead: populate the tx ourselves, submit it via raw eth_sendTransaction
+  // (MetaMask signs it), then poll only for the receipt — receipts never
+  // carry signature fields, so this sidesteps the crash entirely.
+  const sendTxSafely = async (
+    method: string,
+    args: any[],
+    overrides: { value?: bigint } = {}
+  ): Promise<ethers.TransactionReceipt> => {
+    const { contract, signer } = await getSignerContract()
+    const from = await signer.getAddress()
+
+    const populated = await (contract[method] as any).populateTransaction(...args, overrides)
+    const txHash: string = await (signer.provider as any).send('eth_sendTransaction', [{
+      ...populated,
+      from
+    }])
+
+    let receipt: ethers.TransactionReceipt | null = null
+    for (let i = 0; i < 60; i++) {
+      receipt = await signer.provider!.getTransactionReceipt(txHash)
+      if (receipt) break
+      await new Promise((r) => setTimeout(r, 2000))
+    }
+    if (!receipt) throw new Error('Transaction not confirmed within timeout')
+    if (receipt.status === 0) throw new Error('Transaction reverted on-chain')
+
+    return receipt
   }
 
   const createMarketOnChain = async (
@@ -338,7 +357,6 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
     try {
       setTxStatus("Broadcasting market creation payload...")
-      const signerContract = (await getSignerContract()).contract
 
       // Struct-based params for both cTM (team) and pM (community)
       const params = {
@@ -354,15 +372,11 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
         pe: ""
       }
 
-      let tx
       if (isTeam) {
-        tx = await signerContract.cTM(params, { value: ethers.parseEther("10") })
+        await sendTxSafely('cTM', [params], { value: ethers.parseEther("10") })
       } else {
-        tx = await signerContract.pM(params, { value: ethers.parseEther("11") })
+        await sendTxSafely('pM', [params], { value: ethers.parseEther("11") })
       }
-
-      setTxStatus("Awaiting on-chain confirmation...")
-      await tx.wait()
 
       setTxStatus(isTeam ? "Team market created and activated!" : "Market proposed! Awaiting DEC review.")
       if (walletAddress) {
@@ -416,21 +430,15 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     try {
       setTxStatus("Transmitting curation vote...")
       const { contract } = await getContractInstance()
-      const signerContract = (await getSignerContract()).contract
 
       const state = Number(await contract.ms(marketId))
       if (state === MarketState.Proposed) {
         setTxStatus("Entering proposal into DEC voting...")
-        const enterTx = await signerContract.ePV(marketId)
-        await enterTx.wait()
+        await sendTxSafely('ePV', [marketId])
       }
 
-      const tx = await signerContract.vOP(
-        marketId,
-        support ? 1 : 2 // PVote enum: 0=None, 1=Approve, 2=Reject
-      )
+      await sendTxSafely('vOP', [marketId, support ? 1 : 2]) // PVote enum: 0=None, 1=Approve, 2=Reject
       setTxStatus("Ballot submitted on-chain.")
-      await tx.wait()
 
       if (walletAddress) {
         saveLogToLocalStorage(walletAddress, 'Governance Vote', `Vote cast on Proposal #${marketId}`, `Success — ${ballotText}`, 'Success')
@@ -448,17 +456,15 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const placeBetOnChain = async (marketId: number, outcomeIndex: number, amount: string): Promise<boolean> => {
     try {
       setTxStatus("Transmitting trade payload...")
-      const signerContract = (await getSignerContract()).contract
 
       const grossAmount = ethers.parseEther(amount || "0.1")
       const minSharesOut = 1
 
       // bO() is payable — the bet amount is sent as native-token msg.value,
       // not as an ERC20 transfer. No approve/allowance step needed.
-      const tx = await signerContract.bO(marketId, outcomeIndex, minSharesOut, { value: grossAmount })
+      await sendTxSafely('bO', [marketId, outcomeIndex, minSharesOut], { value: grossAmount })
 
       setTxStatus("Trade logged on-chain!")
-      await tx.wait()
 
       if (walletAddress) {
         saveLogToLocalStorage(walletAddress, 'Market Trade', `Wager placed on Market #${marketId}`, `Success — Outcome ${outcomeIndex} with ${amount} tITL`, 'Success')
@@ -478,9 +484,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const finalizeProposalVotingOnChain = async (marketId: number): Promise<boolean> => {
     try {
       setTxStatus("Finalizing proposal voting...")
-      const signerContract = (await getSignerContract()).contract
-      const tx = await signerContract.fPV(marketId)
-      await tx.wait()
+      await sendTxSafely('fPV', [marketId])
       setTxStatus("Proposal finalized!")
       return true
     } catch (err: any) {
@@ -496,18 +500,15 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     try {
       setTxStatus("Entering proposal voting...")
       const { contract } = await getContractInstance()
-      const signerContract = (await getSignerContract()).contract
 
       const state = Number(await contract.ms(marketId))
 
       if (state === MarketState.Proposed) {
-        const enterTx = await signerContract.ePV(marketId)
-        await enterTx.wait()
+        await sendTxSafely('ePV', [marketId])
         setTxStatus("Proposal entered voting. Awaiting 24h window or finalization...")
         return true
       } else if (state === MarketState.DECVoting) {
-        const finTx = await signerContract.fPV(marketId)
-        await finTx.wait()
+        await sendTxSafely('fPV', [marketId])
         setTxStatus("Proposal voting finalized!")
         return true
       }
@@ -523,9 +524,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const claimPayoutOnChain = async (marketId: number): Promise<boolean> => {
     try {
       setTxStatus("Claiming winnings...")
-      const signerContract = (await getSignerContract()).contract
-      const tx = await signerContract.cW(marketId)
-      await tx.wait()
+      await sendTxSafely('cW', [marketId])
       setTxStatus("Winnings claimed successfully!")
       if (walletAddress) {
         saveLogToLocalStorage(walletAddress, 'Payout', `Winnings claimed on Market #${marketId}`, 'Success', 'Success')
@@ -542,9 +541,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const requestResolutionOnChain = async (marketId: number): Promise<boolean> => {
     try {
       setTxStatus("Requesting market resolution...")
-      const signerContract = (await getSignerContract()).contract
-      const tx = await signerContract.rR(marketId)
-      await tx.wait()
+      await sendTxSafely('rR', [marketId])
       setTxStatus("Resolution requested! DEC voting open for 3 hours.")
       return true
     } catch (err: any) {
@@ -559,23 +556,19 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     try {
       setTxStatus("Confirming outcome as admin verifier...")
       const { contract } = await getContractInstance()
-      const signerContract = (await getSignerContract()).contract
 
       const state = Number(await contract.ms(marketId))
 
       if (state === MarketState.DECResVoting) {
         setTxStatus("Finalizing resolution voting first...")
-        const finTx = await signerContract.fRV(marketId)
-        await finTx.wait()
+        await sendTxSafely('fRV', [marketId])
       }
 
       // Admin verification of the winning outcome
-      const tx = await signerContract.cO(marketId, winningOutcome, "")
-      await tx.wait()
+      await sendTxSafely('cO', [marketId, winningOutcome, ""])
 
       setTxStatus("Outcome confirmed! Finalizing market...")
-      const finalTx = await signerContract.fM(marketId)
-      await finalTx.wait()
+      await sendTxSafely('fM', [marketId])
 
       setTxStatus("Market resolved and finalized!")
       return true
@@ -590,9 +583,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const voteOnResolutionOnChain = async (marketId: number, outcomeIndex: number): Promise<boolean> => {
     try {
       setTxStatus("Casting resolution vote...")
-      const signerContract = (await getSignerContract()).contract
-      const tx = await signerContract.vOR(marketId, outcomeIndex)
-      await tx.wait()
+      await sendTxSafely('vOR', [marketId, outcomeIndex])
       setTxStatus("Resolution vote cast!")
       return true
     } catch (err: any) {
@@ -606,9 +597,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const finalizeResolutionVotingOnChain = async (marketId: number): Promise<boolean> => {
     try {
       setTxStatus("Finalizing resolution voting...")
-      const signerContract = (await getSignerContract()).contract
-      const tx = await signerContract.fRV(marketId)
-      await tx.wait()
+      await sendTxSafely('fRV', [marketId])
       setTxStatus("Resolution voting finalized!")
       return true
     } catch (err: any) {
@@ -622,9 +611,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const claimDecRewardsOnChain = async (): Promise<boolean> => {
     try {
       setTxStatus("Claiming DEC rewards...")
-      const signerContract = (await getSignerContract()).contract
-      const tx = await signerContract.cDR()
-      await tx.wait()
+      await sendTxSafely('cDR', [])
       setTxStatus("DEC rewards claimed!")
       return true
     } catch (err: any) {
@@ -638,9 +625,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const claimCreatorFeesOnChain = async (marketId: number): Promise<boolean> => {
     try {
       setTxStatus("Claiming creator fees...")
-      const signerContract = (await getSignerContract()).contract
-      const tx = await signerContract.cCF(marketId)
-      await tx.wait()
+      await sendTxSafely('cCF', [marketId])
       setTxStatus("Creator fees claimed!")
       return true
     } catch (err: any) {
@@ -654,9 +639,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const claimCreatorSeedOnChain = async (marketId: number): Promise<boolean> => {
     try {
       setTxStatus("Claiming creator seed...")
-      const signerContract = (await getSignerContract()).contract
-      const tx = await signerContract.cCS(marketId)
-      await tx.wait()
+      await sendTxSafely('cCS', [marketId])
       setTxStatus("Creator seed claimed!")
       return true
     } catch (err: any) {

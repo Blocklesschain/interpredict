@@ -18,7 +18,7 @@ export default function WhitepaperPage() {
             A Native-L1 Decentralized Prediction Marketplace with Multi-Outcome Pari-Mutuel Trading, Decentralized Curation, and On-Chain Resolution
           </p>
           <p className="mt-3 text-xs text-muted-foreground italic border-l-2 border-primary pl-4">
-            Version 2.0 — July 2026 — Regenerated from the current smart contract implementation.
+            Version 1.0 — July 2026 — Regenerated from the current smart contract implementation.
           </p>
         </div>
 

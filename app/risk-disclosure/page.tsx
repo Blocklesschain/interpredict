@@ -69,52 +69,10 @@ export default function RiskDisclosurePage() {
             </div>
 
             <div>
-              <h2 className="text-2xl font-semibold text-foreground">Risk Severity Matrix</h2>
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left py-2 pr-4 font-semibold text-foreground">Risk Category</th>
-                      <th className="text-left py-2 pr-4 font-semibold text-foreground">Severity</th>
-                      <th className="text-left py-2 font-semibold text-foreground">Mitigation</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-muted-foreground">
-                    <tr className="border-b border-border/50">
-                      <td className="py-2 pr-4">Total loss of principal</td>
-                      <td className="py-2 pr-4 text-red-400 font-semibold">High</td>
-                      <td className="py-2">Only risk what you can afford to lose</td>
-                    </tr>
-                    <tr className="border-b border-border/50">
-                      <td className="py-2 pr-4">Smart contract vulnerability</td>
-                      <td className="py-2 pr-4 text-red-400 font-semibold">High</td>
-                      <td className="py-2">Audits, testing, but no guarantees</td>
-                    </tr>
-                    <tr className="border-b border-border/50">
-                      <td className="py-2 pr-4">Admin centralization</td>
-                      <td className="py-2 pr-4 text-amber-400 font-semibold">Medium</td>
-                      <td className="py-2">Progressive decentralization planned</td>
-                    </tr>
-                    <tr className="border-b border-border/50">
-                      <td className="py-2 pr-4">Regulatory action</td>
-                      <td className="py-2 pr-4 text-amber-400 font-semibold">Medium</td>
-                      <td className="py-2">Legal review, compliance</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 pr-4">User error</td>
-                      <td className="py-2 pr-4 text-amber-400 font-semibold">Medium</td>
-                      <td className="py-2">Careful review of all transactions</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div>
               <h2 className="text-2xl font-semibold text-foreground">No Guarantees</h2>
               <p className="mt-4">
-                The Protocol may become unavailable at any time. There is no guarantee of correct outcomes, 
-                trading profits, DEC rewards, or return of principal. InterPredict does not provide financial, 
+                The Protocol may become unavailable at any time. There is no guarantee of correct outcomes,
+                trading profits, DEC rewards, or return of principal. InterPredict does not provide financial,
                 investment, legal, or tax advice.
               </p>
             </div>

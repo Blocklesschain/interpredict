@@ -58,6 +58,11 @@ interface MyPosition {
   marketState: number
   confirmedOutcome: number
   shares: string[]
+  stakes: string[]
+  totalStake: string
+  claimablePayout: string
+  claimedPayout: string
+  claimed: boolean
   marketEndTime: number
   outcomeLabels: string[]
   outcomePools: string[]
@@ -170,7 +175,8 @@ export default function DAppPortal() {
     try {
       let baseMarkets: SmartMarket[] = []
       try {
-        const marketsRes = await fetch('/api/markets', { cache: 'no-store' })
+        const marketsUrl = walletAddress ? `/api/markets?address=${encodeURIComponent(walletAddress)}` : '/api/markets'
+        const marketsRes = await fetch(marketsUrl, { cache: 'no-store' })
         if (marketsRes.ok) {
           const data = await marketsRes.json()
           baseMarkets = (data.allMarkets || []).map((m: any) => ({
@@ -188,6 +194,26 @@ export default function DAppPortal() {
             hasCurrentWalletVotedOnResolution: Boolean(m.hasCurrentWalletVotedOnResolution)
           }))
           setAllOnChainMarkets(baseMarkets)
+
+          if (walletAddress && Array.isArray(data.walletPositions)) {
+            const apiPositions: MyPosition[] = data.walletPositions.map((position: any) => ({
+              marketId: Number(position.marketId),
+              question: String(position.question || `Market #${position.marketId}`),
+              marketState: Number(position.marketState || 0),
+              confirmedOutcome: Number(position.confirmedOutcome || 0),
+              shares: Array.isArray(position.shares) ? position.shares.map(String) : [],
+              stakes: Array.isArray(position.stakes) ? position.stakes.map(String) : [],
+              totalStake: String(position.totalStake || '0'),
+              claimablePayout: String(position.claimablePayout || '0'),
+              claimedPayout: String(position.claimedPayout || '0'),
+              claimed: Boolean(position.claimed),
+              marketEndTime: Number(position.marketEndTime || 0),
+              outcomeLabels: Array.isArray(position.outcomeLabels) ? position.outcomeLabels : [],
+              outcomePools: Array.isArray(position.outcomePools) ? position.outcomePools.map(String) : []
+            }))
+            setMyPositions(apiPositions)
+            setClaimedMarkets(apiPositions.filter((position) => position.claimed).map((position) => position.marketId))
+          }
         }
       } catch (e) { console.warn('API fetch failed:', e) }
 
@@ -225,154 +251,9 @@ export default function DAppPortal() {
         } catch { return null }
       }
 
-      const countHex = await ethCall(iface.encodeFunctionData("tm"))
-      let tempMarkets: SmartMarket[] = []
-      if (countHex) {
-        const totalCount = Number(iface.decodeFunctionResult("tm", countHex)[0])
-        tempMarkets = []
-        for (let i = 0; i < totalCount; i++) {
-          const raw = await ethCall(iface.encodeFunctionData("mb", [i]))
-          if (raw) {
-            const decoded = iface.decodeFunctionResult("mb", raw)
-            const stateRaw = await ethCall(iface.encodeFunctionData("ms", [i]))
-            const state = stateRaw ? Number(iface.decodeFunctionResult("ms", stateRaw)[0]) : 0
-            const labelsRaw = await ethCall(iface.encodeFunctionData("gL", [i]))
-            const labels = labelsRaw ? Array.from(iface.decodeFunctionResult("gL", labelsRaw)[0] as string[]) : []
-            const poolsRaw = await ethCall(iface.encodeFunctionData("gP", [i]))
-            const pools = poolsRaw ? Array.from(iface.decodeFunctionResult("gP", poolsRaw)[0] as string[]).map((v: any) => v.toString()) : []
-            const pricesRaw = await ethCall(iface.encodeFunctionData("gPr2", [i]))
-            const prices = pricesRaw
-              ? Array.from(
-                iface.decodeFunctionResult("gPr2", pricesRaw)[0] as bigint[]
-              ).map((v) => v.toString())
-              : []
+      // Shared market data and wallet history come from the authenticated API.
+      // Only lightweight wallet-specific reads continue below.
 
-            // Proposal-voting information.
-            // mv(id) returns:
-            // pvs, pvd, apv, rjv, pf, pd, pft, ra, rr, rc
-            const proposalRaw = await ethCall(
-              iface.encodeFunctionData("mv", [i])
-            )
-
-            let proposalVotingDeadline = 0
-            let approvalVotes = 0
-            let rejectionVotes = 0
-            let proposalFinalized = false
-            let proposalDecision = 0
-
-            if (proposalRaw) {
-              const proposalData = iface.decodeFunctionResult(
-                "mv",
-                proposalRaw
-              )
-
-              proposalVotingDeadline = Number(proposalData[1])
-              approvalVotes = Number(proposalData[2])
-              rejectionVotes = Number(proposalData[3])
-              proposalFinalized = Boolean(proposalData[4])
-              proposalDecision = Number(proposalData[5])
-            }
-
-            // The contract records whether this connected wallet has already
-            // voted on this proposal in hvp(marketId, walletAddress).
-            let hasCurrentWalletVoted = false
-
-            if (walletAddress) {
-              const hasVotedRaw = await ethCall(
-                iface.encodeFunctionData("hvp", [i, walletAddress])
-              )
-
-              if (hasVotedRaw) {
-                hasCurrentWalletVoted = Boolean(
-                  iface.decodeFunctionResult("hvp", hasVotedRaw)[0]
-                )
-              }
-            }
-
-            // Resolution lifecycle information.
-            const resolutionRaw = await ethCall(
-              iface.encodeFunctionData("mr", [i])
-            )
-
-            let activeDECSnapshot = 0
-            let resolutionQuorum = 0
-            let totalResolutionVotes = 0
-            let decSelectedOutcome = 0
-            let confirmedOutcome = 0
-            let outcomeConfirmed = false
-            let finalized = false
-
-            if (resolutionRaw) {
-              const resolutionData = iface.decodeFunctionResult(
-                "mr",
-                resolutionRaw
-              )
-
-              activeDECSnapshot = Number(resolutionData[0])
-              resolutionQuorum = Number(resolutionData[1])
-              totalResolutionVotes = Number(resolutionData[2])
-              decSelectedOutcome = Number(resolutionData[3])
-              confirmedOutcome = Number(resolutionData[3])
-              outcomeConfirmed = Boolean(resolutionData[4])
-              finalized = Boolean(resolutionData[5])
-            }
-
-            let hasCurrentWalletVotedOnResolution = false
-
-            if (walletAddress) {
-              const hasResolutionVotedRaw = await ethCall(
-                iface.encodeFunctionData("hvr", [i, walletAddress])
-              )
-
-              if (hasResolutionVotedRaw) {
-                hasCurrentWalletVotedOnResolution = Boolean(
-                  iface.decodeFunctionResult("hvr", hasResolutionVotedRaw)[0]
-                )
-              }
-            }
-
-            tempMarkets.push({
-              id: i,
-              question: String(decoded[0]),
-              description: String(decoded[1]),
-              category: Number(decoded[2]),
-              customCategory: String(decoded[3]),
-              thumbnailUri: String(decoded[4]),
-              origin: Number(decoded[5]),
-              creator: String(decoded[6]),
-              marketEndTime: Number(decoded[7]),
-              resolutionCriteria: String(decoded[8]),
-              state,
-              outcomeLabels: labels,
-              outcomePools: pools,
-              outcomePrices: prices,
-              totalVolume: '0',
-              participantCount: 0,
-              creatorFeesEarned: '0',
-              creatorFeesClaimed: '0',
-              creatorSeedClaimed: '0',
-              cancelled: false,
-              cancelReason: '',
-              proposalVotingDeadline,
-              approvalVotes,
-              rejectionVotes,
-              proposalFinalized,
-              proposalDecision,
-              hasCurrentWalletVoted,
-              hasCurrentWalletVotedOnResolution,
-              resolutionVotingDeadline: 0,
-              activeDECSnapshot,
-              resolutionQuorum,
-              totalResolutionVotes,
-              decSelectedOutcome,
-              confirmedOutcome,
-              outcomeConfirmed,
-              finalized
-            })
-          }
-        }
-        if (tempMarkets.length > 0) setAllOnChainMarkets(tempMarkets)
-      }
 
       // Check DEC membership
       const decHex = await ethCall(iface.encodeFunctionData("iad", [walletAddress]))
@@ -410,30 +291,9 @@ export default function DAppPortal() {
         setWalletBalance(bal)
       } catch { }
 
-      // User positions
-      if (tempMarkets.length > 0) {
-        const positionResults: MyPosition[] = []
-        for (const m of tempMarkets) {
-          const shares: string[] = []
-          for (let oi = 0; oi < (m.outcomeLabels?.length || 0); oi++) {
-            const shHex = await ethCall(iface.encodeFunctionData("gUS", [m.id, oi, walletAddress]))
-            shares.push(shHex ? iface.decodeFunctionResult("gUS", shHex)[0].toString() : "0")
-          }
-          if (shares.some(s => BigInt(s) > BigInt(0))) {
-            positionResults.push({
-              marketId: m.id,
-              question: m.question,
-              marketState: m.state,
-              confirmedOutcome: m.confirmedOutcome,
-              shares,
-              marketEndTime: m.marketEndTime,
-              outcomeLabels: m.outcomeLabels,
-              outcomePools: m.outcomePools
-            })
-          }
-        }
-        setMyPositions(positionResults)
-      }
+      // Wallet participation history is loaded by /api/markets from SP and WC events.
+      // This preserves winning, losing, and already-claimed positions after balances change.
+
     } catch (err: any) {
       console.warn("Scan error:", err?.message || err)
     } finally {
@@ -582,7 +442,9 @@ export default function DAppPortal() {
         if (existing) {
           return prev.map(p => p.marketId === marketId ? {
             ...p,
-            shares: p.shares.map((s, i) => i === outcomeIndex ? (BigInt(s) + addWei).toString() : s)
+            shares: p.shares.map((s, i) => i === outcomeIndex ? (BigInt(s) + addWei).toString() : s),
+            stakes: p.stakes.map((s, i) => i === outcomeIndex ? (BigInt(s || '0') + ethers.parseEther(stakeAmount || '0')).toString() : s),
+            totalStake: (BigInt(p.totalStake || '0') + ethers.parseEther(stakeAmount || '0')).toString()
           } : p)
         }
         return [...prev, {
@@ -591,6 +453,11 @@ export default function DAppPortal() {
           marketState: mkt?.state ?? 5,
           confirmedOutcome: mkt?.confirmedOutcome ?? 0,
           shares: mkt?.outcomeLabels?.map((_, i) => i === outcomeIndex ? addWei.toString() : '0') || [],
+          stakes: mkt?.outcomeLabels?.map((_, i) => i === outcomeIndex ? ethers.parseEther(stakeAmount || '0').toString() : '0') || [],
+          totalStake: ethers.parseEther(stakeAmount || '0').toString(),
+          claimablePayout: '0',
+          claimedPayout: '0',
+          claimed: false,
           marketEndTime: mkt?.marketEndTime ?? 0,
           outcomeLabels: mkt?.outcomeLabels || [],
           outcomePools: mkt?.outcomePools || []
@@ -1092,7 +959,7 @@ export default function DAppPortal() {
               <div className="p-6 bg-gradient-to-br from-purple-950/20 to-indigo-950/20 border border-purple-900/30 rounded-xl text-center w-full max-w-xl">
                 <Shield className="size-10 mx-auto text-primary mb-3" />
                 <p className="text-sm font-semibold mb-1 text-slate-200">{t('assessorTitle')}</p>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">DEC membership requires admin approval. Contact the team to be added.</p>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">DEC membership requires a 0.1 tITL native-token payment and admin approval. Admin wallets are not charged.</p>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">Submit a request to join the DEC Committee. An admin will review and approve it.</p>
                 <button onClick={handleJoinCommitteeSubmit} className="px-6 py-2.5 bg-primary text-white font-bold text-xs rounded-xl">{t('assessorBtn')}</button>
               </div>
@@ -1142,7 +1009,14 @@ export default function DAppPortal() {
                           endedPositions.map((pos) => {
                             const isResolved = pos.marketState >= 11
                             const winOutcome = pos.confirmedOutcome
-                            const hasWinningShares = isResolved && winOutcome < pos.shares.length && BigInt(pos.shares[winOutcome] || '0') > BigInt(0)
+                            const winningShares = BigInt(pos.shares[winOutcome] || '0')
+                            const hasWinningShares = isResolved && winningShares > BigInt(0)
+                            const didWin = isResolved && (hasWinningShares || pos.claimed)
+                            const payoutWei = BigInt(pos.claimed ? pos.claimedPayout : pos.claimablePayout || '0')
+                            const stakeWei = BigInt(pos.totalStake || '0')
+                            const profitPercent = stakeWei > BigInt(0)
+                              ? Number(((payoutWei - stakeWei) * BigInt(10000)) / stakeWei) / 100
+                              : 0
                             return (
                               <div key={pos.marketId} className="bg-secondary/20 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl opacity-95">
                                 <div className="flex justify-between items-center mb-2">
@@ -1157,14 +1031,26 @@ export default function DAppPortal() {
                                 </div>
                                 <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(pos.marketEndTime)}</p>
                                 {isResolved ? (
-                                  claimedMarkets.includes(pos.marketId) ? (
-                                    <div className="w-full py-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-lg uppercase flex items-center justify-center gap-1.5">
-                                      <CheckCircle2 className="size-3.5" /> Claimed
+                                  pos.claimed || claimedMarkets.includes(pos.marketId) ? (
+                                    <div className="space-y-2">
+                                      <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                                        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2 text-emerald-300">Won: {formatEther(pos.claimedPayout)} tITL</div>
+                                        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2 text-emerald-300">Return: {profitPercent >= 0 ? '+' : ''}{profitPercent.toFixed(2)}%</div>
+                                      </div>
+                                      <div className="w-full py-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-lg uppercase flex items-center justify-center gap-1.5">
+                                        <CheckCircle2 className="size-3.5" /> Claimed
+                                      </div>
                                     </div>
-                                  ) : hasWinningShares ? (
-                                    <button onClick={() => handleCashOut(pos.marketId)} className="w-full py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg uppercase">Cash Out</button>
+                                  ) : didWin ? (
+                                    <div className="space-y-2">
+                                      <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                                        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2 text-emerald-300">Winning Amount: {formatEther(pos.claimablePayout)} tITL</div>
+                                        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2 text-emerald-300">Return: {profitPercent >= 0 ? '+' : ''}{profitPercent.toFixed(2)}%</div>
+                                      </div>
+                                      <button onClick={() => handleCashOut(pos.marketId)} className="w-full py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-lg uppercase">Cash Out</button>
+                                    </div>
                                   ) : (
-                                    <p className="text-[11px] font-mono text-rose-400">No payout available.</p>
+                                    <div className="w-full py-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold rounded-lg uppercase text-center">Lost</div>
                                   )
                                 ) : pos.marketState === 9 ? (
                                   <div className="w-full py-2.5 bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-xs font-bold rounded-lg uppercase text-center">DEC Resolution Voting</div>
@@ -1246,6 +1132,15 @@ export default function DAppPortal() {
                       <div className="rounded-lg bg-black/20 border border-purple-900/30 p-2"><span className="block text-slate-500">Quorum</span><strong className="text-slate-200">{market.resolutionQuorum}</strong></div>
                       <div className="rounded-lg bg-black/20 border border-purple-900/30 p-2"><span className="block text-slate-500">Snapshot</span><strong className="text-slate-200">{market.activeDECSnapshot}</strong></div>
                     </div>
+                    <div className={`mb-4 rounded-lg border p-3 text-center font-mono ${market.resolutionVotingDeadline > nowSec ? 'border-yellow-500/30 bg-yellow-500/10' : 'border-red-500/30 bg-red-500/10'}`}>
+                      <span className="block text-[10px] uppercase tracking-wider text-slate-400">Voting time remaining</span>
+                      <strong className={`mt-1 block text-sm ${market.resolutionVotingDeadline > nowSec ? 'text-yellow-300' : 'text-red-300'}`}>
+                        {market.resolutionVotingDeadline > 0 ? formatCountdown(market.resolutionVotingDeadline) : 'Deadline unavailable'}
+                      </strong>
+                      {market.resolutionVotingDeadline > 0 && (
+                        <span className="mt-1 block text-[10px] text-slate-500">Ends {formatExpiryDate(market.resolutionVotingDeadline)}</span>
+                      )}
+                    </div>
                     {market.hasCurrentWalletVotedOnResolution ? (
                       <div className="w-full py-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold rounded-lg uppercase text-center">Vote Submitted</div>
                     ) : (
@@ -1274,8 +1169,13 @@ export default function DAppPortal() {
                     {resolutionVotingMarkets.length === 0 ? <div className="p-6 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No DEC resolution votes to finalize.</div> : resolutionVotingMarkets.map((market) => (
                       <div key={market.id} className="bg-secondary/30 border border-yellow-500/20 rounded-xl p-4 sm:p-5 max-w-xl">
                         <p className="text-sm font-semibold text-slate-200">{market.question}</p>
-                        <p className="text-[11px] text-slate-400 mt-2 mb-3">Votes {market.totalResolutionVotes} / Quorum {market.resolutionQuorum}</p>
-                        <button onClick={() => handleFinalizeResolutionVoting(market.id)} className="w-full py-2.5 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold rounded-lg uppercase">Finalize DEC Resolution Voting</button>
+                        <p className="text-[11px] text-slate-400 mt-2">Votes {market.totalResolutionVotes} / Quorum {market.resolutionQuorum}</p>
+                        <p className={`text-[11px] font-mono mt-1 mb-3 ${market.resolutionVotingDeadline > nowSec ? 'text-yellow-300' : 'text-red-300'}`}>
+                          {market.resolutionVotingDeadline > 0
+                            ? `Voting ${market.resolutionVotingDeadline > nowSec ? 'ends in' : 'ended'} ${formatCountdown(market.resolutionVotingDeadline)}`
+                            : 'Voting deadline unavailable'}
+                        </p>
+                        <button disabled={market.resolutionVotingDeadline > nowSec} onClick={() => handleFinalizeResolutionVoting(market.id)} className="w-full py-2.5 bg-yellow-600 hover:bg-yellow-500 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg uppercase">{market.resolutionVotingDeadline > nowSec ? 'Voting Still in Progress' : 'Finalize DEC Resolution Voting'}</button>
                       </div>
                     ))}
                   </div>
@@ -1487,7 +1387,13 @@ export default function DAppPortal() {
                       {market.finalized && (
                         <div className="flex gap-2">
                           <button onClick={() => handleClaimCreatorFees(market.id)} className="flex-1 py-2 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg">Claim Fees</button>
-                          <button onClick={() => handleClaimCreatorSeed(market.id)} className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg">Claim Seed</button>
+                          <button
+                            onClick={() => handleClaimCreatorSeed(market.id)}
+                            disabled={BigInt(market.creatorSeedClaimed || '0') > BigInt(0)}
+                            className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg"
+                          >
+                            {BigInt(market.creatorSeedClaimed || '0') > BigInt(0) ? 'Seed Claimed' : 'Claim Seed'}
+                          </button>
                         </div>
                       )}
                     </div>

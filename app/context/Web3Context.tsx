@@ -48,6 +48,7 @@ const Web3Context = createContext<Web3ContextType | undefined>(undefined)
 
 const INTERLINK_TESTNET_CHAIN_ID = '19042026'
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x3E5936F13e1194380A66c3c1d75D4D7342299CfF"
+const ADMIN_ADDRESS = '0x6e832252ea4c78068ee109d953724d2762431992'
 
 // NOTE: the deployed contract uses the native chain token (msg.value) for all
 // payments — market seeds, proposal fees, and bets. There is no ERC20 token
@@ -530,35 +531,67 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     } catch { return 0 }
   }
 
-  // Submits an off-chain DEC membership request — no wallet signature, no
-  // gas. The admin reviews pending requests in the "DEC Requests" tab and
-  // approves by calling addD() on-chain themselves via approveDecRequestOnChain.
+  // A non-admin wallet pays the native 0.1 tITL DEC application fee to
+  // the contract treasury before its off-chain request is submitted. The admin
+  // then approves the request on-chain with addD().
   const joinDecOnChain = async (): Promise<boolean> => {
     try {
+      if (!walletAddress) throw new Error('Wallet not connected')
+
       setTxStatus("Checking DEC membership status...")
       const { contract } = await getContractInstance()
-
       const isAlreadyMember = await contract.iad(walletAddress)
+
       if (isAlreadyMember) {
         setTxStatus("Already a registered DEC Committee Member!")
         return true
+      }
+
+      const adminRole = ethers.id('ADMIN_VERIFIER_ROLE')
+      const defaultAdminRole = ethers.ZeroHash
+      const isAdmin =
+        walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase() ||
+        Boolean(await contract.hasRole(adminRole, walletAddress)) ||
+        Boolean(await contract.hasRole(defaultAdminRole, walletAddress))
+
+      const feeStorageKey = `interpredict_dec_fee_${walletAddress.toLowerCase()}`
+      let paymentTransactionHash = localStorage.getItem(feeStorageKey) || ''
+
+      if (!isAdmin && !paymentTransactionHash) {
+        setTxStatus("Confirm the 0.1 tITL DEC application payment in your wallet...")
+        const { signer } = await getSignerContract()
+        const treasuryAddress = await contract.treasury()
+        const paymentTx = await signer.sendTransaction({
+          to: treasuryAddress,
+          value: ethers.parseEther('0.1')
+        })
+        await paymentTx.wait()
+        paymentTransactionHash = paymentTx.hash
+        localStorage.setItem(feeStorageKey, paymentTransactionHash)
       }
 
       setTxStatus("Submitting DEC membership request...")
       const res = await fetch('/api/dec-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: walletAddress })
+        body: JSON.stringify({
+          address: walletAddress,
+          paid: !isAdmin,
+          amount: isAdmin ? '0' : '0.1',
+          paymentTransactionHash: isAdmin ? '' : paymentTransactionHash
+        })
       })
       const json = await res.json()
 
       if (!res.ok) {
-        setTxStatus(`Error: ${json.error || 'Failed to submit request'}`)
-        return false
+        throw new Error(json.error || 'Failed to submit request')
       }
 
-      setTxStatus("Request submitted! An admin will review and approve your membership.")
-      return false // request submitted, but not yet an actual member
+      setTxStatus(isAdmin
+        ? "Request submitted without a fee. An admin will review the membership request."
+        : "0.1 tITL paid and request submitted! An admin will review your membership."
+      )
+      return false
     } catch (err: any) {
       const detail = formatTxError(err)
       console.error('joinDecOnChain failed:', err)

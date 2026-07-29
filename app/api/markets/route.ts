@@ -33,7 +33,11 @@ const iface = new ethers.Interface([
 
   'function gP(uint256) view returns (uint256[])',
 
-  'function gPr2(uint256) view returns (uint256[])'
+  'function gPr2(uint256) view returns (uint256[])',
+
+  'event RR(uint256 id, address r, uint256 dl)',
+  'event SP(uint256 id, address b, uint8 oi, uint256 g, uint256 n, uint256 s, uint256 f)',
+  'event WC(uint256 id, address c, uint256 a)'
 ])
 
 enum MarketState {
@@ -113,6 +117,17 @@ interface RpcResponse {
 interface SkippedMarket {
   marketId: number
   error: string
+}
+
+interface LoadedMarket {
+  id: number
+  marketId: number
+  state: number
+  outcomeLabels: string[]
+  outcomePools: string[]
+  confirmedOutcome: number
+  finalized: boolean
+  [key: string]: unknown
 }
 
 function getErrorMessage(error: unknown): string {
@@ -377,6 +392,168 @@ async function rpcCall(
   )
 }
 
+
+interface RpcLog {
+  topics: string[]
+  data: string
+  blockNumber?: string
+  transactionHash?: string
+  logIndex?: string
+}
+
+async function rpcJson(
+  accessToken: string,
+  method: string,
+  params: unknown[],
+  id: number
+): Promise<any> {
+  const response = await fetch(RPC_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+    cache: 'no-store'
+  })
+  const json = await response.json()
+  if (!response.ok || json.error) {
+    throw new Error(json?.error?.message || `${method} returned HTTP ${response.status}`)
+  }
+  return json.result
+}
+
+async function loadLogsChunked(
+  accessToken: string,
+  topics: Array<string | string[] | null>,
+  requestId: number
+): Promise<RpcLog[]> {
+  const configuredStart = process.env.INTERPREDICT_DEPLOYMENT_BLOCK || '0x0'
+  const latestHex = await rpcJson(accessToken, 'eth_blockNumber', [], requestId)
+  const latest = Number(BigInt(latestHex))
+  let from = Number(BigInt(configuredStart))
+  const logs: RpcLog[] = []
+  const chunkSize = 10_000
+
+  console.info(`[Markets API] Event scan starting from ${configuredStart} (${from}), latest ${latest}`)
+
+  while (from <= latest) {
+    const to = Math.min(from + chunkSize - 1, latest)
+    const result = await rpcJson(accessToken, 'eth_getLogs', [{
+      address: CONTRACT_ADDRESS,
+      fromBlock: ethers.toQuantity(from),
+      toBlock: ethers.toQuantity(to),
+      topics
+    }], requestId + from)
+    if (Array.isArray(result)) logs.push(...result)
+    from = to + 1
+  }
+
+  return logs
+}
+
+interface WalletPositionHistory {
+  marketId: number
+  stakes: string[]
+  shares: string[]
+  totalStake: string
+  claimed: boolean
+  claimedPayout: string
+}
+
+async function loadWalletPositionHistory(
+  accessToken: string,
+  walletAddress: string
+): Promise<Map<number, WalletPositionHistory>> {
+  const positions = new Map<number, WalletPositionHistory>()
+  const sp = iface.getEvent('SP')
+  const wc = iface.getEvent('WC')
+  if (!sp || !wc) return positions
+
+  const logs = await loadLogsChunked(
+    accessToken,
+    [[sp.topicHash, wc.topicHash]],
+    910000
+  )
+
+  for (const log of logs) {
+    try {
+      const parsed = iface.parseLog({ topics: log.topics, data: log.data })
+      if (!parsed) continue
+
+      if (parsed.name === 'SP') {
+        const buyer = String(parsed.args.b ?? parsed.args[1])
+        if (buyer.toLowerCase() !== walletAddress.toLowerCase()) continue
+        const marketId = bigintToNumber(parsed.args.id ?? parsed.args[0])
+        const outcomeIndex = Number(parsed.args.oi ?? parsed.args[2])
+        const gross = BigInt(parsed.args.g ?? parsed.args[3])
+        const shares = BigInt(parsed.args.s ?? parsed.args[5])
+        const current = positions.get(marketId) || {
+          marketId,
+          stakes: [],
+          shares: [],
+          totalStake: '0',
+          claimed: false,
+          claimedPayout: '0'
+        }
+        while (current.stakes.length <= outcomeIndex) current.stakes.push('0')
+        while (current.shares.length <= outcomeIndex) current.shares.push('0')
+        current.stakes[outcomeIndex] = (BigInt(current.stakes[outcomeIndex]) + gross).toString()
+        current.shares[outcomeIndex] = (BigInt(current.shares[outcomeIndex]) + shares).toString()
+        current.totalStake = (BigInt(current.totalStake) + gross).toString()
+        positions.set(marketId, current)
+      } else if (parsed.name === 'WC') {
+        const claimant = String(parsed.args.c ?? parsed.args[1])
+        if (claimant.toLowerCase() !== walletAddress.toLowerCase()) continue
+        const marketId = bigintToNumber(parsed.args.id ?? parsed.args[0])
+        const amount = BigInt(parsed.args.a ?? parsed.args[2]).toString()
+        const current = positions.get(marketId) || {
+          marketId,
+          stakes: [],
+          shares: [],
+          totalStake: '0',
+          claimed: false,
+          claimedPayout: '0'
+        }
+        current.claimed = true
+        current.claimedPayout = amount
+        positions.set(marketId, current)
+      }
+    } catch (error) {
+      console.warn('Unable to decode wallet history event:', getErrorMessage(error))
+    }
+  }
+
+  return positions
+}
+
+async function loadResolutionVotingDeadlines(
+  accessToken: string
+): Promise<Map<number, number>> {
+  const deadlines = new Map<number, number>()
+
+  try {
+    const eventFragment = iface.getEvent('RR')
+    if (!eventFragment) return deadlines
+    const logs = await loadLogsChunked(accessToken, [eventFragment.topicHash], 900001)
+
+    for (const log of logs) {
+      try {
+        const decoded = iface.decodeEventLog(eventFragment, log.data, log.topics)
+        const marketId = bigintToNumber(decoded.id ?? decoded[0])
+        const deadline = bigintToNumber(decoded.dl ?? decoded[2])
+        deadlines.set(marketId, deadline)
+      } catch (error) {
+        console.warn('Unable to decode an RR event:', getErrorMessage(error))
+      }
+    }
+  } catch (error) {
+    console.warn('Resolution deadline event lookup failed:', getErrorMessage(error))
+  }
+
+  return deadlines
+}
+
 async function readFunction(
   accessToken: string,
   functionName: string,
@@ -414,8 +591,9 @@ async function readFunction(
 
 async function loadMarket(
   accessToken: string,
-  marketId: number
-) {
+  marketId: number,
+  resolutionVotingDeadline = 0
+): Promise<LoadedMarket> {
   /*
    * Calls are deliberately sequential to avoid flooding
    * the InterLink authenticated RPC endpoint.
@@ -659,6 +837,8 @@ async function loadMarket(
         voting.rc ?? voting[9]
       ),
 
+    resolutionVotingDeadline,
+
     activeDECSnapshot:
       bigintToNumber(
         resolution.snap ??
@@ -818,7 +998,7 @@ async function loadMarket(
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   if (
     !ethers.isAddress(
       CONTRACT_ADDRESS
@@ -845,6 +1025,10 @@ export async function GET() {
     const accessToken =
       await getValidServiceToken()
 
+    const requestUrl = new URL(request.url)
+    const requestedAddress = requestUrl.searchParams.get('address')?.trim() || ''
+    const walletAddress = ethers.isAddress(requestedAddress) ? requestedAddress : ''
+
     const totalResult =
       await readFunction(
         accessToken,
@@ -859,7 +1043,10 @@ export async function GET() {
         totalResult[0]
       )
 
-    const allMarkets = []
+    const resolutionDeadlines =
+      await loadResolutionVotingDeadlines(accessToken)
+
+    const allMarkets: LoadedMarket[] = []
 
     /*
      * Market IDs begin at zero.
@@ -873,7 +1060,8 @@ export async function GET() {
         const market =
           await loadMarket(
             accessToken,
-            marketId
+            marketId,
+            resolutionDeadlines.get(marketId) || 0
           )
 
         allMarkets.push(market)
@@ -914,6 +1102,43 @@ export async function GET() {
           MarketState.Approved
         ].includes(market.state)
       )
+
+    const walletHistory = walletAddress
+      ? await loadWalletPositionHistory(accessToken, walletAddress)
+      : new Map<number, WalletPositionHistory>()
+
+    const walletPositions = Array.from(walletHistory.values()).map(history => {
+      const market = allMarkets.find(item => item.id === history.marketId)
+      const outcomeCount = market?.outcomeLabels?.length || Math.max(history.shares.length, history.stakes.length)
+      const shares = Array.from({ length: outcomeCount }, (_, index) => history.shares[index] || '0')
+      const stakes = Array.from({ length: outcomeCount }, (_, index) => history.stakes[index] || '0')
+      let claimablePayout = '0'
+
+      if (market && market.finalized && !history.claimed) {
+        const winningOutcome = Number(market.confirmedOutcome)
+        const userShares = BigInt(shares[winningOutcome] || '0')
+        const pools = market.outcomePools.map((value: string) => BigInt(value))
+        const totalPool = pools.reduce((sum: bigint, value: bigint) => sum + value, BigInt(0))
+        const winningPool = BigInt(market.outcomePools[winningOutcome] || '0')
+        if (userShares > BigInt(0) && winningPool > BigInt(0)) {
+          const grossPayout = (userShares * totalPool) / winningPool
+          claimablePayout = (grossPayout - ((grossPayout * BigInt(500)) / BigInt(10000))).toString()
+        }
+      }
+
+      return {
+        ...history,
+        shares,
+        stakes,
+        claimablePayout,
+        question: market?.question || `Market #${history.marketId}`,
+        marketState: market?.state || 0,
+        confirmedOutcome: market?.confirmedOutcome || 0,
+        marketEndTime: market?.marketEndTime || 0,
+        outcomeLabels: market?.outcomeLabels || [],
+        outcomePools: market?.outcomePools || []
+      }
+    })
 
     const activeMarkets =
       allMarkets.filter(
@@ -996,6 +1221,7 @@ export async function GET() {
       resolvedMarkets,
       rejectedMarkets,
       cancelledMarkets,
+      walletPositions,
 
       counts: {
         all: allMarkets.length,
@@ -1037,6 +1263,12 @@ export async function GET() {
       diagnostics: {
         contractAddress:
           CONTRACT_ADDRESS,
+
+        eventScanStartBlock:
+          process.env.INTERPREDICT_DEPLOYMENT_BLOCK || '0x0',
+
+        requestedWallet:
+          walletAddress || null,
 
         totalMarketsReported:
           totalCount,

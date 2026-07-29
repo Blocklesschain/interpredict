@@ -1,6 +1,9 @@
 import { ethers } from "ethers";
-import "dotenv/config";
-import { getBackendToken } from "../lib/interlinkAuthBackend";
+import dotenv from "dotenv";
+import { getBackendToken } from "../lib/interlinkAuthBackend.js";
+
+dotenv.config({ path: ".env.local" });
+dotenv.config();
 
 async function main() {
   console.log("\n====================================================");

@@ -29,6 +29,7 @@ interface Web3ContextType {
   getWalletBalance: (address: string) => Promise<string>
   createMarketOnChain: (description: string, marketEndTime: number, outcomes: string[], category: number, thumbnailUri: string, resolutionCriteria: string) => Promise<boolean>
   joinDecOnChain: () => Promise<boolean>
+  approveDecRequestOnChain: (address: string) => Promise<boolean>
   castVoteOnChain: (marketId: number, support: boolean) => Promise<void>
   placeBetOnChain: (marketId: number, outcomeIndex: number, amount: string) => Promise<boolean>
   initializeMarketOnChain: (marketId: number) => Promise<boolean>
@@ -402,9 +403,12 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     } catch { return 0 }
   }
 
+  // Submits an off-chain DEC membership request — no wallet signature, no
+  // gas. The admin reviews pending requests in the "DEC Requests" tab and
+  // approves by calling addD() on-chain themselves via approveDecRequestOnChain.
   const joinDecOnChain = async (): Promise<boolean> => {
     try {
-      setTxStatus("Joining DEC Committee...")
+      setTxStatus("Checking DEC membership status...")
       const { contract } = await getContractInstance()
 
       const isAlreadyMember = await contract.iad(walletAddress)
@@ -413,13 +417,51 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
         return true
       }
 
-      setTxStatus("Processing DEC Committee registration...")
-      // DEC membership is granted by admin via addD() — no self-serve join.
-      setTxStatus("DEC membership requires admin approval. Contact the team to add you.")
-      return false
+      setTxStatus("Submitting DEC membership request...")
+      const res = await fetch('/api/dec-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: walletAddress })
+      })
+      const json = await res.json()
+
+      if (!res.ok) {
+        setTxStatus(`Error: ${json.error || 'Failed to submit request'}`)
+        return false
+      }
+
+      setTxStatus("Request submitted! An admin will review and approve your membership.")
+      return false // request submitted, but not yet an actual member
     } catch (err: any) {
       const detail = formatTxError(err)
       console.error('joinDecOnChain failed:', err)
+      setTxStatus(`Error: ${detail}`)
+      return false
+    }
+  }
+
+  // Admin-only: grants DEC membership on-chain via addD(), then clears the
+  // request from the pending list.
+  const approveDecRequestOnChain = async (address: string): Promise<boolean> => {
+    try {
+      setTxStatus(`Approving DEC membership for ${address}...`)
+      await sendTxSafely('addD', [address])
+
+      try {
+        await fetch('/api/dec-requests', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address })
+        })
+      } catch (e) {
+        console.warn('[Web3Context] Failed to clear pending request after approval:', e)
+      }
+
+      setTxStatus(`DEC membership granted to ${address}`)
+      return true
+    } catch (err: any) {
+      const detail = formatTxError(err)
+      console.error('approveDecRequestOnChain failed:', err)
       setTxStatus(`Error: ${detail}`)
       return false
     }
@@ -655,7 +697,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       walletAddress, decMembers, txStatus, setTxStatus, historyLogs,
       locale, setLocale, t,
       connectWallet, disconnectWallet, getWalletBalance,
-      createMarketOnChain, joinDecOnChain, castVoteOnChain, placeBetOnChain,
+      createMarketOnChain, joinDecOnChain, approveDecRequestOnChain, castVoteOnChain, placeBetOnChain,
       initializeMarketOnChain, claimPayoutOnChain, requestResolutionOnChain,
       resolveMarketOnChain, claimDecRewardsOnChain,
       claimCreatorFeesOnChain, claimCreatorSeedOnChain,

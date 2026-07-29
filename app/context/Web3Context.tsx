@@ -310,39 +310,33 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Sends a contract transaction while bypassing ethers' automatic
-  // TransactionResponse construction — the Interlink RPC gateway appears to
-  // return transaction data missing signature fields (r/s/v), which makes
-  // ethers throw "missing r" (INVALID_ARGUMENT) even when the transaction
-  // itself is submitted and mined successfully.
-  //
-  // Instead: populate the tx ourselves, submit it via raw eth_sendTransaction
-  // (MetaMask signs it), then poll only for the receipt — receipts never
-  // carry signature fields, so this sidesteps the crash entirely.
   const sendTxSafely = async (
     method: string,
     args: any[],
     overrides: { value?: bigint } = {}
-  ): Promise<ethers.TransactionReceipt> => {
-    if (typeof window === 'undefined' || !(window as any).ethereum) {
+  ): Promise<any> => {
+    if (
+      typeof window === 'undefined' ||
+      !(window as any).ethereum
+    ) {
       throw new Error('Wallet not identified')
     }
 
     const { contract, signer } = await getSignerContract()
     const from = await signer.getAddress()
 
-    const populated = await (contract[method] as any).populateTransaction(
-      ...args,
-      overrides
-    )
+    const populated = await (
+      contract[method] as any
+    ).populateTransaction(...args, overrides)
 
-    // JSON-RPC cannot serialize native JavaScript bigint values. Convert all
-    // bigint transaction fields (such as value, gasLimit, and nonce) into
-    // Ethereum hexadecimal quantities before sending them to the wallet.
-    const transactionPayload: Record<string, unknown> = { from }
+    const transactionPayload: Record<string, any> = {
+      from,
+    }
 
     for (const [key, value] of Object.entries(populated)) {
-      if (value === undefined || value === null) continue
+      if (value === undefined || value === null) {
+        continue
+      }
 
       transactionPayload[key] =
         typeof value === 'bigint'
@@ -350,28 +344,57 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
           : value
     }
 
-    const txHash = await (window as any).ethereum.request({
+    const txHash: string = await (
+      window as any
+    ).ethereum.request({
       method: 'eth_sendTransaction',
-      params: [transactionPayload]
-    }) as string
+      params: [transactionPayload],
+    })
 
-    let receipt: ethers.TransactionReceipt | null = null
+    let rawReceipt: any = null
 
     for (let attempt = 0; attempt < 60; attempt++) {
-      receipt = await signer.provider.getTransactionReceipt(txHash)
-      if (receipt) break
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      try {
+        rawReceipt = await (
+          window as any
+        ).ethereum.request({
+          method: 'eth_getTransactionReceipt',
+          params: [txHash],
+        })
+      } catch (receiptError) {
+        console.warn(
+          `Receipt check ${attempt + 1} failed:`,
+          receiptError
+        )
+      }
+
+      if (rawReceipt) {
+        break
+      }
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, 2000)
+      )
     }
 
-    if (!receipt) {
-      throw new Error('Transaction was submitted but was not confirmed within 120 seconds')
+    if (!rawReceipt) {
+      throw new Error(
+        `Transaction ${txHash} was submitted but was not confirmed within 120 seconds`
+      )
     }
 
-    if (receipt.status === 0) {
-      throw new Error('Transaction reverted on-chain')
+    const receiptStatus =
+      typeof rawReceipt.status === 'string'
+        ? Number.parseInt(rawReceipt.status, 16)
+        : Number(rawReceipt.status)
+
+    if (receiptStatus !== 1) {
+      throw new Error(
+        `Transaction reverted on-chain: ${txHash}`
+      )
     }
 
-    return receipt
+    return rawReceipt
   }
 
   const createMarketOnChain = async (
@@ -471,27 +494,106 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
   // Admin-only: grants DEC membership on-chain via addD(), then clears the
   // request from the pending list.
-  const approveDecRequestOnChain = async (address: string): Promise<boolean> => {
-    try {
-      setTxStatus(`Approving DEC membership for ${address}...`)
-      await sendTxSafely('addD', [address])
+  const approveDecRequestOnChain = async (
+    address: string
+  ): Promise<boolean> => {
+    const clearPendingRequest = async () => {
+      const response = await fetch('/api/dec-requests', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ address }),
+      })
 
-      try {
-        await fetch('/api/dec-requests', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ address })
-        })
-      } catch (e) {
-        console.warn('[Web3Context] Failed to clear pending request after approval:', e)
+      if (!response.ok) {
+        const result = await response.json().catch(() => null)
+
+        throw new Error(
+          result?.error ||
+          'Failed to clear the pending DEC request'
+        )
+      }
+    }
+
+    try {
+      if (!ethers.isAddress(address)) {
+        throw new Error('Invalid DEC wallet address')
       }
 
-      setTxStatus(`DEC membership granted to ${address}`)
+      setTxStatus(
+        `Checking DEC membership for ${address}...`
+      )
+
+      const { contract } = await getContractInstance()
+
+      const isAlreadyActive = Boolean(
+        await contract.iad(address)
+      )
+
+      if (isAlreadyActive) {
+        await clearPendingRequest()
+
+        setTxStatus(
+          `${address} is already an active DEC member. The stale request was removed.`
+        )
+
+        return true
+      }
+
+      /*
+       * AccessControl exposes hasRole publicly.
+       * Read DEC_ROLE from the contract and check whether the wallet
+       * already owns the role but is currently inactive.
+       */
+      let alreadyHasRole = false
+
+      try {
+        const decRole = await contract.DEC_ROLE()
+
+        alreadyHasRole = Boolean(
+          await contract.hasRole(decRole, address)
+        )
+      } catch (roleCheckError) {
+        console.warn(
+          '[Web3Context] Detailed DEC role check unavailable:',
+          roleCheckError
+        )
+      }
+
+      if (alreadyHasRole) {
+        setTxStatus(
+          `Reactivating DEC membership for ${address}...`
+        )
+
+        await sendTxSafely('actD', [address])
+      } else {
+        setTxStatus(
+          `Approving DEC membership for ${address}...`
+        )
+
+        await sendTxSafely('addD', [address])
+      }
+
+      await clearPendingRequest()
+
+      setTxStatus(
+        alreadyHasRole
+          ? `DEC membership reactivated for ${address}`
+          : `DEC membership granted to ${address}`
+      )
+
       return true
     } catch (err: any) {
       const detail = formatTxError(err)
-      console.error('approveDecRequestOnChain failed:', err)
+
+      console.error(
+        'approveDecRequestOnChain failed:',
+        err
+      )
+
       setTxStatus(`Error: ${detail}`)
+
       return false
     }
   }

@@ -1,11 +1,7 @@
 import { BackHomeButton } from '@/components/back-home-button'
+import Link from 'next/link'
 
 export default function RiskDisclosurePage() {
-  // String definitions to avoid JSX syntax parsers choking on raw symbols
-  const totalFeeString = "5.0%";
-  const penaltyRatio = "10% / 90%";
-  const timeCondition = "block.timestamp >= market.marketEndTime";
-
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-background py-24">
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
@@ -15,7 +11,7 @@ export default function RiskDisclosurePage() {
               Risk Disclosure
             </p>
             <h1 className="mt-4 text-4xl font-heading font-bold tracking-tight text-foreground sm:text-5xl">
-              Protocol Risk & Participant Notice
+              InterPredict Risk Disclosure
             </h1>
           </div>
 
@@ -23,53 +19,122 @@ export default function RiskDisclosurePage() {
             <BackHomeButton />
           </div>
 
-          <section className="space-y-8 text-base leading-8 text-muted-foreground">
+          {/* Important Notice */}
+          <section className="space-y-6 text-base leading-8 text-muted-foreground">
             <div>
-              <h2 className="text-2xl font-semibold text-foreground font-mono">1. Absolute Capital Loss Risk</h2>
+              <h2 className="text-2xl font-semibold text-foreground">⚠️ Important Notice</h2>
+              <div className="mt-4 p-4 rounded-lg border border-red-500/30 bg-red-500/10">
+                <p className="text-sm font-bold text-red-400">
+                  PREDICTION MARKET TRADING INVOLVES SUBSTANTIAL RISK. YOU COULD LOSE ALL OF THE ASSETS YOU COMMIT TO THE PROTOCOL.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-semibold text-foreground">Risk Categories</h2>
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="p-3 rounded-lg border border-border bg-secondary/20">
+                  <h3 className="font-semibold text-foreground mb-1">Blockchain Risks</h3>
+                  <p className="text-muted-foreground text-xs">Network congestion, forks, 51% attacks, chain reorganizations</p>
+                </div>
+                <div className="p-3 rounded-lg border border-border bg-secondary/20">
+                  <h3 className="font-semibold text-foreground mb-1">Smart Contract Risks</h3>
+                  <p className="text-muted-foreground text-xs">Code vulnerabilities, no formal verification, upgrade limitations</p>
+                </div>
+                <div className="p-3 rounded-lg border border-border bg-secondary/20">
+                  <h3 className="font-semibold text-foreground mb-1">Market Risks</h3>
+                  <p className="text-muted-foreground text-xs">Total loss of principal, manipulation, illiquidity, cancellation</p>
+                </div>
+                <div className="p-3 rounded-lg border border-border bg-secondary/20">
+                  <h3 className="font-semibold text-foreground mb-1">Resolution Risks</h3>
+                  <p className="text-muted-foreground text-xs">DEC voting failures, admin override, delayed resolution</p>
+                </div>
+                <div className="p-3 rounded-lg border border-border bg-secondary/20">
+                  <h3 className="font-semibold text-foreground mb-1">Governance Risks</h3>
+                  <p className="text-muted-foreground text-xs">Centralization, admin misbehavior, DEC collusion</p>
+                </div>
+                <div className="p-3 rounded-lg border border-border bg-secondary/20">
+                  <h3 className="font-semibold text-foreground mb-1">Wallet & Security</h3>
+                  <p className="text-muted-foreground text-xs">Private key loss, phishing, malware, browser extension risks</p>
+                </div>
+                <div className="p-3 rounded-lg border border-border bg-secondary/20">
+                  <h3 className="font-semibold text-foreground mb-1">Regulatory Risks</h3>
+                  <p className="text-muted-foreground text-xs">Uncertain legal status, regulatory action, tax implications</p>
+                </div>
+                <div className="p-3 rounded-lg border border-border bg-secondary/20">
+                  <h3 className="font-semibold text-foreground mb-1">User Mistake Risks</h3>
+                  <p className="text-muted-foreground text-xs">Wrong network, wrong contract, incorrect parameters, slippage</p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-semibold text-foreground">Risk Severity Matrix</h2>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 pr-4 font-semibold text-foreground">Risk Category</th>
+                      <th className="text-left py-2 pr-4 font-semibold text-foreground">Severity</th>
+                      <th className="text-left py-2 font-semibold text-foreground">Mitigation</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-muted-foreground">
+                    <tr className="border-b border-border/50">
+                      <td className="py-2 pr-4">Total loss of principal</td>
+                      <td className="py-2 pr-4 text-red-400 font-semibold">High</td>
+                      <td className="py-2">Only risk what you can afford to lose</td>
+                    </tr>
+                    <tr className="border-b border-border/50">
+                      <td className="py-2 pr-4">Smart contract vulnerability</td>
+                      <td className="py-2 pr-4 text-red-400 font-semibold">High</td>
+                      <td className="py-2">Audits, testing, but no guarantees</td>
+                    </tr>
+                    <tr className="border-b border-border/50">
+                      <td className="py-2 pr-4">Admin centralization</td>
+                      <td className="py-2 pr-4 text-amber-400 font-semibold">Medium</td>
+                      <td className="py-2">Progressive decentralization planned</td>
+                    </tr>
+                    <tr className="border-b border-border/50">
+                      <td className="py-2 pr-4">Regulatory action</td>
+                      <td className="py-2 pr-4 text-amber-400 font-semibold">Medium</td>
+                      <td className="py-2">Legal review, compliance</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 pr-4">User error</td>
+                      <td className="py-2 pr-4 text-amber-400 font-semibold">Medium</td>
+                      <td className="py-2">Careful review of all transactions</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-semibold text-foreground">No Guarantees</h2>
               <p className="mt-4">
-                Trading positions in any InterPredict pool is highly speculative. Market shares are binary, settling either to 1.00 ITL or 0.00 ITL based on real-world outcomes. If you buy YES shares on a market that resolves to NO (or vice versa), your entire position settles to zero. All on-chain wagers are final, non-refundable, and completely irreversible.
+                The Protocol may become unavailable at any time. There is no guarantee of correct outcomes, 
+                trading profits, DEC rewards, or return of principal. InterPredict does not provide financial, 
+                investment, legal, or tax advice.
               </p>
             </div>
 
             <div>
-              <h2 className="text-2xl font-semibold text-foreground font-mono">2. Curation Escrow Rejection Penalties</h2>
-              <p className="mt-4">
-                Users who propose a market must deposit a strict 1.0 ITL security stake. Proposing markets that are deemed ambiguous, misleading, or inappropriate by the Decentralized Curation Committee carries immediate financial penalties:
-              </p>
-              <ul className="mt-4 list-disc list-inside space-y-2 text-sm pl-4">
-                <li>
-                  <strong>The Penalty:</strong> If a proposal is rejected, the contract enforces a <strong>{penaltyRatio}</strong> split. 10% (0.1 ITL) is sent immediately to the Team Treasury Wallet to compensate for committee curation overhead. Only the remaining 90% (0.9 ITL) is returned to the creator.
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h2 className="text-2xl font-semibold text-foreground font-mono">3. Embedded Platform Fee Cuts</h2>
-              <p className="mt-4">
-                Upon pool resolution, a flat <strong>{totalFeeString}</strong> platform fee is automatically deducted from all winning payouts. This fee is automatically routed by the smart contract to reward DEC Committee curators (2.0%) and support protocol operations (2.0% or 3.0%), with 1.0% held in escrow for user creators of community-proposed markets. You must factor this fee into your expected margins before placing wagers.
-              </p>
-            </div>
-
-            <div>
-              <h2 className="text-2xl font-semibold text-foreground font-mono">4. Subjective First-Party Oracle Settlement</h2>
-              <p className="mt-4">
-                During the bootstrap phase of the Interlink Network, InterPredict utilizes a first-party validator wallet key to settle outcomes. This subjective oracle key is designated inside the smart contract state.
-                While resolving a market strictly requires the on-chain condition that <code>{timeCondition}</code>, participants assume the risk of relying on the team oracle key to submit real-world resolution callbacks truthfully and accurately.
-              </p>
-            </div>
-
-            <div>
-              <h2 className="text-2xl font-semibold text-foreground font-mono">5. Smart Contract and L1 Infrastructure Dependency</h2>
-              <p className="mt-4">
-                All functions—including <code>buyShares()</code>, <code>claimPayout()</code>, and <code>claimDecRewards()</code>—depend directly on the underlying Interlink EVM-compatible execution layer. Network congestion, consensus latency, or smart contract bugs on the L1 can prevent timely order executions or payout redemptions.
-              </p>
-            </div>
-
-            <div>
-              <h2 className="text-2xl font-semibold text-foreground font-mono">6. Open-Ended Roadmap Commitments</h2>
-              <p className="mt-4">
-                This document contains no fixed roadmap dates or guaranteed feature releases. The protocol and team prioritize sovereign consensus, smart contract safety, and long-term utility of the ITL token rather than delivering against predetermined timelines.
-              </p>
+              <h2 className="text-2xl font-semibold text-foreground">Related Documents</h2>
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                <Link href="/terms-of-service" className="p-3 rounded-lg border border-border bg-secondary/20 hover:text-primary transition-colors">
+                  <span className="font-semibold text-foreground">Terms of Service</span>
+                  <p className="text-xs mt-1 text-muted-foreground">Legal terms and conditions</p>
+                </Link>
+                <Link href="/privacy-policy" className="p-3 rounded-lg border border-border bg-secondary/20 hover:text-primary transition-colors">
+                  <span className="font-semibold text-foreground">Privacy Policy</span>
+                  <p className="text-xs mt-1 text-muted-foreground">Data collection and privacy practices</p>
+                </Link>
+                <Link href="/whitepaper" className="p-3 rounded-lg border border-border bg-secondary/20 hover:text-primary transition-colors">
+                  <span className="font-semibold text-foreground">Whitepaper</span>
+                  <p className="text-xs mt-1 text-muted-foreground">Technical protocol specification</p>
+                </Link>
+              </div>
             </div>
           </section>
         </div>

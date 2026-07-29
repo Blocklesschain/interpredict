@@ -4,14 +4,6 @@ import Link from 'next/link'
 import { BackHomeButton } from '@/components/back-home-button'
 
 export default function DocumentationPage() {
-  // Safe string definitions to prevent the JSX compiler from hitting unexpected token errors
-  const formatRules = "Will Bitcoin close above $50,000 on December 31, 2026? is good. Crypto will moon is not.";
-  const superMajorityStr = "66% or higher";
-  const disputeMajorityStr = "75% or higher";
-  const voteConditionStr = "votesForActive >= votesAgainstActive && votesForActive > 0";
-  const timeConditionStr = "block.timestamp >= market.marketEndTime";
-  const logNamespaceStr = "interpredict_logs_${walletAddress.toLowerCase()}";
-
   return (
     <main className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5">
       <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
@@ -20,185 +12,131 @@ export default function DocumentationPage() {
         <div className="mb-12">
           <BackHomeButton />
           <h1 className="mt-8 text-5xl font-bold tracking-tight text-foreground sm:text-6xl font-mono">
-            How InterPredict Works
+            InterPredict Documentation
           </h1>
           <p className="mt-4 text-xl text-muted-foreground font-mono">
-            A Developer &amp; User Manual for Native L1 Prediction Pools
+            Developer & User Guide — Regenerated from Smart Contract Implementation
           </p>
         </div>
 
         {/* Quick Start Guide */}
-        <section className="mb-12 rounded-xl border border-border bg-secondary/30 p-8 backdrop-blur">
-          <h2 className="mb-6 text-2xl font-bold text-foreground font-mono">Quick Start Guide</h2>
+        <div className="mb-8 rounded-xl border border-border bg-secondary/30 p-6">
+          <h2 className="text-xl font-bold text-foreground mb-4">Quick Start Guide</h2>
           <div className="space-y-4">
             <div className="rounded-lg border border-border bg-secondary/20 p-4">
               <p className="font-semibold text-foreground mb-2">1. Connect Your Web3 Wallet</p>
               <p className="text-muted-foreground text-sm">
-                Connect your browser wallet and verify that your network is set to the Interlink Testnet (Chain ID: 19042026).
+                Connect your browser wallet to the Interlink Testnet (Chain ID: 19042026). The dApp will automatically prompt you to switch networks.
               </p>
             </div>
             <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">2. Propose or Browse Markets</p>
+              <p className="font-semibold text-foreground mb-2">2. Browse or Create Markets</p>
               <p className="text-muted-foreground text-sm">
-                Browse existing prediction markets or deposit exactly 1.00 ITL to propose a custom binary question for committee review.
+                Browse existing prediction markets or create your own. Community markets cost 11 tITL (1 fee + 10 seed). Team markets cost 10 tITL.
               </p>
             </div>
             <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">3. Purchase YES/NO Shares</p>
+              <p className="font-semibold text-foreground mb-2">3. Trade on Outcomes</p>
               <p className="text-muted-foreground text-sm">
-                Commit ITL to acquire YES or NO shares in active markets. Prices adjust dynamically based on the ratio of capital in each pool.
+                Buy shares in your chosen outcomes. Prices adjust dynamically based on the pari-mutuel pool ratio. Minimum trade: 0.001 tITL.
               </p>
             </div>
             <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">4. Settle Winnings</p>
+              <p className="font-semibold text-foreground mb-2">4. Claim Winnings</p>
               <p className="text-muted-foreground text-sm">
-                Once resolved, winning shares can be redeemed for their proportional share of the pool, while losing positions expire.
+                After market finalization, winning positions can be claimed. Creators can claim fees and seed liquidity. DEC members can claim rewards.
               </p>
             </div>
           </div>
-        </section>
+        </div>
 
-        {/* Market Creation & Curation */}
-        <section className="mb-12">
-          <h2 className="mb-6 text-3xl font-bold text-foreground font-mono border-b border-border pb-2">Creating a New Market</h2>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">What Makes a Valid Proposal?</h3>
-          <p className="mb-4 text-muted-foreground text-sm leading-relaxed">
-            InterPredict markets require clear, objective resolution criteria to pass curation. The DEC Committee evaluates proposals based on these standards:
-          </p>
-          <ul className="mb-6 space-y-3 text-muted-foreground text-sm list-disc pl-5">
-            <li>
-              <strong>Clear Binary Output:</strong> Event statements must resolve strictly to YES or NO (e.g., <em>{formatRules}</em>).
-            </li>
-            <li>
-              <strong>Verifiable Evidence Sources:</strong> You must specify a public, reliable API, explorer, or press outlet where the oracle can verify the outcome.
-            </li>
-            <li>
-              <strong>Time Precision:</strong> Specify the exact date, time, and timezone of event resolution.
-            </li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">The 24-Hour Curation Process</h3>
-          <div className="space-y-3 mb-6 text-sm text-muted-foreground">
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">Step 1: Staking and Submission</p>
-              <p className="text-xs">
-                Proposers call <code>proposeMarket</code>, locking a security deposit of exactly 1.00 ITL.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">Step 2: Curation Window</p>
-              <p className="text-xs">
-                During a strict 24-hour voting period, DEC members review the proposal and cast votes to Approve or Reject.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">Step 3: State Initialization</p>
-              <p className="text-xs">
-                Any user calls <code>initializeMarket</code> to calculate the votes. If the proposal meets the criteria (<code>{voteConditionStr}</code>), the market is opened for trading. If rejected, the contract applies a 10% curation penalty (0.1 ITL) and refunds the remaining 90% (0.9 ITL) to the creator.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Trading & Pricing Mechanics */}
-        <section className="mb-12">
-          <h2 className="mb-6 text-3xl font-bold text-foreground font-mono border-b border-border pb-2">Trading on InterPredict</h2>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">Understanding Share Pricing</h3>
-          <p className="mb-4 text-muted-foreground text-sm leading-relaxed">
-            InterPredict pools operate on a peer-to-peer matching model where odds shift based on the ratio of committed capital.
-            The price of a share represents the market&apos;s implied probability of that outcome occurring. For example:
-          </p>
-          <ul className="mb-6 space-y-2 text-sm text-muted-foreground list-disc pl-5">
-            <li>If YES shares are priced at 0.65 ITL, the market is pricing in an implied probability of 65%.</li>
-            <li>At resolution, winning shares are redeemable for their proportional share of the pool, while losing shares settle to zero.</li>
-          </ul>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">Browser-Cached Transaction Logs</h3>
-          <p className="mb-4 text-muted-foreground text-sm leading-relaxed">
-            To provide a responsive interface while maintaining a decentralized architecture, transaction logs are written directly to your browser&apos;s local cache:
-          </p>
-          <ul className="mb-6 space-y-2 text-sm text-muted-foreground list-disc pl-5">
-            <li>
-              Logs are mapped directly to your connected address using the namespace <code>{logNamespaceStr}</code>.
-            </li>
-            <li>This transaction history is kept entirely private and is never transmitted to or stored on external servers.</li>
-            <li>Disconnecting your wallet immediately clears active logs from the active user interface.</li>
-          </ul>
-        </section>
-
-        {/* Resolution & Payouts */}
-        <section className="mb-12">
-          <h2 className="mb-6 text-3xl font-bold text-foreground font-mono border-b border-border pb-2">Market Resolution &amp; Settlement</h2>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">The Resolution Workflow</h3>
-          <p className="mb-4 text-muted-foreground text-sm leading-relaxed">
-            Once a market reaches its deadline, the resolution process is executed through these steps:
-          </p>
-          <ol className="mb-6 space-y-3 text-sm text-muted-foreground list-decimal list-inside pl-2">
-            <li>The trading window closes, rejecting any further buy orders.</li>
-            <li>
-              Any user clicks &quot;Ping Oracle Resolution&quot; to invoke <code>requestOracleResolution</code>, emitting a resolution request event.
-            </li>
-            <li>
-              The authorized Team Oracle Wallet (<code>0x6E832252eA4c78068EE109d953724D2762431992</code>) verifies the outcome and submits the resolution callback on-chain.
-            </li>
-            <li>Winning shareholders can call <code>claimPayout</code> to claim their winnings.</li>
-          </ol>
-
-          <h3 className="mb-4 text-xl font-semibold text-foreground font-mono">Disputes</h3>
-          <p className="mb-4 text-muted-foreground text-sm leading-relaxed">
-            If an incorrect outcome is submitted, users can present verifiable evidence in the governance forum.
-            If a dispute meets the required consensus ({disputeMajorityStr}), the outcome can be updated, with all actions recorded on-chain.
-          </p>
-        </section>
-
-        {/* Frequently Asked Questions (FAQ) */}
-        <section className="mb-12">
-          <h2 className="mb-6 text-3xl font-bold text-foreground font-mono border-b border-border pb-2">Frequently Asked Questions</h2>
-
-          <div className="space-y-4">
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">Q: Why does InterPredict use ITL instead of standard stablecoins?</p>
-              <p className="text-muted-foreground text-sm">
-                A: Settling wagers directly in native ITL avoids the security risks, wrapping fees, and transaction delays associated with bridged stablecoins, keeping operations low-cost and secure.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">Q: Why is my &quot;Ping Oracle Resolution&quot; button disabled?</p>
-              <p className="text-muted-foreground text-sm">
-                A: This button is dynamically locked by the frontend until the block timestamp has passed the market&apos;s registered deadline (<code>{timeConditionStr}</code>), protecting market integrity from premature resolution.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">Q: How do platform fees get split?</p>
-              <p className="text-muted-foreground text-sm">
-                A: The protocol deducts a flat 5.0% platform fee from winning wagers, which is dynamically split based on the creator of the pool:
-              </p>
-              <ul className="mt-2 space-y-1 text-xs text-muted-foreground pl-4 list-disc">
-                <li>User-Created Pools: 2.0% goes to the DEC Committee, 2.0% goes to the Team Treasury, and 1.0% is reserved for the creator.</li>
-                <li>Team-Created Pools: 2.0% goes to the DEC Committee, and 3.0% goes to the Team Treasury.</li>
+        {/* Documentation Sections */}
+        <div className="mb-8 rounded-xl border border-border bg-secondary/30 p-6">
+          <h2 className="text-xl font-bold text-foreground mb-4">Documentation Sections</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="p-3 rounded-lg border border-border bg-secondary/20">
+              <h3 className="font-semibold text-foreground mb-2">Getting Started</h3>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>• Connect wallet to Interlink Testnet (Chain ID: 19042026)</li>
+                <li>• Get tITL from the Interlink faucet</li>
+                <li>• Browse markets on the dApp Portal</li>
+                <li>• Configure environment variables for development</li>
               </ul>
             </div>
-            <div className="rounded-lg border border-border bg-secondary/20 p-4">
-              <p className="font-semibold text-foreground mb-2">Q: Is the 0.1 ITL DEC enrollment fee refundable?</p>
-              <p className="text-muted-foreground text-sm">
-                A: No. The registration fee is a non-refundable contribution sent directly to the Team Treasury to prevent automated spam attacks and support ongoing development of the protocol.
-              </p>
+            <div className="p-3 rounded-lg border border-border bg-secondary/20">
+              <h3 className="font-semibold text-foreground mb-2">Market Creation</h3>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>• Community: 11 tITL, requires DEC approval</li>
+                <li>• Team: 10 tITL, bypasses curation</li>
+                <li>• 2-4 outcomes, 18 categories</li>
+                <li>• Optional IPFS image upload via Pinata</li>
+              </ul>
+            </div>
+            <div className="p-3 rounded-lg border border-border bg-secondary/20">
+              <h3 className="font-semibold text-foreground mb-2">Trading</h3>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>• Pari-mutuel pricing model</li>
+                <li>• 0.5% trading fee</li>
+                <li>• 5% settlement fee on winnings</li>
+                <li>• Minimum trade: 0.001 tITL</li>
+              </ul>
+            </div>
+            <div className="p-3 rounded-lg border border-border bg-secondary/20">
+              <h3 className="font-semibold text-foreground mb-2">Resolution</h3>
+              <ul className="space-y-1 text-muted-foreground">
+                <li>• DEC resolution voting (3h window)</li>
+                <li>• Admin verification layer</li>
+                <li>• Claim winnings, creator fees, seed</li>
+                <li>• DEC rewards based on reputation</li>
+              </ul>
             </div>
           </div>
-        </section>
+        </div>
 
-        {/* Learn More Block */}
-        <div className="rounded-lg border border-primary/20 bg-primary/5 p-6 mt-8">
-          <p className="text-foreground font-semibold mb-2">Want to Learn More?</p>
-          <p className="text-muted-foreground text-sm mb-4">
-            For technical details about contract state, byte-packing schemas, and mathematical payout settlement models, see our complete <Link href="/whitepaper" className="font-semibold text-primary hover:underline">Whitepaper</Link>.
-          </p>
-          <p className="text-muted-foreground text-sm">
-            To join discussions and vote on proposals, visit the active <Link href="/governance-forum" className="font-semibold text-primary hover:underline">Governance Forum</Link>.
-          </p>
+        {/* API & Contract Reference */}
+        <div className="mb-8 rounded-xl border border-border bg-secondary/30 p-6">
+          <h2 className="text-xl font-bold text-foreground mb-4">API & Contract Reference</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="p-3 rounded-lg border border-border bg-secondary/20">
+              <h3 className="font-semibold text-foreground mb-2">API Endpoints</h3>
+              <ul className="space-y-1 text-muted-foreground font-mono text-xs">
+                <li>• GET /api/markets — All market data</li>
+                <li>• GET /api/dec-membership — DEC status</li>
+                <li>• GET/POST/DELETE /api/dec-requests</li>
+                <li>• GET /api/keeper — Automated transitions</li>
+                <li>• POST /api/upload-thumbnail — IPFS upload</li>
+              </ul>
+            </div>
+            <div className="p-3 rounded-lg border border-border bg-secondary/20">
+              <h3 className="font-semibold text-foreground mb-2">Contract Functions</h3>
+              <ul className="space-y-1 text-muted-foreground font-mono text-xs">
+                <li>• pM() — Propose community market</li>
+                <li>• cTM() — Create team market</li>
+                <li>• bO() — Buy outcome shares</li>
+                <li>• vOP() / vOR() — DEC voting</li>
+                <li>• cW() / cCF() / cCS() / cDR() — Claims</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Related Documents */}
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-6">
+          <p className="text-foreground font-semibold mb-2">Related Documents</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm mt-3">
+            <Link href="/whitepaper" className="p-3 rounded-lg border border-border bg-secondary/20 text-muted-foreground hover:text-primary transition-colors">
+              <span className="font-semibold text-foreground">Whitepaper</span>
+              <p className="text-xs mt-1">Comprehensive technical specification</p>
+            </Link>
+            <Link href="/governance-forum" className="p-3 rounded-lg border border-border bg-secondary/20 text-muted-foreground hover:text-primary transition-colors">
+              <span className="font-semibold text-foreground">Governance</span>
+              <p className="text-xs mt-1">DEC Committee roles and operations</p>
+            </Link>
+            <Link href="/terms-of-service" className="p-3 rounded-lg border border-border bg-secondary/20 text-muted-foreground hover:text-primary transition-colors">
+              <span className="font-semibold text-foreground">Terms of Service</span>
+              <p className="text-xs mt-1">Legal terms and conditions</p>
+            </Link>
+          </div>
         </div>
       </div>
     </main>

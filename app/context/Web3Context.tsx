@@ -324,23 +324,52 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     args: any[],
     overrides: { value?: bigint } = {}
   ): Promise<ethers.TransactionReceipt> => {
+    if (typeof window === 'undefined' || !(window as any).ethereum) {
+      throw new Error('Wallet not identified')
+    }
+
     const { contract, signer } = await getSignerContract()
     const from = await signer.getAddress()
 
-    const populated = await (contract[method] as any).populateTransaction(...args, overrides)
-    const txHash: string = await (signer.provider as any).send('eth_sendTransaction', [{
-      ...populated,
-      from
-    }])
+    const populated = await (contract[method] as any).populateTransaction(
+      ...args,
+      overrides
+    )
+
+    // JSON-RPC cannot serialize native JavaScript bigint values. Convert all
+    // bigint transaction fields (such as value, gasLimit, and nonce) into
+    // Ethereum hexadecimal quantities before sending them to the wallet.
+    const transactionPayload: Record<string, unknown> = { from }
+
+    for (const [key, value] of Object.entries(populated)) {
+      if (value === undefined || value === null) continue
+
+      transactionPayload[key] =
+        typeof value === 'bigint'
+          ? ethers.toQuantity(value)
+          : value
+    }
+
+    const txHash = await (window as any).ethereum.request({
+      method: 'eth_sendTransaction',
+      params: [transactionPayload]
+    }) as string
 
     let receipt: ethers.TransactionReceipt | null = null
-    for (let i = 0; i < 60; i++) {
-      receipt = await signer.provider!.getTransactionReceipt(txHash)
+
+    for (let attempt = 0; attempt < 60; attempt++) {
+      receipt = await signer.provider.getTransactionReceipt(txHash)
       if (receipt) break
-      await new Promise((r) => setTimeout(r, 2000))
+      await new Promise((resolve) => setTimeout(resolve, 2000))
     }
-    if (!receipt) throw new Error('Transaction not confirmed within timeout')
-    if (receipt.status === 0) throw new Error('Transaction reverted on-chain')
+
+    if (!receipt) {
+      throw new Error('Transaction was submitted but was not confirmed within 120 seconds')
+    }
+
+    if (receipt.status === 0) {
+      throw new Error('Transaction reverted on-chain')
+    }
 
     return receipt
   }

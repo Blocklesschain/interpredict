@@ -76,6 +76,37 @@ const STATE_NAMES = [
   'Admin Ver', 'Confirmed', 'Finalized', 'Resolved'
 ]
 
+function MarketThumbnail({
+  src,
+  question,
+}: {
+  src?: string
+  question: string
+}) {
+  const [imageFailed, setImageFailed] = useState(false)
+
+  useEffect(() => {
+    setImageFailed(false)
+  }, [src])
+
+  if (!src || imageFailed) {
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <Logo className="size-8 rounded-lg" />
+      </div>
+    )
+  }
+
+  return (
+    <img
+      src={src}
+      alt={`${question} thumbnail`}
+      className="w-full h-full object-cover"
+      onError={() => setImageFailed(true)}
+    />
+  )
+}
+
 export default function DAppPortal() {
   const { walletAddress, connectWallet, disconnectWallet, txStatus, setTxStatus, historyLogs,
     getWalletBalance,
@@ -142,6 +173,12 @@ export default function DAppPortal() {
           const data = await marketsRes.json()
           baseMarkets = (data.allMarkets || []).map((m: any) => ({
             ...m,
+            thumbnailUri:
+              m.thumbnailUri ||
+              m.thumbnailURI ||
+              m.thumbnailUrl ||
+              m.thumbnailURL ||
+              '',
             outcomeLabels: m.outcomeLabels || [],
             outcomePools: m.outcomePools || [],
             outcomePrices: m.outcomePrices || []
@@ -539,7 +576,14 @@ export default function DAppPortal() {
   }
 
   const formatEther = (val: string) => {
-    try { return ethers.formatEther(val || '0') } catch { return '0' }
+    try {
+      return Number(ethers.formatEther(val || "0")).toLocaleString(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1,
+      })
+    } catch {
+      return "0"
+    }
   }
 
   return (
@@ -610,8 +654,11 @@ export default function DAppPortal() {
                     ) : (
                       activeMarkets.map((market) => (
                         <div key={market.id} className="bg-secondary/40 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl relative">
-                          <div className="absolute top-4 right-4 size-12 rounded-xl bg-purple-950/40 border border-purple-900/30 overflow-hidden flex items-center justify-center">
-                            <Logo className="size-8 rounded-lg" />
+                          <div className="absolute top-4 right-4 size-12 rounded-xl bg-purple-950/40 border border-purple-900/30 overflow-hidden">
+                            <MarketThumbnail
+                              src={market.thumbnailUri}
+                              question={market.question}
+                            />
                           </div>
                           <div className="flex justify-between items-center mb-3 pr-14">
                             <span className="px-2 py-0.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded text-[10px] font-bold tracking-wider uppercase">

@@ -690,8 +690,8 @@ export default function DAppPortal() {
 
           {walletAddress ? (
             <div className="min-w-0 flex shrink items-center bg-purple-950/30 border border-purple-900/40 rounded-full px-1.5 sm:pr-1.5 sm:pl-4 py-1.5 gap-1.5 sm:gap-3">
-              <span className="hidden min-[390px]:inline font-mono text-[10px] text-emerald-400 whitespace-nowrap">
-                {formatEther(walletBalance)} tITL
+              <span className="inline font-mono text-[10px] sm:text-xs text-emerald-400 whitespace-nowrap">
+                {Number(formatEther(walletBalance)).toFixed(1)} tITL
               </span>
               <span className="hidden sm:block w-px h-4 bg-purple-900/40" />
               <span className="hidden sm:inline font-mono text-xs text-purple-300 whitespace-nowrap">

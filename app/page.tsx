@@ -3,53 +3,112 @@
 import { useState, useEffect } from 'react'
 import { useWeb3 } from './context/Web3Context'
 import { Navbar } from '@/components/navbar'
-import { ArrowRight, Layers, ShieldCheck, Coins, Gavel, CheckCircle2, TrendingUp } from 'lucide-react'
+import { ArrowRight, Layers, ShieldCheck, Coins, Gavel, CheckCircle2, TrendingUp, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { ethers } from 'ethers'
 
 interface MarketType {
   id: number
-  description: string
-  yesVotes: string
-  noVotes: string
-  resolved: boolean
+  question: string
+  category: number
+  customCategory: string
+  marketEndTime: number
+  state: number
+  outcomeLabels: string[]
+  outcomePools: string[]
 }
 
 export default function HomePage() {
   const { t } = useWeb3()
-  const [liveMarkets, setLiveMarkets] = useState<MarketType[]>([])
+  const [activeMarkets, setActiveMarkets] = useState<MarketType[]>([])
+  const [inactiveMarkets, setInactiveMarkets] = useState<MarketType[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [marketError, setMarketError] = useState<string | null>(null)
 
-  // 🔧 FIXED: previously this required window.ethereum to even attempt a read
-  // (so it silently did nothing for visitors without a wallet), called a
-  // function name (`marketCount`) that doesn't exist on the contract
-  // (the real function is `totalMarkets`), and pointed at a hardcoded fallback
-  // address that wasn't the real deployed contract at all. It now just calls
-  // our own public API route, which works for every visitor regardless of
-  // wallet, and is backed by the real contract address + a real function name.
-  useEffect(() => {
-    async function syncExploreMarkets() {
-      try {
-        setIsLoading(true)
-        const res = await fetch('/api/markets')
-        if (!res.ok) throw new Error('Failed to load markets')
-        const { activeMarkets } = await res.json()
+  const CATEGORY_NAMES = [
+    'Sports',
+    'Politics',
+    'Crypto',
+    'Blockchain',
+    'Technology',
+    'AI',
+    'Economics',
+    'Finance',
+    'Business',
+    'Science',
+    'Climate',
+    'Entertainment',
+    'Culture',
+    'Health',
+    'Real Estate',
+    'Gaming',
+    'Web3',
+    'Other',
+  ]
 
-        const fetched: MarketType[] = activeMarkets.map((m: any) => ({
-          id: m.id,
-          description: m.question,
-          yesVotes: ethers.formatEther(m.totalYesPool),
-          noVotes: ethers.formatEther(m.totalNoPool),
-          resolved: false
-        }))
-        setLiveMarkets(fetched)
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setIsLoading(false)
-      }
+  const getCategoryName = (market: MarketType) =>
+    market.customCategory ||
+    CATEGORY_NAMES[market.category] ||
+    'Other'
+
+  const formatPool = (value?: string) => {
+    try {
+      return Number(ethers.formatEther(value || '0')).toFixed(1)
+    } catch {
+      return '0.0'
     }
-    syncExploreMarkets()
+  }
+
+  const loadPublicMarkets = async () => {
+    try {
+      setIsLoading(true)
+      setMarketError(null)
+
+      const res = await fetch('/api/markets', {
+        cache: 'no-store',
+      })
+
+      if (!res.ok) {
+        throw new Error('Failed to load public markets')
+      }
+
+      const data = await res.json()
+      const allMarkets: MarketType[] = Array.isArray(data.allMarkets)
+        ? data.allMarkets
+        : []
+
+      const now = Math.floor(Date.now() / 1000)
+
+      setActiveMarkets(
+        allMarkets.filter(
+          market =>
+            Number(market.state) === 5 &&
+            Number(market.marketEndTime) > now
+        )
+      )
+
+      setInactiveMarkets(
+        allMarkets.filter(
+          market =>
+            (Number(market.state) === 5 &&
+              Number(market.marketEndTime) <= now) ||
+            Number(market.state) >= 6
+        )
+      )
+    } catch (err) {
+      console.error(err)
+      setMarketError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to load public markets'
+      )
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadPublicMarkets()
   }, [])
 
   return (
@@ -93,61 +152,156 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* --- EXPLORE LIVE MARKETS SECTION --- */}
+      {/* --- EXPLORE MARKETS SECTION --- */}
       <section id="markets" className="py-20 border-t border-border bg-secondary/20 px-4">
         <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-12 gap-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-10 gap-4">
             <div>
-              <h2 className="text-2xl sm:text-4xl font-heading font-bold tracking-tight">{t('exploreMarketsTitle')}</h2>
-              <p className="text-muted-foreground text-sm mt-1">{t('exploreMarketsSub')}</p>
+              <h2 className="text-2xl sm:text-4xl font-heading font-bold tracking-tight">
+                {t('exploreMarketsTitle')}
+              </h2>
+              <p className="text-muted-foreground text-sm mt-1">
+                {t('exploreMarketsSub')}
+              </p>
             </div>
-            <Link href="/app" className="text-sm font-bold text-primary hover:underline flex items-center gap-1.5 transition-all">
-              <span>{t('tradeRealtimeBtn')}</span>
-              <ArrowRight className="size-3.5" />
-            </Link>
-            <button
-              onClick={() => { window.location.href = '/'; localStorage.removeItem('interpredict_connected'); }}
-              className="text-sm font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1.5 transition-all"
-              title="Hard refresh"
-            >
-            </button>
-          </div>
 
-          {isLoading ? (
-            <p className="text-sm font-mono text-primary animate-pulse">Syncing smart contract registries...</p>
-          ) : liveMarkets.length === 0 ? (
-            <div className="border border-dashed border-border rounded-2xl p-8 sm:p-12 text-center max-w-xl mx-auto bg-background/50 backdrop-blur-sm shadow-sm">
-              <TrendingUp className="size-8 mx-auto text-muted-foreground mb-3" />
+            <div className="flex flex-wrap items-center gap-4">
+              <button
+                onClick={loadPublicMarkets}
+                disabled={isLoading}
+                className="text-sm font-bold text-primary hover:underline flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <RefreshCw className={`size-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                <span>{isLoading ? 'Refreshing...' : 'Refresh Markets'}</span>
+              </button>
 
-              <p className="text-sm font-semibold text-foreground">
-                {t('noActiveMarkets')}
-              </p>
-
-              <p className="text-xs text-muted-foreground mt-1 mb-6 max-w-xs mx-auto">
-                {t('noActivePoolsDesc')}
-              </p>
-
-              <Link href="/app" className="px-5 py-2.5 bg-primary text-primary-foreground text-xs font-bold rounded-full inline-block transition-colors hover:bg-primary/90">
-                {t('createFirstMarketBtn')}
+              <Link
+                href="/app"
+                className="text-sm font-bold text-primary hover:underline flex items-center gap-1.5 transition-all"
+              >
+                <span>{t('tradeRealtimeBtn')}</span>
+                <ArrowRight className="size-3.5" />
               </Link>
             </div>
+          </div>
+
+          {marketError && (
+            <div className="mb-8 rounded-xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-300">
+              {marketError}
+            </div>
+          )}
+
+          {isLoading &&
+            activeMarkets.length === 0 &&
+            inactiveMarkets.length === 0 ? (
+            <p className="text-sm font-mono text-primary animate-pulse">
+              Syncing smart contract registries...
+            </p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {liveMarkets.map((market) => (
-                <div key={market.id} className="bg-background border border-border rounded-2xl p-6 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <div className="flex justify-between mb-4 items-center">
-                      <span className="text-[10px] font-mono bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded font-bold uppercase tracking-wider">Index #{market.id}</span>
-                      <span className="text-[11px] text-emerald-400 font-medium font-mono">● Active</span>
-                    </div>
-                    <p className="text-sm font-bold text-foreground leading-snug mb-4">{market.description}</p>
-                  </div>
-                  <div className="border-t border-border pt-4 mt-2 flex justify-between text-[11px] font-mono text-muted-foreground">
-                    <span>YES: {market.yesVotes} ITL</span>
-                    <span>NO: {market.noVotes} ITL</span>
-                  </div>
+            <div className="space-y-12">
+              <div>
+                <div className="mb-5 flex items-center justify-between">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-400">
+                    Active Markets
+                  </h3>
+                  <span className="text-xs font-mono text-muted-foreground">
+                    {activeMarkets.length} available
+                  </span>
                 </div>
-              ))}
+
+                {activeMarkets.length === 0 ? (
+                  <div className="border border-dashed border-border rounded-2xl p-8 sm:p-12 text-center max-w-xl mx-auto bg-background/50 backdrop-blur-sm shadow-sm">
+                    <TrendingUp className="size-8 mx-auto text-muted-foreground mb-3" />
+                    <p className="text-sm font-semibold text-foreground">
+                      {t('noActiveMarkets')}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1 mb-6 max-w-xs mx-auto">
+                      {t('noActivePoolsDesc')}
+                    </p>
+                    <Link
+                      href="/app"
+                      className="px-5 py-2.5 bg-primary text-primary-foreground text-xs font-bold rounded-full inline-block transition-colors hover:bg-primary/90"
+                    >
+                      {t('createFirstMarketBtn')}
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {activeMarkets.map(market => (
+                      <Link
+                        href="/app"
+                        key={market.id}
+                        className="bg-background border border-border rounded-2xl p-6 shadow-sm hover:border-primary/40 transition-colors"
+                      >
+                        <div className="flex justify-between mb-4 items-center gap-3">
+                          <span className="text-[10px] font-mono bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded font-bold uppercase tracking-wider">
+                            {getCategoryName(market)}
+                          </span>
+                          <span className="text-[11px] text-emerald-400 font-medium font-mono">
+                            ● Active
+                          </span>
+                        </div>
+
+                        <p className="text-sm font-bold text-foreground leading-snug mb-5">
+                          {market.question}
+                        </p>
+
+                        <div className="border-t border-border pt-4 grid grid-cols-2 gap-2 text-[11px] font-mono text-muted-foreground">
+                          {(market.outcomeLabels || [])
+                            .slice(0, 4)
+                            .map((label, index) => (
+                              <span key={`${market.id}-${index}`}>
+                                {label}: {formatPool(market.outcomePools?.[index])} ITL
+                              </span>
+                            ))}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-5 flex items-center justify-between">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
+                    Inactive Markets
+                  </h3>
+                  <span className="text-xs font-mono text-muted-foreground">
+                    {inactiveMarkets.length} available
+                  </span>
+                </div>
+
+                {inactiveMarkets.length === 0 ? (
+                  <div className="border border-dashed border-border rounded-2xl p-8 text-center bg-background/40">
+                    <p className="text-sm text-muted-foreground">
+                      No inactive or completed markets yet.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {inactiveMarkets.map(market => (
+                      <Link
+                        href="/app"
+                        key={market.id}
+                        className="bg-background/70 border border-border rounded-2xl p-6 opacity-80 hover:opacity-100 transition-opacity"
+                      >
+                        <div className="flex justify-between mb-4 items-center gap-3">
+                          <span className="text-[10px] font-mono bg-secondary border border-border px-2 py-0.5 rounded font-bold uppercase">
+                            {getCategoryName(market)}
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            Inactive
+                          </span>
+                        </div>
+
+                        <p className="text-sm font-bold text-foreground leading-snug">
+                          {market.question}
+                        </p>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

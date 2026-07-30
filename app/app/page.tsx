@@ -218,11 +218,11 @@ export default function DAppPortal() {
       let baseMarkets: SmartMarket[] = []
 
       try {
-        const PAGE_SIZE = 5
-        const MAX_PAGE_ATTEMPTS = 3
-        const PAGE_REQUEST_TIMEOUT_MS = 28_000
-        const PAGE_GAP_MS = 800
-        const FINAL_RETRY_GAP_MS = 1_500
+        const PAGE_SIZE = 3
+        const MAX_PAGE_ATTEMPTS = 4
+        const PAGE_REQUEST_TIMEOUT_MS = 30_000
+        const PAGE_GAP_MS = 500
+        const FINAL_RETRY_GAP_MS = 1_000
 
         const byId = new Map<number, SmartMarket>()
 
@@ -1059,7 +1059,7 @@ export default function DAppPortal() {
                           {/* Market depth */}
                           {market.outcomeLabels?.length > 0 && (
                             <div className="mb-3 space-y-2">
-                              <div className="grid grid-cols-2 gap-2">
+                              <div className={`grid gap-2 ${market.outcomeLabels.length === 3 ? 'grid-cols-3' : market.outcomeLabels.length === 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'}`}>
                                 {market.outcomeLabels.map((label, oi) => (
                                   <div key={oi} className="bg-black/20 border border-purple-900/30 rounded-lg p-2 text-center">
                                     <p className="text-[10px] font-mono text-slate-400">{label}</p>
@@ -1080,7 +1080,7 @@ export default function DAppPortal() {
                             <label className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block mb-1">{t('wagerTitle')}</label>
                             <input type="number" value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} className="w-full bg-black/20 border border-purple-900/40 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none" />
                           </div>
-                          <div className={`grid gap-3 ${market.outcomeLabels?.length === 2 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-' + Math.min(market.outcomeLabels?.length || 2, 4)}`}>
+                          <div className={`grid gap-3 ${market.outcomeLabels?.length === 3 ? 'grid-cols-3' : market.outcomeLabels?.length === 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'}`}>
                             {market.outcomeLabels?.map((label, oi) => (
                               <button key={oi} onClick={() => executeTradeAction(market.id, oi)}
                                 className="py-2.5 bg-gradient-to-r from-purple-700 to-indigo-600 text-white font-bold text-xs rounded-lg uppercase">

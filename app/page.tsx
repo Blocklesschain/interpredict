@@ -6,6 +6,7 @@ import { Navbar } from '@/components/navbar'
 import { ArrowRight, Layers, ShieldCheck, Coins, Gavel, CheckCircle2, TrendingUp, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { ethers } from 'ethers'
+import { Logo } from '@/components/logo'
 
 interface MarketType {
   id: number
@@ -16,6 +17,35 @@ interface MarketType {
   state: number
   outcomeLabels: string[]
   outcomePools: string[]
+  thumbnailUri?: string
+  totalVolume?: string
+  outcomePrices?: number[]
+  origin?: number
+}
+
+function MarketThumbnail({ src, question }: { src?: string; question: string }) {
+  const [imageFailed, setImageFailed] = useState(false)
+
+  useEffect(() => {
+    setImageFailed(false)
+  }, [src])
+
+  if (!src || imageFailed) {
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <Logo className="size-7 rounded-lg" />
+      </div>
+    )
+  }
+
+  return (
+    <img
+      src={src}
+      alt={`${question} thumbnail`}
+      className="w-full h-full object-cover"
+      onError={() => setImageFailed(true)}
+    />
+  )
 }
 
 export default function HomePage() {
@@ -24,6 +54,12 @@ export default function HomePage() {
   const [inactiveMarkets, setInactiveMarkets] = useState<MarketType[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [marketError, setMarketError] = useState<string | null>(null)
+  const [nowSec, setNowSec] = useState<number>(() => Math.floor(Date.now() / 1000))
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   const CATEGORY_NAMES = [
     'Sports',
@@ -57,6 +93,39 @@ export default function HomePage() {
     } catch {
       return '0.0'
     }
+  }
+
+  const formatVolume = (market: MarketType) => {
+    try {
+      const contractTotalVolume = BigInt(market.totalVolume || '0')
+      if (contractTotalVolume > BigInt(0)) {
+        return Number(ethers.formatEther(contractTotalVolume)).toFixed(1)
+      }
+      const pools = Array.isArray(market.outcomePools) ? market.outcomePools : []
+      const totalPool = pools.reduce((sum, value) => sum + BigInt(value || '0'), BigInt(0))
+      return Number(ethers.formatEther(totalPool)).toFixed(1)
+    } catch {
+      return '0.0'
+    }
+  }
+
+  const formatExpiryDate = (endTimeSec: number): string =>
+    new Date(endTimeSec * 1000).toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    })
+
+  const formatCountdown = (endTimeSec: number): string => {
+    let remaining = endTimeSec - nowSec
+    if (remaining <= 0) return 'Expired'
+    const days = Math.floor(remaining / 86400); remaining %= 86400
+    const hours = Math.floor(remaining / 3600); remaining %= 3600
+    const minutes = Math.floor(remaining / 60)
+    const seconds = remaining % 60
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return days > 0
+      ? `${days}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`
+      : `${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`
   }
 
   const loadPublicMarkets = async () => {
@@ -249,13 +318,29 @@ export default function HomePage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {activeMarkets.map(market => (
+                    {activeMarkets.map(market => {
+                      const outcomeCount = (market.outcomeLabels || []).length
+                      const outcomeGridClass =
+                        outcomeCount === 3
+                          ? 'grid-cols-3'
+                          : outcomeCount === 4
+                            ? 'grid-cols-2'
+                            : 'grid-cols-2'
+                      return (
                       <Link
                         href="/app"
                         key={market.id}
-                        className="bg-background border border-border rounded-2xl p-6 shadow-sm hover:border-primary/40 transition-colors"
+                        className="bg-background border border-border rounded-2xl p-5 shadow-sm hover:border-primary/40 transition-colors relative"
                       >
-                        <div className="flex justify-between mb-4 items-center gap-3">
+                        {/* Thumbnail */}
+                        <div className="absolute top-5 right-5 size-12 rounded-xl bg-secondary/60 border border-border overflow-hidden">
+                          <MarketThumbnail
+                            src={market.thumbnailUri}
+                            question={market.question}
+                          />
+                        </div>
+
+                        <div className="flex justify-between mb-3 items-center gap-3 pr-14">
                           <span className="text-[10px] font-mono bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded font-bold uppercase tracking-wider">
                             {getCategoryName(market)}
                           </span>
@@ -264,21 +349,37 @@ export default function HomePage() {
                           </span>
                         </div>
 
-                        <p className="text-sm font-bold text-foreground leading-snug mb-5">
+                        <p className="text-sm font-bold text-foreground leading-snug mb-3 pr-14">
                           {market.question}
                         </p>
 
-                        <div className="border-t border-border pt-4 grid grid-cols-2 gap-2 text-[11px] font-mono text-muted-foreground">
-                          {(market.outcomeLabels || [])
-                            .slice(0, 4)
-                            .map((label, index) => (
-                              <span key={`${market.id}-${index}`}>
-                                {label}: {formatPool(market.outcomePools?.[index])} ITL
-                              </span>
-                            ))}
+                        {/* Timer & Expiry */}
+                        <div className="mb-3 flex flex-col gap-0.5 text-[10px] font-mono">
+                          <span className="text-muted-foreground">Expires: <span className="text-foreground/80">{formatExpiryDate(market.marketEndTime)}</span></span>
+                          <span className="text-primary">⏳ {formatCountdown(market.marketEndTime)}</span>
+                        </div>
+
+                        {/* Outcome pools */}
+                        <div className="border-t border-border pt-3">
+                          <div className={`grid gap-2 ${outcomeGridClass} text-[11px] font-mono text-muted-foreground`}>
+                            {(market.outcomeLabels || [])
+                              .slice(0, 4)
+                              .map((label, index) => (
+                                <span key={`${market.id}-${index}`}>
+                                  {label}: {formatPool(market.outcomePools?.[index])} ITL
+                                </span>
+                              ))}
+                          </div>
+                        </div>
+
+                        {/* Volume */}
+                        <div className="mt-3 pt-3 border-t border-border flex items-center justify-between text-[11px] font-mono">
+                          <span className="text-muted-foreground font-bold uppercase tracking-wider">Volume</span>
+                          <span className="text-primary font-bold">{formatVolume(market)} ITL</span>
                         </div>
                       </Link>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>

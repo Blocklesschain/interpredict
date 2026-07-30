@@ -5,19 +5,24 @@ import { getValidServiceToken } from '@/lib/interlinkServiceAuth'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+// Testnet-safe mode: pace one market batch at a time and stop before Netlify's 30s limit.
+
 const CONTRACT_ADDRESS =
   process.env.NEXT_PUBLIC_CONTRACT_ADDRESS?.trim() ||
   '0x3E5936F13e1194380A66c3c1d75D4D7342299CfF'
 
 const RPC_URL = 'https://evm-rpc.test-net.interlinklabs.ai/v1/rpc'
 
-const MAX_RPC_ATTEMPTS = 3
-const INITIAL_RETRY_DELAY_MS = 500
+const MAX_RPC_ATTEMPTS = 2
+const INITIAL_RETRY_DELAY_MS = 1_200
 const RPC_BATCH_SIZE = 8
-const RPC_BATCH_RETRY_ROUNDS = 4
-const RPC_BATCH_GAP_MS = 120
+const RPC_BATCH_RETRY_ROUNDS = 1
+const RPC_BATCH_GAP_MS = 1_250
 const PUBLIC_CACHE_TTL_MS = 30_000
-const WALLET_CACHE_TTL_MS = 12_000
+const WALLET_CACHE_TTL_MS = 20_000
+const MAX_ROUTE_TIME_MS = 24_000
+const ENABLE_WALLET_ENRICHMENT =
+  process.env.INTERPREDICT_ENABLE_WALLET_ENRICHMENT === 'true'
 const ENABLE_EVENT_HISTORY =
   process.env.INTERPREDICT_ENABLE_EVENT_HISTORY === 'true'
 const ENABLE_RESOLUTION_EVENT_SCAN =
@@ -203,7 +208,8 @@ async function fetchRpcJson(
           Authorization: `Bearer ${accessToken}`
         },
         body: JSON.stringify(body),
-        cache: 'no-store'
+        cache: 'no-store',
+        signal: AbortSignal.timeout(4_000)
       })
 
       const responseText = await response.text()
@@ -269,7 +275,8 @@ async function rpcCall(
 async function rpcBatchRead(
   accessToken: string,
   calls: BatchCall[],
-  startId: number
+  startId: number,
+  routeStartedAt = Date.now()
 ): Promise<Map<string, ethers.Result>> {
   const output = new Map<string, ethers.Result>()
   let pending = [...calls]
@@ -287,6 +294,12 @@ async function rpcBatchRead(
     )
 
     for (let offset = 0; offset < pending.length; offset += chunkSize) {
+      if (Date.now() - routeStartedAt >= MAX_ROUTE_TIME_MS - 2_000) {
+        console.warn('[Markets API] Time budget reached; returning the markets loaded so far.')
+        nextPending.push(...pending.slice(offset))
+        break
+      }
+
       const chunk = pending.slice(offset, offset + chunkSize)
       const idByKey = new Map<string, number>()
       const callById = new Map<number, BatchCall>()
@@ -397,32 +410,8 @@ async function rpcBatchRead(
 
   if (pending.length > 0) {
     console.warn(
-      `[Markets API] ${pending.length} calls still unavailable after batched retries. Falling back to individual RPC calls.`
+      `[Markets API] ${pending.length} calls remain unavailable. Individual fallbacks are disabled to keep the route below Netlify's timeout.`
     )
-
-    for (const call of pending) {
-      if (output.has(call.key)) continue
-
-      try {
-        const raw = await rpcCall(
-          accessToken,
-          iface.encodeFunctionData(call.functionName, call.args),
-          call.callName,
-          startId + requestSequence++
-        )
-        output.set(
-          call.key,
-          iface.decodeFunctionResult(call.functionName, raw)
-        )
-      } catch (error) {
-        console.error(
-          `[Markets API] Final individual fallback failed for ${call.callName}:`,
-          getErrorMessage(error)
-        )
-      }
-
-      await sleep(RPC_BATCH_GAP_MS)
-    }
   }
 
   return output
@@ -658,7 +647,8 @@ function buildMarket(
 async function loadAllMarkets(
   accessToken: string,
   totalCount: number,
-  resolutionDeadlines: Map<number, number>
+  resolutionDeadlines: Map<number, number>,
+  routeStartedAt: number
 ): Promise<{ markets: LoadedMarket[]; skipped: SkippedMarket[] }> {
   const calls: BatchCall[] = []
   const functions = ['mb', 'mv', 'mr', 'mf', 'ms', 'gL', 'gP', 'gPr2']
@@ -674,7 +664,7 @@ async function loadAllMarkets(
     }
   }
 
-  const values = await rpcBatchRead(accessToken, calls, 1000)
+  const values = await rpcBatchRead(accessToken, calls, 1000, routeStartedAt)
   const markets: LoadedMarket[] = []
   const skipped: SkippedMarket[] = []
 
@@ -694,7 +684,8 @@ async function loadAllMarkets(
 async function enrichWalletData(
   accessToken: string,
   markets: LoadedMarket[],
-  walletAddress: string
+  walletAddress: string,
+  routeStartedAt: number
 ): Promise<Map<number, WalletPositionHistory>> {
   const walletHistory = await loadWalletPositionHistory(accessToken, walletAddress)
   const calls: BatchCall[] = []
@@ -716,7 +707,7 @@ async function enrichWalletData(
     }
   }
 
-  const values = await rpcBatchRead(accessToken, calls, 500000)
+  const values = await rpcBatchRead(accessToken, calls, 500000, routeStartedAt)
 
   for (const market of markets) {
     const proposalVote = Number(values.get(`${market.id}:pv`)?.[0] || 0)
@@ -860,7 +851,9 @@ function buildPayload(
         batchGapMs: RPC_BATCH_GAP_MS,
         loadingMode: 'adaptive-json-rpc-batched',
         eventHistoryEnabled: ENABLE_EVENT_HISTORY,
-        resolutionEventScanEnabled: ENABLE_RESOLUTION_EVENT_SCAN
+        resolutionEventScanEnabled: ENABLE_RESOLUTION_EVENT_SCAN,
+        walletEnrichmentEnabled: ENABLE_WALLET_ENRICHMENT,
+        maxRouteTimeMs: MAX_ROUTE_TIME_MS
       }
     },
     fetchedAt: new Date().toISOString()
@@ -878,12 +871,14 @@ async function generatePayload(walletAddress: string): Promise<Record<string, un
   )
   const totalCount = bigintToNumber(iface.decodeFunctionResult('tm', totalRaw)[0])
   const deadlines = await loadResolutionVotingDeadlines(accessToken)
-  const { markets, skipped } = await loadAllMarkets(accessToken, totalCount, deadlines)
+  const { markets, skipped } = await loadAllMarkets(accessToken, totalCount, deadlines, startedAt)
 
   let walletPositions: Array<Record<string, unknown>> = []
-  if (walletAddress) {
-    const walletHistory = await enrichWalletData(accessToken, markets, walletAddress)
+  if (walletAddress && ENABLE_WALLET_ENRICHMENT && Date.now() - startedAt < MAX_ROUTE_TIME_MS - 5_000) {
+    const walletHistory = await enrichWalletData(accessToken, markets, walletAddress, startedAt)
     walletPositions = buildWalletPositions(walletHistory, markets)
+  } else if (walletAddress && !ENABLE_WALLET_ENRICHMENT) {
+    console.info('[Markets API] Wallet enrichment is disabled on testnet to protect the public market endpoint from RPC rate limits.')
   }
 
   console.info(`[Markets API] Loaded ${markets.length}/${totalCount} markets in ${Date.now() - startedAt}ms`)
@@ -911,7 +906,7 @@ export async function GET(request: Request) {
       headers: {
         'Cache-Control': walletAddress
           ? 'private, no-store'
-          : 'public, s-maxage=30, stale-while-revalidate=120'
+          : 'public, max-age=0, s-maxage=60, stale-while-revalidate=600'
       }
     })
   }
@@ -950,7 +945,7 @@ export async function GET(request: Request) {
       headers: {
         'Cache-Control': walletAddress
           ? 'private, no-store'
-          : 'public, s-maxage=30, stale-while-revalidate=120'
+          : 'public, max-age=0, s-maxage=60, stale-while-revalidate=600'
       }
     })
   } catch (error) {

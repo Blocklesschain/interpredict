@@ -13,7 +13,9 @@ const RPC_URL = 'https://evm-rpc.test-net.interlinklabs.ai/v1/rpc'
 
 const MAX_RPC_ATTEMPTS = 3
 const INITIAL_RETRY_DELAY_MS = 500
-const RPC_BATCH_SIZE = 24
+const RPC_BATCH_SIZE = 8
+const RPC_BATCH_RETRY_ROUNDS = 4
+const RPC_BATCH_GAP_MS = 120
 const PUBLIC_CACHE_TTL_MS = 30_000
 const WALLET_CACHE_TTL_MS = 12_000
 const ENABLE_EVENT_HISTORY =
@@ -270,79 +272,157 @@ async function rpcBatchRead(
   startId: number
 ): Promise<Map<string, ethers.Result>> {
   const output = new Map<string, ethers.Result>()
+  let pending = [...calls]
+  let requestSequence = 0
 
-  for (let offset = 0; offset < calls.length; offset += RPC_BATCH_SIZE) {
-    const chunk = calls.slice(offset, offset + RPC_BATCH_SIZE)
-    const requests = chunk.map((call, index) => ({
-      jsonrpc: '2.0',
-      id: startId + offset + index,
-      method: 'eth_call',
-      params: [{
-        to: CONTRACT_ADDRESS,
-        data: iface.encodeFunctionData(call.functionName, call.args)
-      }, 'latest']
-    }))
+  for (
+    let round = 1;
+    round <= RPC_BATCH_RETRY_ROUNDS && pending.length > 0;
+    round++
+  ) {
+    const nextPending: BatchCall[] = []
+    const chunkSize = Math.max(
+      1,
+      Math.floor(RPC_BATCH_SIZE / Math.pow(2, round - 1))
+    )
 
-    const startedAt = Date.now()
-    let parsed: unknown
+    for (let offset = 0; offset < pending.length; offset += chunkSize) {
+      const chunk = pending.slice(offset, offset + chunkSize)
+      const idByKey = new Map<string, number>()
+      const callById = new Map<number, BatchCall>()
 
-    try {
-      parsed = await fetchRpcJson(
-        accessToken,
-        requests,
-        `RPC batch ${Math.floor(offset / RPC_BATCH_SIZE) + 1}`
-      )
-    } catch (error) {
-      console.warn('[Markets API] JSON-RPC batching failed; falling back to individual calls:', getErrorMessage(error))
-      for (let index = 0; index < chunk.length; index++) {
-        const call = chunk[index]
+      const requests = chunk.map(call => {
+        const id = startId + requestSequence++
+        idByKey.set(call.key, id)
+        callById.set(id, call)
+
+        return {
+          jsonrpc: '2.0',
+          id,
+          method: 'eth_call',
+          params: [{
+            to: CONTRACT_ADDRESS,
+            data: iface.encodeFunctionData(call.functionName, call.args)
+          }, 'latest']
+        }
+      })
+
+      const startedAt = Date.now()
+      let parsed: unknown
+
+      try {
+        parsed = await fetchRpcJson(
+          accessToken,
+          requests,
+          `RPC batch round ${round}`
+        )
+      } catch (error) {
+        console.warn(
+          `[Markets API] RPC batch round ${round} failed; scheduling ${chunk.length} calls for retry:`,
+          getErrorMessage(error)
+        )
+        nextPending.push(...chunk)
+        continue
+      }
+
+      if (!Array.isArray(parsed)) {
+        console.warn(
+          `[Markets API] RPC batch round ${round} returned a non-array response; scheduling ${chunk.length} calls for retry.`
+        )
+        nextPending.push(...chunk)
+        continue
+      }
+
+      const responsesById = new Map<number, RpcResponse>()
+      for (const item of parsed as RpcResponse[]) {
+        responsesById.set(Number(item.id), item)
+      }
+
+      for (const call of chunk) {
+        const id = idByKey.get(call.key)
+        const response = id === undefined ? undefined : responsesById.get(id)
+
+        if (!response) {
+          console.warn(`[Markets API] Missing response for ${call.callName}; retrying.`)
+          nextPending.push(call)
+          continue
+        }
+
+        if (response.error) {
+          const message = extractRpcErrorMessage(response.error)
+          console.warn(`[Markets API] ${call.callName} failed in batch: ${message}`)
+          nextPending.push(call)
+          continue
+        }
+
+        if (!response.result || response.result === '0x') {
+          console.warn(`[Markets API] ${call.callName} returned empty data; retrying.`)
+          nextPending.push(call)
+          continue
+        }
+
         try {
-          const raw = await rpcCall(
-            accessToken,
-            iface.encodeFunctionData(call.functionName, call.args),
-            call.callName,
-            startId + offset + index
+          output.set(
+            call.key,
+            iface.decodeFunctionResult(call.functionName, response.result)
           )
-          output.set(call.key, iface.decodeFunctionResult(call.functionName, raw))
-        } catch (individualError) {
-          console.warn(`[Markets API] ${call.callName} failed:`, getErrorMessage(individualError))
+        } catch (error) {
+          console.warn(
+            `[Markets API] Unable to decode ${call.callName}; retrying:`,
+            getErrorMessage(error)
+          )
+          nextPending.push(call)
         }
       }
-      continue
+
+      console.info(
+        `[Markets API] RPC batch round ${round}: ${chunk.length} calls in ${Date.now() - startedAt}ms`
+      )
+
+      if (offset + chunkSize < pending.length) {
+        await sleep(RPC_BATCH_GAP_MS)
+      }
     }
 
-    if (!Array.isArray(parsed)) {
-      throw new Error('Authenticated RPC did not return a JSON-RPC batch array')
-    }
+    pending = nextPending.filter(call => !output.has(call.key))
 
-    const byId = new Map<number, RpcResponse>()
-    for (const item of parsed as RpcResponse[]) {
-      byId.set(Number(item.id), item)
+    if (pending.length > 0 && round < RPC_BATCH_RETRY_ROUNDS) {
+      const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, round - 1)
+      console.warn(
+        `[Markets API] ${pending.length} RPC calls remain unavailable after round ${round}. Retrying in ${delay}ms with smaller batches.`
+      )
+      await sleep(delay)
     }
+  }
 
-    for (let index = 0; index < chunk.length; index++) {
-      const call = chunk[index]
-      const response = byId.get(startId + offset + index)
-      if (!response) {
-        console.warn(`[Markets API] Missing response for ${call.callName}`)
-        continue
-      }
-      if (response.error) {
-        console.warn(`[Markets API] ${call.callName} failed: ${extractRpcErrorMessage(response.error)}`)
-        continue
-      }
-      if (!response.result || response.result === '0x') {
-        console.warn(`[Markets API] ${call.callName} returned empty data`)
-        continue
-      }
+  if (pending.length > 0) {
+    console.warn(
+      `[Markets API] ${pending.length} calls still unavailable after batched retries. Falling back to individual RPC calls.`
+    )
+
+    for (const call of pending) {
+      if (output.has(call.key)) continue
+
       try {
-        output.set(call.key, iface.decodeFunctionResult(call.functionName, response.result))
+        const raw = await rpcCall(
+          accessToken,
+          iface.encodeFunctionData(call.functionName, call.args),
+          call.callName,
+          startId + requestSequence++
+        )
+        output.set(
+          call.key,
+          iface.decodeFunctionResult(call.functionName, raw)
+        )
       } catch (error) {
-        console.warn(`[Markets API] Unable to decode ${call.callName}:`, getErrorMessage(error))
+        console.error(
+          `[Markets API] Final individual fallback failed for ${call.callName}:`,
+          getErrorMessage(error)
+        )
       }
-    }
 
-    console.info(`[Markets API] Loaded RPC batch of ${chunk.length} calls in ${Date.now() - startedAt}ms`)
+      await sleep(RPC_BATCH_GAP_MS)
+    }
   }
 
   return output
@@ -776,7 +856,9 @@ function buildPayload(
         maxAttempts: MAX_RPC_ATTEMPTS,
         initialRetryDelayMs: INITIAL_RETRY_DELAY_MS,
         batchSize: RPC_BATCH_SIZE,
-        loadingMode: 'json-rpc-batched',
+        batchRetryRounds: RPC_BATCH_RETRY_ROUNDS,
+        batchGapMs: RPC_BATCH_GAP_MS,
+        loadingMode: 'adaptive-json-rpc-batched',
         eventHistoryEnabled: ENABLE_EVENT_HISTORY,
         resolutionEventScanEnabled: ENABLE_RESOLUTION_EVENT_SCAN
       }
@@ -842,8 +924,29 @@ export async function GET(request: Request) {
     }
 
     const payload = await pending
-    responseCache.set(cacheKey, { expiresAt: Date.now() + ttl, payload })
-    return NextResponse.json({ ...payload, cache: { hit: false, ttlMs: ttl } }, {
+    const diagnostics = payload.diagnostics as {
+      totalMarketsReported?: number
+      marketsLoaded?: number
+    } | undefined
+    const isComplete =
+      diagnostics?.totalMarketsReported === diagnostics?.marketsLoaded
+
+    if (isComplete) {
+      responseCache.set(cacheKey, { expiresAt: Date.now() + ttl, payload })
+    } else {
+      console.warn(
+        `[Markets API] Partial response was not cached (${diagnostics?.marketsLoaded || 0}/${diagnostics?.totalMarketsReported || 0} markets loaded).`
+      )
+    }
+
+    return NextResponse.json({
+      ...payload,
+      cache: {
+        hit: false,
+        stored: isComplete,
+        ttlMs: isComplete ? ttl : 0
+      }
+    }, {
       headers: {
         'Cache-Control': walletAddress
           ? 'private, no-store'

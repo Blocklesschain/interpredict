@@ -14,13 +14,15 @@ const CONTRACT_ADDRESS =
 const RPC_URL = 'https://evm-rpc.test-net.interlinklabs.ai/v1/rpc'
 
 const MAX_RPC_ATTEMPTS = 2
-const INITIAL_RETRY_DELAY_MS = 1_200
+const INITIAL_RETRY_DELAY_MS = 900
 const RPC_BATCH_SIZE = 8
-const RPC_BATCH_RETRY_ROUNDS = 1
-const RPC_BATCH_GAP_MS = 1_250
+const RPC_BATCH_RETRY_ROUNDS = 2
+const RPC_BATCH_GAP_MS = 900
+const DEFAULT_PAGE_SIZE = 2
+const MAX_PAGE_SIZE = 3
 const PUBLIC_CACHE_TTL_MS = 30_000
 const WALLET_CACHE_TTL_MS = 20_000
-const MAX_ROUTE_TIME_MS = 24_000
+const MAX_ROUTE_TIME_MS = 20_000
 const ENABLE_WALLET_ENRICHMENT =
   process.env.INTERPREDICT_ENABLE_WALLET_ENRICHMENT === 'true'
 const ENABLE_EVENT_HISTORY =
@@ -644,16 +646,17 @@ function buildMarket(
   }
 }
 
-async function loadAllMarkets(
+async function loadMarketRange(
   accessToken: string,
-  totalCount: number,
+  start: number,
+  endExclusive: number,
   resolutionDeadlines: Map<number, number>,
   routeStartedAt: number
 ): Promise<{ markets: LoadedMarket[]; skipped: SkippedMarket[] }> {
   const calls: BatchCall[] = []
   const functions = ['mb', 'mv', 'mr', 'mf', 'ms', 'gL', 'gP', 'gPr2']
 
-  for (let marketId = 0; marketId < totalCount; marketId++) {
+  for (let marketId = start; marketId < endExclusive; marketId++) {
     for (const functionName of functions) {
       calls.push({
         key: `${marketId}:${functionName}`,
@@ -664,11 +667,11 @@ async function loadAllMarkets(
     }
   }
 
-  const values = await rpcBatchRead(accessToken, calls, 1000, routeStartedAt)
+  const values = await rpcBatchRead(accessToken, calls, 1000 + start * 100, routeStartedAt)
   const markets: LoadedMarket[] = []
   const skipped: SkippedMarket[] = []
 
-  for (let marketId = 0; marketId < totalCount; marketId++) {
+  for (let marketId = start; marketId < endExclusive; marketId++) {
     try {
       markets.push(buildMarket(marketId, values, resolutionDeadlines.get(marketId) || 0))
     } catch (error) {
@@ -792,7 +795,9 @@ function buildPayload(
   totalCount: number,
   skippedMarkets: SkippedMarket[],
   walletAddress: string,
-  startedAt: number
+  startedAt: number,
+  pageStart: number,
+  pageLimit: number
 ): Record<string, unknown> {
   const pendingProposals = allMarkets.filter(m => [0, 1, 4].includes(m.state))
   const activeMarkets = allMarkets.filter(m => m.state === 5)
@@ -834,6 +839,13 @@ function buildPayload(
       rejected: rejectedMarkets.length,
       cancelled: cancelledMarkets.length
     },
+    pagination: {
+      start: pageStart,
+      limit: pageLimit,
+      nextStart: Math.min(pageStart + pageLimit, totalCount),
+      hasMore: pageStart + pageLimit < totalCount,
+      totalMarkets: totalCount
+    },
     diagnostics: {
       contractAddress: CONTRACT_ADDRESS,
       eventScanStartBlock: process.env.INTERPREDICT_DEPLOYMENT_BLOCK || '0x0',
@@ -860,7 +872,11 @@ function buildPayload(
   }
 }
 
-async function generatePayload(walletAddress: string): Promise<Record<string, unknown>> {
+async function generatePayload(
+  walletAddress: string,
+  pageStart: number,
+  pageLimit: number
+): Promise<Record<string, unknown>> {
   const startedAt = Date.now()
   const accessToken = await getValidServiceToken()
   const totalRaw = await rpcCall(
@@ -870,19 +886,23 @@ async function generatePayload(walletAddress: string): Promise<Record<string, un
     1
   )
   const totalCount = bigintToNumber(iface.decodeFunctionResult('tm', totalRaw)[0])
+  const safeStart = Math.min(Math.max(0, pageStart), totalCount)
+  const endExclusive = Math.min(safeStart + pageLimit, totalCount)
   const deadlines = await loadResolutionVotingDeadlines(accessToken)
-  const { markets, skipped } = await loadAllMarkets(accessToken, totalCount, deadlines, startedAt)
+  const { markets, skipped } = await loadMarketRange(
+    accessToken, safeStart, endExclusive, deadlines, startedAt
+  )
 
   let walletPositions: Array<Record<string, unknown>> = []
   if (walletAddress && ENABLE_WALLET_ENRICHMENT && Date.now() - startedAt < MAX_ROUTE_TIME_MS - 5_000) {
     const walletHistory = await enrichWalletData(accessToken, markets, walletAddress, startedAt)
     walletPositions = buildWalletPositions(walletHistory, markets)
-  } else if (walletAddress && !ENABLE_WALLET_ENRICHMENT) {
-    console.info('[Markets API] Wallet enrichment is disabled on testnet to protect the public market endpoint from RPC rate limits.')
   }
 
-  console.info(`[Markets API] Loaded ${markets.length}/${totalCount} markets in ${Date.now() - startedAt}ms`)
-  return buildPayload(markets, walletPositions, totalCount, skipped, walletAddress, startedAt)
+  console.info(`[Markets API] Loaded page ${safeStart}-${endExclusive - 1}: ${markets.length}/${endExclusive - safeStart} markets in ${Date.now() - startedAt}ms`)
+  return buildPayload(
+    markets, walletPositions, totalCount, skipped, walletAddress, startedAt, safeStart, pageLimit
+  )
 }
 
 export async function GET(request: Request) {
@@ -896,7 +916,13 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const requestedAddress = requestUrl.searchParams.get('address')?.trim() || ''
   const walletAddress = ethers.isAddress(requestedAddress) ? requestedAddress.toLowerCase() : ''
-  const cacheKey = walletAddress || 'public'
+  const requestedStart = Number.parseInt(requestUrl.searchParams.get('start') || '0', 10)
+  const requestedLimit = Number.parseInt(requestUrl.searchParams.get('limit') || String(DEFAULT_PAGE_SIZE), 10)
+  const pageStart = Number.isFinite(requestedStart) ? Math.max(0, requestedStart) : 0
+  const pageLimit = Number.isFinite(requestedLimit)
+    ? Math.min(MAX_PAGE_SIZE, Math.max(1, requestedLimit))
+    : DEFAULT_PAGE_SIZE
+  const cacheKey = `${walletAddress || 'public'}:${pageStart}:${pageLimit}`
   const ttl = walletAddress ? WALLET_CACHE_TTL_MS : PUBLIC_CACHE_TTL_MS
   const now = Date.now()
 
@@ -914,7 +940,7 @@ export async function GET(request: Request) {
   try {
     let pending = inFlightRequests.get(cacheKey)
     if (!pending) {
-      pending = generatePayload(walletAddress)
+      pending = generatePayload(walletAddress, pageStart, pageLimit)
       inFlightRequests.set(cacheKey, pending)
     }
 
@@ -923,8 +949,12 @@ export async function GET(request: Request) {
       totalMarketsReported?: number
       marketsLoaded?: number
     } | undefined
-    const isComplete =
-      diagnostics?.totalMarketsReported === diagnostics?.marketsLoaded
+    const pagination = payload.pagination as { start?: number; limit?: number; totalMarkets?: number } | undefined
+    const expectedOnPage = Math.max(0, Math.min(
+      pagination?.limit || pageLimit,
+      (pagination?.totalMarkets || 0) - (pagination?.start || pageStart)
+    ))
+    const isComplete = diagnostics?.marketsLoaded === expectedOnPage
 
     if (isComplete) {
       responseCache.set(cacheKey, { expiresAt: Date.now() + ttl, payload })

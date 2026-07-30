@@ -64,19 +64,41 @@ export default function HomePage() {
       setIsLoading(true)
       setMarketError(null)
 
-      const res = await fetch('/api/markets', {
-        cache: 'no-store',
-      })
+      const PAGE_SIZE = 5
+      const byId = new Map<number, MarketType>()
+      let start = 0
+      let totalMarkets = 0
 
-      if (!res.ok) {
-        throw new Error('Failed to load public markets')
-      }
+      // Paginate through all markets so the home page shows every market,
+      // not just the first page returned by the API.
+      do {
+        const res = await fetch(
+          `/api/markets?start=${start}&limit=${PAGE_SIZE}`,
+          { cache: 'no-store' }
+        )
 
-      const data = await res.json()
-      const allMarkets: MarketType[] = Array.isArray(data.allMarkets)
-        ? data.allMarkets
-        : []
+        if (!res.ok) {
+          throw new Error('Failed to load public markets')
+        }
 
+        const data = await res.json()
+        const pageMarkets: MarketType[] = Array.isArray(data.allMarkets)
+          ? data.allMarkets
+          : []
+
+        for (const market of pageMarkets) {
+          byId.set(Number(market.id), market)
+        }
+
+        const pagination = data.pagination || {}
+        totalMarkets = Number(pagination.totalMarkets || pageMarkets.length)
+        start = Number(pagination.nextStart || start + PAGE_SIZE)
+
+        // Safety guard: stop if the API reports no more pages.
+        if (pageMarkets.length === 0) break
+      } while (start < totalMarkets)
+
+      const allMarkets = Array.from(byId.values()).sort((a, b) => a.id - b.id)
       const now = Math.floor(Date.now() / 1000)
 
       setActiveMarkets(

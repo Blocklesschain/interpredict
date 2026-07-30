@@ -218,11 +218,11 @@ export default function DAppPortal() {
       let baseMarkets: SmartMarket[] = []
 
       try {
-        const PAGE_SIZE = 2
+        const PAGE_SIZE = 5
         const MAX_PAGE_ATTEMPTS = 3
         const PAGE_REQUEST_TIMEOUT_MS = 28_000
-        const PAGE_GAP_MS = 1_500
-        const FINAL_RETRY_GAP_MS = 2_500
+        const PAGE_GAP_MS = 800
+        const FINAL_RETRY_GAP_MS = 1_500
 
         const byId = new Map<number, SmartMarket>()
 

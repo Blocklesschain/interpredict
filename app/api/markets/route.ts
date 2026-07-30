@@ -13,16 +13,16 @@ const CONTRACT_ADDRESS =
 
 const RPC_URL = 'https://evm-rpc.test-net.interlinklabs.ai/v1/rpc'
 
-const MAX_RPC_ATTEMPTS = 2
-const INITIAL_RETRY_DELAY_MS = 900
+const MAX_RPC_ATTEMPTS = 3
+const INITIAL_RETRY_DELAY_MS = 500
 const RPC_BATCH_SIZE = 8
-const RPC_BATCH_RETRY_ROUNDS = 2
-const RPC_BATCH_GAP_MS = 900
-const DEFAULT_PAGE_SIZE = 2
-const MAX_PAGE_SIZE = 3
+const RPC_BATCH_RETRY_ROUNDS = 3
+const RPC_BATCH_GAP_MS = 300
+const DEFAULT_PAGE_SIZE = 3
+const MAX_PAGE_SIZE = 5
 const PUBLIC_CACHE_TTL_MS = 30_000
 const WALLET_CACHE_TTL_MS = 20_000
-const MAX_ROUTE_TIME_MS = 20_000
+const MAX_ROUTE_TIME_MS = 28_000
 const ENABLE_WALLET_ENRICHMENT =
   process.env.INTERPREDICT_ENABLE_WALLET_ENRICHMENT === 'true'
 const ENABLE_EVENT_HISTORY =
@@ -211,7 +211,7 @@ async function fetchRpcJson(
         },
         body: JSON.stringify(body),
         cache: 'no-store',
-        signal: AbortSignal.timeout(4_000)
+        signal: AbortSignal.timeout(8_000)
       })
 
       const responseText = await response.text()

@@ -222,6 +222,7 @@ export default function DAppPortal() {
         const MAX_PAGE_ATTEMPTS = 3
         const PAGE_REQUEST_TIMEOUT_MS = 28_000
         const PAGE_GAP_MS = 1_500
+        const FINAL_RETRY_GAP_MS = 2_500
 
         const byId = new Map<number, SmartMarket>()
 
@@ -263,17 +264,74 @@ export default function DAppPortal() {
           }
         }
 
+        const mergePageMarkets = (pageData: any) => {
+          const pageMarkets = Array.isArray(pageData?.allMarkets)
+            ? pageData.allMarkets
+            : []
+
+          for (const rawMarket of pageMarkets) {
+            const market = normalizeMarket(rawMarket)
+            byId.set(market.id, market)
+          }
+
+          publishMarkets()
+        }
+
+        const getExpectedPageCount = (
+          pageData: any,
+          requestedStart: number,
+          totalMarketsFallback = 0
+        ) => {
+          const pagination = pageData?.pagination || {}
+          const totalMarkets = Number(
+            pagination.totalMarkets ?? totalMarketsFallback
+          )
+          const pageStart = Number(
+            pagination.start ?? requestedStart
+          )
+          const pageLimit = Number(
+            pagination.limit ?? PAGE_SIZE
+          )
+
+          return Math.max(
+            0,
+            Math.min(pageLimit, totalMarkets - pageStart)
+          )
+        }
+
+        const isIncompletePage = (
+          pageData: any,
+          requestedStart: number,
+          totalMarketsFallback = 0
+        ) => {
+          const expectedCount = getExpectedPageCount(
+            pageData,
+            requestedStart,
+            totalMarketsFallback
+          )
+          const loadedCount = Array.isArray(pageData?.allMarkets)
+            ? pageData.allMarkets.length
+            : 0
+
+          return loadedCount < expectedCount
+        }
+
         // Show the last successfully loaded market set immediately while fresh
         // pages are requested. This prevents the marketplace from flashing empty.
         try {
-          const cachedMarkets = sessionStorage.getItem('interpredict_public_markets')
+          const cachedMarkets = sessionStorage.getItem(
+            'interpredict_public_markets'
+          )
+
           if (cachedMarkets) {
             const parsedMarkets = JSON.parse(cachedMarkets)
+
             if (Array.isArray(parsedMarkets)) {
               for (const rawMarket of parsedMarkets) {
                 const market = normalizeMarket(rawMarket)
                 byId.set(market.id, market)
               }
+
               publishMarkets()
             }
           }
@@ -281,10 +339,16 @@ export default function DAppPortal() {
           // Ignore malformed or unavailable browser cache.
         }
 
-        const fetchMarketPage = async (start: number): Promise<any> => {
+        const fetchMarketPage = async (
+          start: number
+        ): Promise<any> => {
           let lastError: unknown = null
 
-          for (let attempt = 1; attempt <= MAX_PAGE_ATTEMPTS; attempt++) {
+          for (
+            let attempt = 1;
+            attempt <= MAX_PAGE_ATTEMPTS;
+            attempt++
+          ) {
             const controller = new AbortController()
             const timeoutId = window.setTimeout(
               () => controller.abort(),
@@ -319,21 +383,18 @@ export default function DAppPortal() {
                 )
               }
 
-              const totalMarkets = Number(json.pagination.totalMarkets || 0)
-              const pageStart = Number(json.pagination.start ?? start)
-              const pageLimit = Number(json.pagination.limit || PAGE_SIZE)
-              const expectedCount = Math.max(
-                0,
-                Math.min(pageLimit, totalMarkets - pageStart)
-              )
+              const expectedCount = getExpectedPageCount(json, start)
               const loadedCount = Array.isArray(json.allMarkets)
                 ? json.allMarkets.length
                 : 0
 
+              // A partial page is still useful. Return it, render the markets
+              // that did load, continue to later pages, and retry this page later.
               if (loadedCount < expectedCount) {
-                throw new Error(
-                  `Markets page ${start} was incomplete: ` +
-                  `${loadedCount}/${expectedCount} markets loaded`
+                console.warn(
+                  `[Markets] Page ${start} was incomplete: ` +
+                  `${loadedCount}/${expectedCount} markets loaded`,
+                  json?.diagnostics?.skippedMarkets || []
                 )
               }
 
@@ -361,70 +422,96 @@ export default function DAppPortal() {
           )
         }
 
-        // The first page tells us the total number of markets. We then request
-        // every remaining page by its known start index. A temporary failure on
-        // one page no longer prevents later pages (including active markets)
-        // from loading.
+        // The first page tells us how many markets exist in total.
+        // Even when this page is partial, its successfully loaded markets are
+        // rendered and every later page is still requested.
         const firstPage = await fetchMarketPage(0)
-        const totalMarkets = Number(firstPage.pagination.totalMarkets || 0)
+        const totalMarkets = Number(
+          firstPage.pagination.totalMarkets || 0
+        )
 
-        for (const rawMarket of firstPage.allMarkets || []) {
-          const market = normalizeMarket(rawMarket)
-          byId.set(market.id, market)
+        const incompletePageStarts: number[] = []
+        const failedPageStarts: number[] = []
+
+        mergePageMarkets(firstPage)
+
+        if (isIncompletePage(firstPage, 0, totalMarkets)) {
+          incompletePageStarts.push(0)
         }
-        publishMarkets()
 
         const remainingPageStarts: number[] = []
-        for (let start = PAGE_SIZE; start < totalMarkets; start += PAGE_SIZE) {
+
+        for (
+          let start = PAGE_SIZE;
+          start < totalMarkets;
+          start += PAGE_SIZE
+        ) {
           remainingPageStarts.push(start)
         }
 
-        const failedPages: number[] = []
-
+        // Load every later page independently. A failed or partial page cannot
+        // block active markets that live on another page.
         for (const start of remainingPageStarts) {
           try {
-            await new Promise(resolve => setTimeout(resolve, PAGE_GAP_MS))
+            await new Promise(resolve =>
+              setTimeout(resolve, PAGE_GAP_MS)
+            )
 
             const pageData = await fetchMarketPage(start)
 
-            for (const rawMarket of pageData.allMarkets || []) {
-              const market = normalizeMarket(rawMarket)
-              byId.set(market.id, market)
-            }
+            mergePageMarkets(pageData)
 
-            // Render after every successful page so active markets appear as
-            // soon as their own page has loaded.
-            publishMarkets()
+            if (isIncompletePage(pageData, start, totalMarkets)) {
+              incompletePageStarts.push(start)
+            }
           } catch (pageError) {
-            failedPages.push(start)
+            failedPageStarts.push(start)
+
             console.warn(
-              `[Markets] Skipping temporarily unavailable page starting at ${start}:`,
+              `[Markets] Page starting at ${start} is temporarily unavailable:`,
               pageError
             )
           }
         }
 
-        // Retry only failed pages once more after the other pages have loaded.
-        // This prevents one bad page from stopping the complete marketplace.
-        if (failedPages.length > 0) {
-          await new Promise(resolve => setTimeout(resolve, 2_500))
+        // Retry both completely failed pages and partially loaded pages after
+        // all other pages have had a chance to render.
+        const retryPageStarts = Array.from(
+          new Set([
+            ...failedPageStarts,
+            ...incompletePageStarts
+          ])
+        )
 
-          for (const start of failedPages) {
+        if (retryPageStarts.length > 0) {
+          await new Promise(resolve =>
+            setTimeout(resolve, FINAL_RETRY_GAP_MS)
+          )
+
+          for (const start of retryPageStarts) {
             try {
-              const pageData = await fetchMarketPage(start)
+              const retryData = await fetchMarketPage(start)
 
-              for (const rawMarket of pageData.allMarkets || []) {
-                const market = normalizeMarket(rawMarket)
-                byId.set(market.id, market)
+              // Always publish whatever the retry recovered. Never discard a
+              // useful partial response.
+              mergePageMarkets(retryData)
+
+              if (isIncompletePage(retryData, start, totalMarkets)) {
+                console.warn(
+                  `[Markets] Page ${start} remained incomplete after final retry.`,
+                  retryData?.diagnostics?.skippedMarkets || []
+                )
               }
-
-              publishMarkets()
             } catch (retryError) {
               console.error(
                 `[Markets] Final retry failed for page starting at ${start}:`,
                 retryError
               )
             }
+
+            await new Promise(resolve =>
+              setTimeout(resolve, PAGE_GAP_MS)
+            )
           }
         }
 

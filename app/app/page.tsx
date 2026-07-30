@@ -216,100 +216,233 @@ export default function DAppPortal() {
 
     try {
       let baseMarkets: SmartMarket[] = []
+
       try {
         const PAGE_SIZE = 2
         const MAX_PAGE_ATTEMPTS = 3
-        const byId = new Map<number, SmartMarket>()
-        let nextStart = 0
-        let hasMore = true
-        let pageGuard = 0
+        const PAGE_REQUEST_TIMEOUT_MS = 28_000
+        const PAGE_GAP_MS = 1_500
 
-        while (hasMore && pageGuard < 500) {
-          pageGuard += 1
-          let pageData: any = null
-          let lastPageError: unknown = null
+        const byId = new Map<number, SmartMarket>()
+
+        const normalizeMarket = (rawMarket: any): SmartMarket => ({
+          ...rawMarket,
+          id: Number(rawMarket.id ?? rawMarket.marketId ?? 0),
+          thumbnailUri:
+            rawMarket.thumbnailUri ||
+            rawMarket.thumbnailURI ||
+            rawMarket.thumbnailUrl ||
+            rawMarket.thumbnailURL ||
+            '',
+          outcomeLabels: Array.isArray(rawMarket.outcomeLabels)
+            ? rawMarket.outcomeLabels.map(String)
+            : [],
+          outcomePools: Array.isArray(rawMarket.outcomePools)
+            ? rawMarket.outcomePools.map(String)
+            : [],
+          outcomePrices: Array.isArray(rawMarket.outcomePrices)
+            ? rawMarket.outcomePrices.map(String)
+            : [],
+          hasCurrentWalletVoted: Boolean(rawMarket.hasCurrentWalletVoted),
+          currentWalletProposalVote: Number(rawMarket.currentWalletProposalVote || 0),
+          hasCurrentWalletVotedOnResolution: Boolean(rawMarket.hasCurrentWalletVotedOnResolution),
+          currentWalletResolutionVote: Number(rawMarket.currentWalletResolutionVote || 0)
+        })
+
+        const publishMarkets = () => {
+          baseMarkets = Array.from(byId.values()).sort((a, b) => a.id - b.id)
+          setAllOnChainMarkets(baseMarkets)
+
+          try {
+            sessionStorage.setItem(
+              'interpredict_public_markets',
+              JSON.stringify(baseMarkets)
+            )
+          } catch {
+            // sessionStorage may be unavailable in restricted browsers.
+          }
+        }
+
+        // Show the last successfully loaded market set immediately while fresh
+        // pages are requested. This prevents the marketplace from flashing empty.
+        try {
+          const cachedMarkets = sessionStorage.getItem('interpredict_public_markets')
+          if (cachedMarkets) {
+            const parsedMarkets = JSON.parse(cachedMarkets)
+            if (Array.isArray(parsedMarkets)) {
+              for (const rawMarket of parsedMarkets) {
+                const market = normalizeMarket(rawMarket)
+                byId.set(market.id, market)
+              }
+              publishMarkets()
+            }
+          }
+        } catch {
+          // Ignore malformed or unavailable browser cache.
+        }
+
+        const fetchMarketPage = async (start: number): Promise<any> => {
+          let lastError: unknown = null
 
           for (let attempt = 1; attempt <= MAX_PAGE_ATTEMPTS; attempt++) {
+            const controller = new AbortController()
+            const timeoutId = window.setTimeout(
+              () => controller.abort(),
+              PAGE_REQUEST_TIMEOUT_MS
+            )
+
             try {
-              const pageUrl = `/api/markets?start=${nextStart}&limit=${PAGE_SIZE}`
-              const response = await fetch(pageUrl, { cache: 'no-store' })
+              const response = await fetch(
+                `/api/markets?start=${start}&limit=${PAGE_SIZE}`,
+                {
+                  method: 'GET',
+                  cache: 'no-store',
+                  headers: {
+                    Accept: 'application/json'
+                  },
+                  signal: controller.signal
+                }
+              )
+
               const json = await response.json().catch(() => null)
 
               if (!response.ok) {
-                throw new Error(json?.error || `Markets page returned HTTP ${response.status}`)
+                throw new Error(
+                  json?.error ||
+                  `Markets page ${start} returned HTTP ${response.status}`
+                )
               }
 
-              const expected = Math.max(0, Math.min(
-                Number(json?.pagination?.limit || PAGE_SIZE),
-                Number(json?.pagination?.totalMarkets || 0) - Number(json?.pagination?.start || nextStart)
-              ))
-              const loaded = Array.isArray(json?.allMarkets) ? json.allMarkets.length : 0
-
-              if (loaded < expected) {
-                throw new Error(`Incomplete markets page ${nextStart}: loaded ${loaded}/${expected}`)
+              if (!json || !json.pagination) {
+                throw new Error(
+                  `Markets page ${start} returned an invalid response`
+                )
               }
 
-              pageData = json
-              break
+              const totalMarkets = Number(json.pagination.totalMarkets || 0)
+              const pageStart = Number(json.pagination.start ?? start)
+              const pageLimit = Number(json.pagination.limit || PAGE_SIZE)
+              const expectedCount = Math.max(
+                0,
+                Math.min(pageLimit, totalMarkets - pageStart)
+              )
+              const loadedCount = Array.isArray(json.allMarkets)
+                ? json.allMarkets.length
+                : 0
+
+              if (loadedCount < expectedCount) {
+                throw new Error(
+                  `Markets page ${start} was incomplete: ` +
+                  `${loadedCount}/${expectedCount} markets loaded`
+                )
+              }
+
+              return json
             } catch (error) {
-              lastPageError = error
+              lastError = error
+
+              console.warn(
+                `[Markets] Page ${start}, attempt ${attempt}/${MAX_PAGE_ATTEMPTS} failed:`,
+                error
+              )
+
               if (attempt < MAX_PAGE_ATTEMPTS) {
-                await new Promise(resolve => setTimeout(resolve, 900 * attempt))
+                await new Promise(resolve =>
+                  setTimeout(resolve, attempt * 1_200)
+                )
               }
+            } finally {
+              window.clearTimeout(timeoutId)
             }
           }
 
-          if (!pageData) {
-            console.warn(`Unable to load markets page starting at ${nextStart}:`, lastPageError)
-            throw lastPageError || new Error(`Unable to load markets page ${nextStart}`)
-          }
+          throw lastError || new Error(
+            `Unable to load markets page starting at ${start}`
+          )
+        }
 
-          for (const rawMarket of pageData.allMarkets || []) {
-            const market: SmartMarket = {
-              ...rawMarket,
-              id: Number(rawMarket.id ?? rawMarket.marketId),
-              thumbnailUri:
-                rawMarket.thumbnailUri ||
-                rawMarket.thumbnailURI ||
-                rawMarket.thumbnailUrl ||
-                rawMarket.thumbnailURL ||
-                '',
-              outcomeLabels: Array.isArray(rawMarket.outcomeLabels) ? rawMarket.outcomeLabels : [],
-              outcomePools: Array.isArray(rawMarket.outcomePools) ? rawMarket.outcomePools.map(String) : [],
-              outcomePrices: Array.isArray(rawMarket.outcomePrices) ? rawMarket.outcomePrices.map(String) : [],
-              hasCurrentWalletVoted: Boolean(rawMarket.hasCurrentWalletVoted),
-              currentWalletProposalVote: Number(rawMarket.currentWalletProposalVote || 0),
-              hasCurrentWalletVotedOnResolution: Boolean(rawMarket.hasCurrentWalletVotedOnResolution),
-              currentWalletResolutionVote: Number(rawMarket.currentWalletResolutionVote || 0)
+        // The first page tells us the total number of markets. We then request
+        // every remaining page by its known start index. A temporary failure on
+        // one page no longer prevents later pages (including active markets)
+        // from loading.
+        const firstPage = await fetchMarketPage(0)
+        const totalMarkets = Number(firstPage.pagination.totalMarkets || 0)
+
+        for (const rawMarket of firstPage.allMarkets || []) {
+          const market = normalizeMarket(rawMarket)
+          byId.set(market.id, market)
+        }
+        publishMarkets()
+
+        const remainingPageStarts: number[] = []
+        for (let start = PAGE_SIZE; start < totalMarkets; start += PAGE_SIZE) {
+          remainingPageStarts.push(start)
+        }
+
+        const failedPages: number[] = []
+
+        for (const start of remainingPageStarts) {
+          try {
+            await new Promise(resolve => setTimeout(resolve, PAGE_GAP_MS))
+
+            const pageData = await fetchMarketPage(start)
+
+            for (const rawMarket of pageData.allMarkets || []) {
+              const market = normalizeMarket(rawMarket)
+              byId.set(market.id, market)
             }
-            byId.set(market.id, market)
-          }
 
-          baseMarkets = Array.from(byId.values()).sort((a, b) => a.id - b.id)
-          // Render progressively instead of showing an empty marketplace until every page finishes.
-          setAllOnChainMarkets(baseMarkets)
-
-          const pagination = pageData.pagination || {}
-          hasMore = Boolean(pagination.hasMore)
-          const computedNext = Number(pagination.nextStart)
-          nextStart = Number.isFinite(computedNext) && computedNext > nextStart
-            ? computedNext
-            : nextStart + PAGE_SIZE
-
-          if (hasMore) {
-            // A brief pause prevents consecutive serverless pages from competing for the strict testnet RPC quota.
-            await new Promise(resolve => setTimeout(resolve, 700))
+            // Render after every successful page so active markets appear as
+            // soon as their own page has loaded.
+            publishMarkets()
+          } catch (pageError) {
+            failedPages.push(start)
+            console.warn(
+              `[Markets] Skipping temporarily unavailable page starting at ${start}:`,
+              pageError
+            )
           }
         }
 
-        if (pageGuard >= 500) {
-          throw new Error('Markets pagination safety limit reached')
+        // Retry only failed pages once more after the other pages have loaded.
+        // This prevents one bad page from stopping the complete marketplace.
+        if (failedPages.length > 0) {
+          await new Promise(resolve => setTimeout(resolve, 2_500))
+
+          for (const start of failedPages) {
+            try {
+              const pageData = await fetchMarketPage(start)
+
+              for (const rawMarket of pageData.allMarkets || []) {
+                const market = normalizeMarket(rawMarket)
+                byId.set(market.id, market)
+              }
+
+              publishMarkets()
+            } catch (retryError) {
+              console.error(
+                `[Markets] Final retry failed for page starting at ${start}:`,
+                retryError
+              )
+            }
+          }
         }
-      } catch (e) {
-        console.warn('Paginated markets API fetch failed:', e)
-        // Preserve already-rendered markets during a temporary RPC failure.
+
+        if (baseMarkets.length < totalMarkets) {
+          setToastMsg(
+            `Loaded ${baseMarkets.length} of ${totalMarkets} markets. ` +
+            'Some markets are temporarily unavailable; refresh shortly.'
+          )
+        }
+      } catch (error) {
+        console.error('Paginated markets API fetch failed:', error)
+
+        // Keep cached or already-loaded markets visible. Only show the full
+        // failure message when nothing at all could be restored or fetched.
         if (baseMarkets.length === 0) {
-          setToastMsg('Market data is temporarily unavailable. Please refresh shortly.')
+          setToastMsg(
+            'Market data is temporarily unavailable. Please refresh shortly.'
+          )
         }
       }
 

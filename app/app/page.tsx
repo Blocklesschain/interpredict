@@ -236,7 +236,7 @@ export default function DAppPortal() {
       let baseMarkets: SmartMarket[] = []
 
       try {
-        const PAGE_SIZE = 8
+        const PAGE_SIZE = 5
         const MAX_PAGE_ATTEMPTS = 3
         const PAGE_REQUEST_TIMEOUT_MS = 18_000
         const PAGE_GAP_MS = 120
@@ -605,18 +605,22 @@ export default function DAppPortal() {
         }
       }
 
-      // DEC rewards through authenticated provider
+      // DEC rewards through authenticated provider.
+      // Use member-level unclaimed rewards (ur) so rewards are scoped to each
+      // member's tenure and participation, not equal split of historic pool.
       if (hasJoinedDEC || isMember) {
+        const memberInfo = await readContract('gDMI', [walletAddress])
+        const unclaimedRewards = memberInfo
+          ? BigInt((memberInfo as any).ur ?? (memberInfo as any)[9] ?? 0)
+          : BigInt(0)
+
         const pool = await readContract('drp', [])
         const members = await readContract('tdm', [])
         const poolVal = pool ? BigInt(pool.toString()) : BigInt(0)
         const membersVal = members ? BigInt(members.toString()) : BigInt(0)
         setDecPoolTotal(poolVal.toString())
         setDecMemberCount(Number(membersVal))
-        if (membersVal > BigInt(0)) {
-          const sharePerMember = poolVal / membersVal
-          setDecRewardsClaimable(sharePerMember.toString())
-        }
+        setDecRewardsClaimable(unclaimedRewards.toString())
       }
 
       // Load wallet-specific data (shares, votes, claims) for all markets.

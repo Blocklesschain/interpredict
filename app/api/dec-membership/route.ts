@@ -14,22 +14,33 @@ const iface = new ethers.Interface([
 ])
 
 async function rpcCall(accessToken: string, data: string, id: number = 1) {
-  const res = await fetch(RPC_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id,
-      method: 'eth_call',
-      params: [{ to: CONTRACT_ADDRESS, data }, 'latest']
-    })
-  })
-  const json = await res.json()
-  if (json.error) throw new Error(json.error.message || 'RPC call failed')
-  return json.result
+  let lastError = 'RPC call failed'
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(RPC_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id,
+          method: 'eth_call',
+          params: [{ to: CONTRACT_ADDRESS, data }, 'latest']
+        })
+      })
+      const json = await res.json()
+      if (json.error) throw new Error(json.error.message || 'RPC call failed')
+      return json.result
+    } catch (err: any) {
+      lastError = err?.message || 'RPC call failed'
+      if (attempt < 3) {
+        await new Promise(resolve => setTimeout(resolve, attempt * 500))
+      }
+    }
+  }
+  throw new Error(lastError)
 }
 
 export async function GET(request: NextRequest) {
@@ -56,40 +67,57 @@ export async function GET(request: NextRequest) {
     // Get DEC member info if member
     let memberInfo = null
     if (isActiveMember || isAdmin) {
-      const memberResult = await rpcCall(accessToken, iface.encodeFunctionData('gDMI', [address]), 2)
-      if (memberResult && memberResult !== '0x') {
-        const decoded = iface.decodeFunctionResult('gDMI', memberResult)[0]
-        memberInfo = {
-          active: decoded.act,
-          proposalVotes: Number(decoded.pv),
-          resolutionVotes: Number(decoded.rv),
-          totalParticipation: Number(decoded.tp),
-          honestVotes: Number(decoded.hv),
-          incorrectVotes: Number(decoded.iv),
-          reputation: Number(decoded.rep),
-          totalRewardsEarned: decoded.tre.toString(),
-          totalRewardsClaimed: decoded.trc.toString(),
-          unclaimedRewards: decoded.ur.toString()
+      try {
+        const memberResult = await rpcCall(accessToken, iface.encodeFunctionData('gDMI', [address]), 2)
+        if (memberResult && memberResult !== '0x') {
+          const decoded = iface.decodeFunctionResult('gDMI', memberResult)[0]
+          memberInfo = {
+            active: decoded.act,
+            proposalVotes: Number(decoded.pv),
+            resolutionVotes: Number(decoded.rv),
+            totalParticipation: Number(decoded.tp),
+            honestVotes: Number(decoded.hv),
+            incorrectVotes: Number(decoded.iv),
+            reputation: Number(decoded.rep),
+            totalRewardsEarned: decoded.tre.toString(),
+            totalRewardsClaimed: decoded.trc.toString(),
+            unclaimedRewards: decoded.ur.toString()
+          }
         }
+      } catch (error) {
+        console.warn('DEC member info lookup failed:', error)
       }
     }
 
     // Get all DEC members (admin only)
     let allDecMembers: string[] = []
     if (isAdmin) {
-      const membersResult = await rpcCall(accessToken, iface.encodeFunctionData('gAD'), 3)
-      if (membersResult && membersResult !== '0x') {
-        const members = iface.decodeFunctionResult('gAD', membersResult)[0]
-        allDecMembers = Array.from(members as string[])
+      try {
+        const membersResult = await rpcCall(accessToken, iface.encodeFunctionData('gAD'), 3)
+        if (membersResult && membersResult !== '0x') {
+          const members = iface.decodeFunctionResult('gAD', membersResult)[0]
+          allDecMembers = Array.from(members as string[])
+        }
+      } catch (error) {
+        console.warn('DEC members list lookup failed:', error)
       }
     }
 
     // Get reward threshold and pool
-    const thresholdResult = await rpcCall(accessToken, iface.encodeFunctionData('drt'), 4)
-    const threshold = thresholdResult ? Number(iface.decodeFunctionResult('drt', thresholdResult)[0]) : 0
-
-    const poolResult = await rpcCall(accessToken, iface.encodeFunctionData('drp'), 5)
-    const pool = poolResult ? iface.decodeFunctionResult('drp', poolResult)[0].toString() : '0'
+    let threshold = 0
+    let pool = '0'
+    try {
+      const thresholdResult = await rpcCall(accessToken, iface.encodeFunctionData('drt'), 4)
+      threshold = thresholdResult ? Number(iface.decodeFunctionResult('drt', thresholdResult)[0]) : 0
+    } catch (error) {
+      console.warn('DEC reward threshold lookup failed:', error)
+    }
+    try {
+      const poolResult = await rpcCall(accessToken, iface.encodeFunctionData('drp'), 5)
+      pool = poolResult ? iface.decodeFunctionResult('drp', poolResult)[0].toString() : '0'
+    } catch (error) {
+      console.warn('DEC reward pool lookup failed:', error)
+    }
 
     return NextResponse.json({
       isDecMember: isActiveMember,

@@ -18,8 +18,8 @@ const INITIAL_RETRY_DELAY_MS = 500
 const RPC_BATCH_SIZE = 8
 const RPC_BATCH_RETRY_ROUNDS = 3
 const RPC_BATCH_GAP_MS = 300
-const DEFAULT_PAGE_SIZE = 3
-const MAX_PAGE_SIZE = 5
+const DEFAULT_PAGE_SIZE = 5
+const MAX_PAGE_SIZE = 10
 const PUBLIC_CACHE_TTL_MS = 30_000
 const WALLET_CACHE_TTL_MS = 20_000
 const MAX_ROUTE_TIME_MS = 28_000
@@ -956,11 +956,16 @@ export async function GET(request: Request) {
     ))
     const isComplete = diagnostics?.marketsLoaded === expectedOnPage
 
+    // Cache both complete and partial responses. Partial responses get a
+    // shorter TTL so the client can immediately use whatever markets loaded
+    // while a fresh fetch fills in the gaps on the next request.
+    const partialTtl = Math.min(ttl, 10_000)
     if (isComplete) {
       responseCache.set(cacheKey, { expiresAt: Date.now() + ttl, payload })
     } else {
+      responseCache.set(cacheKey, { expiresAt: Date.now() + partialTtl, payload })
       console.warn(
-        `[Markets API] Partial response was not cached (${diagnostics?.marketsLoaded || 0}/${diagnostics?.totalMarketsReported || 0} markets loaded).`
+        `[Markets API] Partial response cached with ${partialTtl}ms TTL (${diagnostics?.marketsLoaded || 0}/${diagnostics?.totalMarketsReported || 0} markets loaded).`
       )
     }
 

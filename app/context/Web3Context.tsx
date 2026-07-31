@@ -27,6 +27,7 @@ interface Web3ContextType {
   connectWallet: () => Promise<void>
   disconnectWallet: () => void
   getWalletBalance: (address: string) => Promise<string>
+  readContract: (functionName: string, args: readonly unknown[]) => Promise<any>
   createMarketOnChain: (description: string, marketEndTime: number, outcomes: string[], category: number, thumbnailUri: string, resolutionCriteria: string) => Promise<boolean>
   joinDecOnChain: () => Promise<boolean>
   approveDecRequestOnChain: (address: string) => Promise<boolean>
@@ -322,6 +323,28 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       return '0'
     }
   }
+
+  // Reads a view/pure contract function through the authenticated JsonRpcProvider.
+  // This is critical: window.ethereum.request('eth_call') does NOT carry the
+  // Bearer auth header the Interlink testnet requires, so all direct MetaMask
+  // reads silently fail. This wrapper routes through the authenticated provider
+  // so the dApp can reliably read shares, votes, DEC pool, etc.
+  const readContract = useCallback(async (
+    functionName: string,
+    args: readonly unknown[]
+  ): Promise<any> => {
+    try {
+      const { contract } = await getContractInstance()
+      const fn = (contract as any)[functionName]
+      if (!fn || typeof fn !== 'function') {
+        throw new Error(`Contract function "${functionName}" not found in ABI`)
+      }
+      return await fn(...args)
+    } catch (err: any) {
+      console.warn(`[Web3Context] readContract(${functionName}) failed:`, err?.message || err)
+      return null
+    }
+  }, [walletAddress])
 
   // Loads the DEC directory from the authenticated server API.
   // The API returns allDecMembers for the connected admin wallet.
@@ -1009,7 +1032,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     <Web3Context.Provider value={{
       walletAddress, decMembers, txStatus, setTxStatus, historyLogs,
       locale, setLocale, t,
-      connectWallet, disconnectWallet, getWalletBalance,
+      connectWallet, disconnectWallet, getWalletBalance, readContract,
       createMarketOnChain, joinDecOnChain, approveDecRequestOnChain, castVoteOnChain, placeBetOnChain,
       initializeMarketOnChain, claimPayoutOnChain, requestResolutionOnChain,
       resolveMarketOnChain, claimDecRewardsOnChain,

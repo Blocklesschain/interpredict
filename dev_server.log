@@ -1,0 +1,318 @@
+
+> my-project@0.1.0 dev C:\Users\ProffGodswill\Desktop\InterPredict
+> next dev
+
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.50.1:3000
+- Environments: .env.local
+✓ Ready in 6.0s
+
+[Markets API] RPC batch round 1: 8 calls in 546ms
+[Markets API] RPC batch round 1 rate limited. Retrying in 900ms (1/2).
+[Markets API] mb(1) failed in batch: Rate limit exceeded
+[Markets API] mv(1) failed in batch: Rate limit exceeded
+[Markets API] mr(1) failed in batch: Rate limit exceeded
+[Markets API] mf(1) failed in batch: Rate limit exceeded
+[Markets API] ms(1) failed in batch: Rate limit exceeded
+[Markets API] gL(1) failed in batch: Rate limit exceeded
+[Markets API] gP(1) failed in batch: Rate limit exceeded
+[Markets API] gPr2(1) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 1: 8 calls in 2000ms
+[Markets API] 8 RPC calls remain unavailable after round 1. Retrying in 900ms with smaller batches.
+[Markets API] RPC batch round 2: 4 calls in 730ms
+[Markets API] RPC batch round 2: 4 calls in 481ms
+[Markets API] Loaded page 0-1: 2/2 markets in 10885ms
+ GET /api/markets?start=0&limit=2 200 in 13.4s (next.js: 2.4s, application-code: 11.0s)
+[Markets API] RPC batch round 1: 8 calls in 1006ms
+[Markets API] RPC batch round 1 rate limited. Retrying in 900ms (1/2).
+[Markets API] mb(3) failed in batch: Rate limit exceeded
+[Markets API] mv(3) failed in batch: Rate limit exceeded
+[Markets API] mr(3) failed in batch: Rate limit exceeded
+[Markets API] mf(3) failed in batch: Rate limit exceeded
+[Markets API] ms(3) failed in batch: Rate limit exceeded
+[Markets API] gL(3) failed in batch: Rate limit exceeded
+[Markets API] gP(3) failed in batch: Rate limit exceeded
+[Markets API] gPr2(3) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 1: 8 calls in 1956ms
+[Markets API] 8 RPC calls remain unavailable after round 1. Retrying in 900ms with smaller batches.
+[Markets API] RPC batch round 2: 4 calls in 1130ms
+[Markets API] RPC batch round 2: 4 calls in 508ms
+[Markets API] Loaded page 2-3: 2/2 markets in 9458ms
+ GET /api/markets?start=2&limit=2 200 in 9.5s (next.js: 33ms, application-code: 9.5s)
+[Markets API] RPC batch round 1 rate limited. Retrying in 900ms (1/2).
+[Markets API] mb(4) failed in batch: Rate limit exceeded
+[Markets API] mv(4) failed in batch: Rate limit exceeded
+[Markets API] mr(4) failed in batch: Rate limit exceeded
+[Markets API] mf(4) failed in batch: Rate limit exceeded
+[Markets API] ms(4) failed in batch: Rate limit exceeded
+[Markets API] gL(4) failed in batch: Rate limit exceeded
+[Markets API] gP(4) failed in batch: Rate limit exceeded
+[Markets API] gPr2(4) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 1: 8 calls in 1860ms
+[Markets API] RPC batch round 1: 8 calls in 535ms
+[Markets API] 8 RPC calls remain unavailable after round 1. Retrying in 900ms with smaller batches.
+[Markets API] RPC batch round 2 rate limited. Retrying in 900ms (1/2).
+[Markets API] mb(4) failed in batch: Rate limit exceeded
+[Markets API] mv(4) failed in batch: Rate limit exceeded
+[Markets API] mr(4) failed in batch: Rate limit exceeded
+[Markets API] mf(4) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 2: 4 calls in 1952ms
+[Markets API] RPC batch round 2 rate limited. Retrying in 900ms (1/2).
+[Markets API] RPC batch round 2: 4 calls in 1846ms
+[Markets API] 4 calls remain unavailable. Individual fallbacks are disabled to keep the route below Netlify's timeout.
+[Markets API] Unable to build market 4: mb(4) was unavailable
+[Markets API] Loaded page 4-5: 1/2 markets in 9405ms
+[Markets API] Partial response was not cached (1/8 markets loaded).
+ GET /api/markets?start=4&limit=2 200 in 9.5s (next.js: 13ms, application-code: 9.4s)
+[Markets API] RPC batch round 1 rate limited. Retrying in 900ms (1/2).
+[Markets API] mb(6) failed in batch: Rate limit exceeded
+[Markets API] mv(6) failed in batch: Rate limit exceeded
+[Markets API] mr(6) failed in batch: Rate limit exceeded
+[Markets API] mf(6) failed in batch: Rate limit exceeded
+[Markets API] ms(6) failed in batch: Rate limit exceeded
+[Markets API] gL(6) failed in batch: Rate limit exceeded
+[Markets API] gP(6) failed in batch: Rate limit exceeded
+[Markets API] gPr2(6) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 1: 8 calls in 1924ms
+[Markets API] RPC batch round 1 rate limited. Retrying in 900ms (1/2).
+[Markets API] RPC batch round 1: 8 calls in 1902ms
+[Markets API] 8 RPC calls remain unavailable after round 1. Retrying in 900ms with smaller batches.
+[Markets API] RPC batch round 2 rate limited. Retrying in 900ms (1/2).
+[Markets API] mb(6) failed in batch: Rate limit exceeded
+[Markets API] mv(6) failed in batch: Rate limit exceeded
+[Markets API] mr(6) failed in batch: Rate limit exceeded
+[Markets API] mf(6) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 2: 4 calls in 1869ms
+[Markets API] RPC batch round 2 rate limited. Retrying in 900ms (1/2).
+[Markets API] RPC batch round 2: 4 calls in 1875ms
+[Markets API] 4 calls remain unavailable. Individual fallbacks are disabled to keep the route below Netlify's timeout.
+[Markets API] Unable to build market 6: mb(6) was unavailable
+[Markets API] Loaded page 6-7: 1/2 markets in 10953ms
+[Markets API] Partial response was not cached (1/8 markets loaded).
+ GET /api/markets?start=6&limit=2 200 in 11.0s (next.js: 8ms, application-code: 11.0s)
+[Markets API] RPC batch round 1: 8 calls in 493ms
+[Markets API] RPC batch round 1 rate limited. Retrying in 600ms (1/3).
+[Markets API] RPC batch round 1 rate limited. Retrying in 1200ms (2/3).
+[Markets API] mb(1) failed in batch: Rate limit exceeded
+[Markets API] mv(1) failed in batch: Rate limit exceeded
+[Markets API] mr(1) failed in batch: Rate limit exceeded
+[Markets API] mf(1) failed in batch: Rate limit exceeded
+[Markets API] ms(1) failed in batch: Rate limit exceeded
+[Markets API] gL(1) failed in batch: Rate limit exceeded
+[Markets API] gP(1) failed in batch: Rate limit exceeded
+[Markets API] gPr2(1) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 1: 8 calls in 3461ms
+[Markets API] RPC batch round 1: 8 calls in 545ms
+[Markets API] RPC batch round 1 rate limited. Retrying in 600ms (1/3).
+[Markets API] RPC batch round 1 rate limited. Retrying in 1200ms (2/3).
+[Markets API] mb(3) failed in batch: Rate limit exceeded
+[Markets API] mv(3) failed in batch: Rate limit exceeded
+[Markets API] mr(3) failed in batch: Rate limit exceeded
+[Markets API] mf(3) failed in batch: Rate limit exceeded
+[Markets API] ms(3) failed in batch: Rate limit exceeded
+[Markets API] gL(3) failed in batch: Rate limit exceeded
+[Markets API] gP(3) failed in batch: Rate limit exceeded
+[Markets API] gPr2(3) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 1: 8 calls in 3481ms
+[Markets API] RPC batch round 1 rate limited. Retrying in 600ms (1/3).
+[Markets API] RPC batch round 1: 8 calls in 1688ms
+[Markets API] RPC batch round 1 rate limited. Retrying in 600ms (1/3).
+[Markets API] RPC batch round 1 rate limited. Retrying in 1200ms (2/3).
+[Markets API] mb(5) failed in batch: Rate limit exceeded
+[Markets API] mv(5) failed in batch: Rate limit exceeded
+[Markets API] mr(5) failed in batch: Rate limit exceeded
+[Markets API] mf(5) failed in batch: Rate limit exceeded
+[Markets API] ms(5) failed in batch: Rate limit exceeded
+[Markets API] gL(5) failed in batch: Rate limit exceeded
+[Markets API] gP(5) failed in batch: Rate limit exceeded
+[Markets API] gPr2(5) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 1: 8 calls in 3311ms
+[Markets API] RPC batch round 1 rate limited. Retrying in 600ms (1/3).
+[Markets API] RPC batch round 1: 8 calls in 1754ms
+[Markets API] RPC batch round 1 rate limited. Retrying in 600ms (1/3).
+[Markets API] RPC batch round 1 rate limited. Retrying in 1200ms (2/3).
+[Markets API] mb(7) failed in batch: Rate limit exceeded
+[Markets API] mv(7) failed in batch: Rate limit exceeded
+[Markets API] mr(7) failed in batch: Rate limit exceeded
+[Markets API] mf(7) failed in batch: Rate limit exceeded
+[Markets API] ms(7) failed in batch: Rate limit exceeded
+[Markets API] gL(7) failed in batch: Rate limit exceeded
+[Markets API] gP(7) failed in batch: Rate limit exceeded
+[Markets API] gPr2(7) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 1: 8 calls in 3371ms
+[Markets API] 32 RPC calls remain unavailable after round 1. Retrying in 600ms with smaller batches.
+[Markets API] RPC batch round 2 rate limited. Retrying in 600ms (1/3).
+[Markets API] RPC batch round 2: 4 calls in 1742ms
+[Markets API] RPC batch round 2: 4 calls in 605ms
+[Markets API] Time budget reached; returning the markets loaded so far.
+[Markets API] 24 RPC calls remain unavailable after round 2. Retrying in 1200ms with smaller batches.
+[Markets API] Time budget reached; returning the markets loaded so far.
+[Markets API] 24 calls remain unavailable. Individual fallbacks are disabled to keep the route below Netlify's timeout.
+[Markets API] Unable to build market 3: mb(3) was unavailable
+[Markets API] Unable to build market 5: mb(5) was unavailable
+[Markets API] Unable to build market 7: mb(7) was unavailable
+[Markets API] Loaded page 0-7: 5/8 markets in 28043ms
+[Markets API] Partial response was not cached (5/8 markets loaded).
+ GET /api/markets?start=0&limit=10 200 in 28.7s (next.js: 575ms, application-code: 28.1s)
+[Markets API] RPC batch round 1 failed; scheduling 32 calls for retry: RPC batch round 1 returned HTTP 400: {"error":{"code":-32600,"message":"Invalid request","data":{"reason":"batch request exceeds max size 20"}},"id":null,"jsonrpc":"2.0"}
+[Markets API] RPC batch round 1 failed; scheduling 32 calls for retry: RPC batch round 1 returned HTTP 400: {"error":{"code":-32600,"message":"Invalid request","data":{"reason":"batch request exceeds max size 20"}},"id":null,"jsonrpc":"2.0"}
+[Markets API] 64 RPC calls remain unavailable after round 1. Retrying in 500ms with smaller batches.
+[Markets API] RPC batch round 2 rate limited. Retrying in 500ms (1/3).
+[Markets API] RPC batch round 2 rate limited. Retrying in 1000ms (2/3).
+[Markets API] mr(1) failed in batch: Rate limit exceeded
+[Markets API] mf(1) failed in batch: Rate limit exceeded
+[Markets API] ms(1) failed in batch: Rate limit exceeded
+[Markets API] gL(1) failed in batch: Rate limit exceeded
+[Markets API] gP(1) failed in batch: Rate limit exceeded
+[Markets API] gPr2(1) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 2: 16 calls in 3379ms
+[Markets API] RPC batch round 2 rate limited. Retrying in 500ms (1/3).
+[Markets API] RPC batch round 2 rate limited. Retrying in 1000ms (2/3).
+[Markets API] mb(2) failed in batch: Rate limit exceeded
+[Markets API] mv(2) failed in batch: Rate limit exceeded
+[Markets API] mr(2) failed in batch: Rate limit exceeded
+[Markets API] mf(2) failed in batch: Rate limit exceeded
+[Markets API] ms(2) failed in batch: Rate limit exceeded
+[Markets API] gL(2) failed in batch: Rate limit exceeded
+[Markets API] gP(2) failed in batch: Rate limit exceeded
+[Markets API] gPr2(2) failed in batch: Rate limit exceeded
+[Markets API] mb(3) failed in batch: Rate limit exceeded
+[Markets API] mv(3) failed in batch: Rate limit exceeded
+[Markets API] mr(3) failed in batch: Rate limit exceeded
+[Markets API] mf(3) failed in batch: Rate limit exceeded
+[Markets API] ms(3) failed in batch: Rate limit exceeded
+[Markets API] gL(3) failed in batch: Rate limit exceeded
+[Markets API] gP(3) failed in batch: Rate limit exceeded
+[Markets API] gPr2(3) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 2: 16 calls in 3027ms
+[Markets API] RPC batch round 2 rate limited. Retrying in 500ms (1/3).
+[Markets API] RPC batch round 2 rate limited. Retrying in 1000ms (2/3).
+[Markets API] mb(4) failed in batch: Rate limit exceeded
+[Markets API] mv(4) failed in batch: Rate limit exceeded
+[Markets API] mr(4) failed in batch: Rate limit exceeded
+[Markets API] mf(4) failed in batch: Rate limit exceeded
+[Markets API] ms(4) failed in batch: Rate limit exceeded
+[Markets API] gL(4) failed in batch: Rate limit exceeded
+[Markets API] gP(4) failed in batch: Rate limit exceeded
+[Markets API] gPr2(4) failed in batch: Rate limit exceeded
+[Markets API] mb(5) failed in batch: Rate limit exceeded
+[Markets API] mv(5) failed in batch: Rate limit exceeded
+[Markets API] mr(5) failed in batch: Rate limit exceeded
+[Markets API] mf(5) failed in batch: Rate limit exceeded
+[Markets API] ms(5) failed in batch: Rate limit exceeded
+[Markets API] gL(5) failed in batch: Rate limit exceeded
+[Markets API] gP(5) failed in batch: Rate limit exceeded
+[Markets API] gPr2(5) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 2: 16 calls in 3055ms
+[Markets API] RPC batch round 2 rate limited. Retrying in 500ms (1/3).
+[Markets API] RPC batch round 2 rate limited. Retrying in 1000ms (2/3).
+[Markets API] mb(6) failed in batch: Rate limit exceeded
+[Markets API] mv(6) failed in batch: Rate limit exceeded
+[Markets API] mr(6) failed in batch: Rate limit exceeded
+[Markets API] mf(6) failed in batch: Rate limit exceeded
+[Markets API] ms(6) failed in batch: Rate limit exceeded
+[Markets API] gL(6) failed in batch: Rate limit exceeded
+[Markets API] gP(6) failed in batch: Rate limit exceeded
+[Markets API] gPr2(6) failed in batch: Rate limit exceeded
+[Markets API] mb(7) failed in batch: Rate limit exceeded
+[Markets API] mv(7) failed in batch: Rate limit exceeded
+[Markets API] mr(7) failed in batch: Rate limit exceeded
+[Markets API] mf(7) failed in batch: Rate limit exceeded
+[Markets API] ms(7) failed in batch: Rate limit exceeded
+[Markets API] gL(7) failed in batch: Rate limit exceeded
+[Markets API] gP(7) failed in batch: Rate limit exceeded
+[Markets API] gPr2(7) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 2: 16 calls in 3070ms
+[Markets API] 54 RPC calls remain unavailable after round 2. Retrying in 1000ms with smaller batches.
+[Markets API] RPC batch round 3: 8 calls in 491ms
+[Markets API] RPC batch round 3 rate limited. Retrying in 500ms (1/3).
+[Markets API] RPC batch round 3 rate limited. Retrying in 1000ms (2/3).
+[Markets API] mr(2) failed in batch: Rate limit exceeded
+[Markets API] mf(2) failed in batch: Rate limit exceeded
+[Markets API] ms(2) failed in batch: Rate limit exceeded
+[Markets API] gL(2) failed in batch: Rate limit exceeded
+[Markets API] gP(2) failed in batch: Rate limit exceeded
+[Markets API] gPr2(2) failed in batch: Rate limit exceeded
+[Markets API] mb(3) failed in batch: Rate limit exceeded
+[Markets API] mv(3) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 3: 8 calls in 3001ms
+[Markets API] RPC batch round 3 rate limited. Retrying in 500ms (1/3).
+[Markets API] RPC batch round 3: 8 calls in 1616ms
+[Markets API] RPC batch round 3 rate limited. Retrying in 500ms (1/3).
+[Markets API] RPC batch round 3 rate limited. Retrying in 1000ms (2/3).
+[Markets API] mr(4) failed in batch: Rate limit exceeded
+[Markets API] mf(4) failed in batch: Rate limit exceeded
+[Markets API] ms(4) failed in batch: Rate limit exceeded
+[Markets API] gL(4) failed in batch: Rate limit exceeded
+[Markets API] gP(4) failed in batch: Rate limit exceeded
+[Markets API] gPr2(4) failed in batch: Rate limit exceeded
+[Markets API] mb(5) failed in batch: Rate limit exceeded
+[Markets API] mv(5) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 3: 8 calls in 3093ms
+[Markets API] Time budget reached; returning the markets loaded so far.
+[Markets API] 38 calls remain unavailable. Individual fallbacks are disabled to keep the route below Netlify's timeout.
+[Markets API] Unable to build market 2: mr(2) was unavailable
+[Markets API] Unable to build market 3: mb(3) was unavailable
+[Markets API] Unable to build market 4: mr(4) was unavailable
+[Markets API] Unable to build market 5: mb(5) was unavailable
+[Markets API] Unable to build market 6: mb(6) was unavailable
+[Markets API] Unable to build market 7: mb(7) was unavailable
+[Markets API] Loaded page 0-7: 2/8 markets in 28709ms
+[Markets API] Partial response was not cached (2/8 markets loaded).
+ GET /api/markets?start=0&limit=10 200 in 29.6s (next.js: 754ms, application-code: 28.8s)
+[Markets API] RPC batch round 1: 8 calls in 502ms
+[Markets API] RPC batch round 1 rate limited. Retrying in 500ms (1/3).
+[Markets API] RPC batch round 1 rate limited. Retrying in 1000ms (2/3).
+[Markets API] mb(1) failed in batch: Rate limit exceeded
+[Markets API] mv(1) failed in batch: Rate limit exceeded
+[Markets API] mr(1) failed in batch: Rate limit exceeded
+[Markets API] mf(1) failed in batch: Rate limit exceeded
+[Markets API] ms(1) failed in batch: Rate limit exceeded
+[Markets API] gL(1) failed in batch: Rate limit exceeded
+[Markets API] gP(1) failed in batch: Rate limit exceeded
+[Markets API] gPr2(1) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 1: 8 calls in 2953ms
+[Markets API] RPC batch round 1 rate limited. Retrying in 500ms (1/3).
+[Markets API] RPC batch round 1: 8 calls in 1654ms
+[Markets API] RPC batch round 1 rate limited. Retrying in 500ms (1/3).
+[Markets API] RPC batch round 1 rate limited. Retrying in 1000ms (2/3).
+[Markets API] mb(3) failed in batch: Rate limit exceeded
+[Markets API] mv(3) failed in batch: Rate limit exceeded
+[Markets API] mr(3) failed in batch: Rate limit exceeded
+[Markets API] mf(3) failed in batch: Rate limit exceeded
+[Markets API] ms(3) failed in batch: Rate limit exceeded
+[Markets API] gL(3) failed in batch: Rate limit exceeded
+[Markets API] gP(3) failed in batch: Rate limit exceeded
+[Markets API] gPr2(3) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 1: 8 calls in 3052ms
+[Markets API] RPC batch round 1 rate limited. Retrying in 500ms (1/3).
+[Markets API] RPC batch round 1: 8 calls in 1716ms
+[Markets API] 16 RPC calls remain unavailable after round 1. Retrying in 500ms with smaller batches.
+[Markets API] RPC batch round 2 rate limited. Retrying in 500ms (1/3).
+[Markets API] RPC batch round 2 rate limited. Retrying in 1000ms (2/3).
+[Markets API] mb(1) failed in batch: Rate limit exceeded
+[Markets API] mv(1) failed in batch: Rate limit exceeded
+[Markets API] mr(1) failed in batch: Rate limit exceeded
+[Markets API] mf(1) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 2: 4 calls in 3276ms
+[Markets API] RPC batch round 2 rate limited. Retrying in 500ms (1/3).
+[Markets API] RPC batch round 2: 4 calls in 1655ms
+[Markets API] RPC batch round 2: 4 calls in 534ms
+[Markets API] RPC batch round 2 rate limited. Retrying in 500ms (1/3).
+[Markets API] RPC batch round 2 rate limited. Retrying in 1000ms (2/3).
+[Markets API] ms(3) failed in batch: Rate limit exceeded
+[Markets API] gL(3) failed in batch: Rate limit exceeded
+[Markets API] gP(3) failed in batch: Rate limit exceeded
+[Markets API] gPr2(3) failed in batch: Rate limit exceeded
+[Markets API] RPC batch round 2: 4 calls in 3057ms
+[Markets API] 8 RPC calls remain unavailable after round 2. Retrying in 1000ms with smaller batches.
+[Markets API] RPC batch round 3: 2 calls in 483ms
+[Markets API] RPC batch round 3: 2 calls in 599ms
+[Markets API] RPC batch round 3: 2 calls in 508ms
+[Markets API] Time budget reached; returning the markets loaded so far.
+[Markets API] 2 calls remain unavailable. Individual fallbacks are disabled to keep the route below Netlify's timeout.
+[Markets API] Unable to build market 3: gP(3) was unavailable
+[Markets API] Loaded page 0-4: 4/5 markets in 26831ms
+[Markets API] Partial response was not cached (4/8 markets loaded).
+ GET /api/markets?start=0&limit=5 200 in 27.4s (next.js: 500ms, application-code: 26.9s)

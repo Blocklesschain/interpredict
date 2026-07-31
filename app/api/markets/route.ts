@@ -981,11 +981,16 @@ export async function GET(request: Request) {
     ))
     const isComplete = diagnostics?.marketsLoaded === expectedOnPage
 
+    // Cache both complete and partial responses. Partial responses get a
+    // shorter TTL so the client can immediately use whatever markets loaded
+    // while a fresh fetch fills in the gaps on the next request.
+    const partialTtl = Math.min(ttl, 10_000)
     if (isComplete) {
       responseCache.set(cacheKey, { expiresAt: Date.now() + ttl, payload })
     } else {
+      responseCache.set(cacheKey, { expiresAt: Date.now() + partialTtl, payload })
       console.warn(
-        `[Markets API] Partial response was not cached (${diagnostics?.marketsLoaded || 0}/${diagnostics?.totalMarketsReported || 0} markets loaded).`
+        `[Markets API] Partial response cached with ${partialTtl}ms TTL (${diagnostics?.marketsLoaded || 0}/${diagnostics?.totalMarketsReported || 0} markets loaded).`
       )
     }
 

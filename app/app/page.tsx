@@ -182,7 +182,7 @@ export default function DAppPortal() {
     resolveMarketOnChain, claimDecRewardsOnChain,
     claimCreatorFeesOnChain, claimCreatorSeedOnChain,
     voteOnResolutionOnChain, finalizeResolutionVotingOnChain,
-    finalizeProposalVotingOnChain, t } = useWeb3()
+    finalizeProposalVotingOnChain, readContract, t } = useWeb3()
 
   const [activeTab, setActiveTab] = useState<TabType>('MarketPlace')
   const [stakeAmount, setStakeAmount] = useState<string>('0.1')
@@ -585,59 +585,129 @@ export default function DAppPortal() {
       const shouldUsePublicAPI = !walletAddress || typeof window === 'undefined' || !(window as any).ethereum
       if (shouldUsePublicAPI) return
 
-      const iface = new ethers.Interface(contractABI)
-      const ethCall = async (data: string): Promise<string | null> => {
-        try {
-          const result: string = await (window as any).ethereum.request({
-            method: 'eth_call',
-            params: [{ to: CONTRACT_ADDRESS, data }, 'latest']
-          })
-          return result && result !== '0x' ? result : null
-        } catch { return null }
-      }
-
-      // Shared market data and wallet history come from the authenticated API.
-      // Only lightweight wallet-specific reads continue below.
-
-
-      // Check DEC membership
-      const decHex = await ethCall(iface.encodeFunctionData("iad", [walletAddress]))
-      if (decHex) {
-        const isMember = iface.decodeFunctionResult("iad", decHex)[0]
-        setHasJoinedDEC(isMember)
-      }
-
-      // Admin DEC list
-      if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
-        const membersHex = await ethCall(iface.encodeFunctionData("gAD"))
-        if (membersHex) {
-          const members = iface.decodeFunctionResult("gAD", membersHex)[0]
-          setBlockchainDecList(Array.from(members as string[]))
-        }
-      }
-
-      // DEC rewards
-      if (hasJoinedDEC) {
-        const poolHex = await ethCall(iface.encodeFunctionData("drp"))
-        const membersHex = await ethCall(iface.encodeFunctionData("tdm"))
-        const pool = poolHex ? BigInt(iface.decodeFunctionResult("drp", poolHex)[0].toString()) : BigInt(0)
-        const members = membersHex ? BigInt(iface.decodeFunctionResult("tdm", membersHex)[0].toString()) : BigInt(0)
-        setDecPoolTotal(pool.toString())
-        setDecMemberCount(Number(members))
-        if (members > BigInt(0)) {
-          const sharePerMember = pool / members
-          setDecRewardsClaimable(sharePerMember.toString())
-        }
-      }
-
       // Fetch wallet balance through the authenticated provider
       try {
         const bal = await getWalletBalance(walletAddress)
         setWalletBalance(bal)
       } catch { }
 
-      // Wallet participation history is loaded by /api/markets from SP and WC events.
-      // This preserves winning, losing, and already-claimed positions after balances change.
+      // Check DEC membership through authenticated provider
+      const isMember = await readContract('iad', [walletAddress])
+      if (isMember) {
+        setHasJoinedDEC(Boolean(isMember))
+      }
+
+      // Admin DEC list
+      if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
+        const members = await readContract('gAD', [])
+        if (members) {
+          setBlockchainDecList(Array.from(members as string[]))
+        }
+      }
+
+      // DEC rewards through authenticated provider
+      if (hasJoinedDEC || isMember) {
+        const pool = await readContract('drp', [])
+        const members = await readContract('tdm', [])
+        const poolVal = pool ? BigInt(pool.toString()) : BigInt(0)
+        const membersVal = members ? BigInt(members.toString()) : BigInt(0)
+        setDecPoolTotal(poolVal.toString())
+        setDecMemberCount(Number(membersVal))
+        if (membersVal > BigInt(0)) {
+          const sharePerMember = poolVal / membersVal
+          setDecRewardsClaimable(sharePerMember.toString())
+        }
+      }
+
+      // Load wallet-specific data (shares, votes, claims) for all markets.
+      // Uses the authenticated provider via readContract - window.ethereum.request
+      // does NOT carry the Bearer auth header the Interlink testnet requires.
+      try {
+        const updatedMarkets: SmartMarket[] = []
+        const positions: MyPosition[] = []
+
+        for (const market of baseMarkets) {
+          // Read proposal vote (0=none, 1=approve, 2=reject)
+          const proposalVote = await readContract('pv', [market.id, walletAddress])
+          const proposalVoteNum = proposalVote ? Number(proposalVote) : 0
+
+          // Read resolution vote
+          const resolutionVote = await readContract('rv', [market.id, walletAddress])
+          const resolutionVoteNum = resolutionVote ? Number(resolutionVote) : 0
+
+          // Read has voted on proposal
+          const hasVotedOnProposal = await readContract('hvp', [market.id, walletAddress])
+          const hasVoted = hasVotedOnProposal ? Boolean(hasVotedOnProposal) : false
+
+          // Read has claimed winnings
+          const hasClaimedResult = await readContract('hcw', [market.id, walletAddress])
+          const hasClaimed = hasClaimedResult ? Boolean(hasClaimedResult) : false
+
+          // Read shares for each outcome
+          const shares: string[] = []
+          for (let oi = 0; oi < (market.outcomeLabels?.length || 0); oi++) {
+            const shResult = await readContract('sh', [market.id, oi, walletAddress])
+            shares.push(shResult ? BigInt(shResult.toString()).toString() : '0')
+          }
+
+          const hasAnyShares = shares.some(s => BigInt(s || '0') > BigInt(0))
+
+          // Update market with wallet vote data
+          updatedMarkets.push({
+            ...market,
+            hasCurrentWalletVoted: hasVoted || proposalVoteNum !== 0,
+            currentWalletProposalVote: proposalVoteNum,
+            hasCurrentWalletVotedOnResolution: resolutionVoteNum !== 0,
+            currentWalletResolutionVote: resolutionVoteNum
+          })
+
+          // Build position if wallet has shares or has claimed
+          if (hasAnyShares || hasClaimed) {
+            // Calculate claimable payout for finalized markets
+            let claimablePayout = '0'
+            if (market.finalized && !hasClaimed) {
+              const winningOutcome = Number(market.confirmedOutcome)
+              const userShares = BigInt(shares[winningOutcome] || '0')
+              const pools = (market.outcomePools || []).map(v => BigInt(v || '0'))
+              const totalPool = pools.reduce((sum, v) => sum + v, BigInt(0))
+              const winningPool = BigInt(market.outcomePools?.[winningOutcome] || '0')
+              if (userShares > BigInt(0) && winningPool > BigInt(0)) {
+                const grossPayout = (userShares * totalPool) / winningPool
+                claimablePayout = (grossPayout - ((grossPayout * BigInt(500)) / BigInt(10000))).toString()
+              }
+            }
+
+            positions.push({
+              marketId: market.id,
+              question: market.question,
+              marketState: market.state,
+              confirmedOutcome: market.confirmedOutcome,
+              shares,
+              stakes: shares.map(() => '0'),
+              totalStake: shares.reduce((sum, s) => sum + BigInt(s || '0'), BigInt(0)).toString(),
+              claimablePayout,
+              claimedPayout: '0',
+              claimed: hasClaimed,
+              marketEndTime: market.marketEndTime,
+              outcomeLabels: market.outcomeLabels || [],
+              outcomePools: market.outcomePools || []
+            })
+          }
+        }
+
+        // Update markets with wallet vote data so Market Proposals shows correct status
+        if (updatedMarkets.length > 0) {
+          setAllOnChainMarkets(updatedMarkets)
+          try {
+            sessionStorage.setItem('interpredict_public_markets', JSON.stringify(updatedMarkets))
+          } catch { }
+        }
+
+        // Populate My Votes tab
+        setMyPositions(positions)
+      } catch (walletDataErr) {
+        console.warn('Wallet position data loading failed:', walletDataErr)
+      }
 
     } catch (err: any) {
       console.warn("Scan error:", err?.message || err)
@@ -1304,9 +1374,9 @@ export default function DAppPortal() {
               <div className="p-6 bg-gradient-to-br from-purple-950/20 to-indigo-950/20 border border-purple-900/30 rounded-xl text-center w-full max-w-xl">
                 <Shield className="size-10 mx-auto text-primary mb-3" />
                 <p className="text-sm font-semibold mb-1 text-slate-200">{t('assessorTitle')}</p>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">DEC membership requires a 0.1 tITL native-token payment and admin approval. Admin wallets are not charged.</p>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">A 0.1 tITL native-token payment is required to apply for DEC Committee membership. Admin wallets are not charged.</p>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5 leading-relaxed">Submit a request to join the DEC Committee. An admin will review and approve it.</p>
-                <button onClick={handleJoinCommitteeSubmit} className="px-6 py-2.5 bg-primary text-white font-bold text-xs rounded-xl">{t('assessorBtn')}</button>
+                <button onClick={handleJoinCommitteeSubmit} className="px-6 py-2.5 bg-gradient-to-r from-primary to-purple-600 text-white font-bold text-xs rounded-xl shadow-lg">Join DEC (0.1 tITL)</button>
               </div>
             )}
 
@@ -1424,12 +1494,12 @@ export default function DAppPortal() {
               <div className="space-y-4 w-full">
                 {!walletAddress ? (
                   <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">Connect your wallet.</div>
-                ) : awaitingResolutionMarkets.length === 0 ? (
+                ) : unresolvedMarkets.length === 0 ? (
                   <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No markets awaiting a resolution request.</div>
                 ) : (
                   <>
                     <p className="text-[10px] text-slate-500 mb-2">Expired markets that can still enter the resolution process.</p>
-                    {awaitingResolutionMarkets.map((market) => (
+                    {unresolvedMarkets.map((market) => (
                       <div key={market.id} className="bg-secondary/30 border border-yellow-500/20 rounded-xl p-4 sm:p-5 w-full max-w-xl">
                         <div className="flex justify-between items-center mb-2">
                           <span className="text-xs font-mono text-primary font-bold">Market #{market.id}</span>

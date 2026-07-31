@@ -15,11 +15,11 @@ const RPC_URL = 'https://evm-rpc.test-net.interlinklabs.ai/v1/rpc'
 
 const MAX_RPC_ATTEMPTS = 3
 const INITIAL_RETRY_DELAY_MS = 500
-const RPC_BATCH_SIZE = 12
+const RPC_BATCH_SIZE = 8
 const RPC_BATCH_RETRY_ROUNDS = 3
-const RPC_BATCH_GAP_MS = 120
-const DEFAULT_PAGE_SIZE = 8
-const MAX_PAGE_SIZE = 20
+const RPC_BATCH_GAP_MS = 300
+const DEFAULT_PAGE_SIZE = 5
+const MAX_PAGE_SIZE = 10
 const PUBLIC_CACHE_TTL_MS = 30_000
 const WALLET_CACHE_TTL_MS = 20_000
 const MAX_ROUTE_TIME_MS = 28_000
@@ -158,6 +158,9 @@ interface CacheEntry {
 
 const responseCache = new Map<string, CacheEntry>()
 const inFlightRequests = new Map<string, Promise<Record<string, unknown>>>()
+let resolutionDeadlineCache:
+  | { expiresAt: number; deadlines: Map<number, number> }
+  | null = null
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -491,6 +494,11 @@ async function loadLogsChunked(
 async function loadResolutionVotingDeadlines(
   accessToken: string
 ): Promise<Map<number, number>> {
+  const now = Date.now()
+  if (resolutionDeadlineCache && resolutionDeadlineCache.expiresAt > now) {
+    return new Map(resolutionDeadlineCache.deadlines)
+  }
+
   const deadlines = new Map<number, number>()
   if (!ENABLE_RESOLUTION_EVENT_SCAN) return deadlines
 
@@ -513,6 +521,10 @@ async function loadResolutionVotingDeadlines(
     console.warn('[Markets API] Resolution deadline event lookup failed:', getErrorMessage(error))
   }
 
+  resolutionDeadlineCache = {
+    expiresAt: now + 60_000,
+    deadlines
+  }
   return deadlines
 }
 
@@ -577,28 +589,30 @@ function buildMarket(
   values: Map<string, ethers.Result>,
   resolutionVotingDeadline: number
 ): LoadedMarket {
-  const get = (name: string): ethers.Result => {
+  const getRequired = (name: string): ethers.Result => {
     const value = values.get(`${marketId}:${name}`)
     if (!value) throw new Error(`${name}(${marketId}) was unavailable`)
     return value
   }
+  const getOptional = (name: string): ethers.Result | null =>
+    values.get(`${marketId}:${name}`) || null
 
-  const base = get('mb')
-  const voting = get('mv')
-  const resolution = get('mr')
-  const financial = get('mf')
-  const stateResult = get('ms')
-  const labelsResult = get('gL')
-  const poolsResult = get('gP')
-  const pricesResult = get('gPr2')
+  const base = getRequired('mb')
+  const stateResult = getRequired('ms')
+  const voting = getOptional('mv')
+  const resolution = getOptional('mr')
+  const financial = getOptional('mf')
+  const labelsResult = getOptional('gL')
+  const poolsResult = getOptional('gP')
+  const pricesResult = getOptional('gPr2')
 
   const state = Number(stateResult[0])
   const category = Number(base.cat ?? base[2])
   const origin = Number(base.o ?? base[5])
-  const proposalDecision = Number(voting.pd ?? voting[5])
-  const outcomeLabels = Array.from(labelsResult[0] as readonly string[])
-  const outcomePools = Array.from(poolsResult[0] as readonly bigint[]).map(String)
-  const rawOutcomePrices = Array.from(pricesResult[0] as readonly bigint[])
+  const proposalDecision = Number(voting?.pd ?? voting?.[5] ?? 0)
+  const outcomeLabels = Array.from((labelsResult?.[0] as readonly string[] | undefined) || [])
+  const outcomePools = Array.from((poolsResult?.[0] as readonly bigint[] | undefined) || []).map(String)
+  const rawOutcomePrices = Array.from((pricesResult?.[0] as readonly bigint[] | undefined) || [])
   const marketEndTime = bigintToNumber(base.et ?? base[7])
   const nowSec = Math.floor(Date.now() / 1000)
   const canRequestResolution =
@@ -622,34 +636,34 @@ function buildMarket(
     resolutionCriteria: String(base.rc ?? base[8]),
     primaryEvidenceUri: String(base.pe ?? base[9]),
     backupEvidenceUri: String(base.be ?? base[10]),
-    proposalVotingStart: bigintToNumber(voting.pvs ?? voting[0]),
-    proposalVotingDeadline: bigintToNumber(voting.pvd ?? voting[1]),
-    approvalVotes: bigintToNumber(voting.apv ?? voting[2]),
-    rejectionVotes: bigintToNumber(voting.rjv ?? voting[3]),
-    proposalFinalized: Boolean(voting.pf ?? voting[4]),
+    proposalVotingStart: bigintToNumber(voting?.pvs ?? voting?.[0] ?? BigInt(0)),
+    proposalVotingDeadline: bigintToNumber(voting?.pvd ?? voting?.[1] ?? BigInt(0)),
+    approvalVotes: bigintToNumber(voting?.apv ?? voting?.[2] ?? BigInt(0)),
+    rejectionVotes: bigintToNumber(voting?.rjv ?? voting?.[3] ?? BigInt(0)),
+    proposalFinalized: Boolean(voting?.pf ?? voting?.[4] ?? false),
     proposalDecision,
     proposalDecisionName: PROPOSAL_DECISION_NAMES[proposalDecision] || `Decision ${proposalDecision}`,
-    proposalFinalizationTimestamp: bigintToNumber(voting.pft ?? voting[6]),
-    refundAmount: bigintToString(voting.ra ?? voting[7]),
-    refundRecipient: String(voting.rr ?? voting[8]),
-    refundCompleted: Boolean(voting.rc ?? voting[9]),
+    proposalFinalizationTimestamp: bigintToNumber(voting?.pft ?? voting?.[6] ?? BigInt(0)),
+    refundAmount: bigintToString(voting?.ra ?? voting?.[7] ?? BigInt(0)),
+    refundRecipient: String(voting?.rr ?? voting?.[8] ?? ethers.ZeroAddress),
+    refundCompleted: Boolean(voting?.rc ?? voting?.[9] ?? false),
     resolutionVotingDeadline,
-    activeDECSnapshot: bigintToNumber(resolution.snap ?? resolution[0]),
-    resolutionQuorum: bigintToNumber(resolution.quorum ?? resolution[1]),
-    totalResolutionVotes: bigintToNumber(resolution.trv ?? resolution[2]),
-    confirmedOutcome: Number(resolution.co ?? resolution[3]),
-    decSelectedOutcome: Number(resolution.co ?? resolution[3]),
-    outcomeConfirmed: Boolean(resolution.oc ?? resolution[4]),
-    finalized: Boolean(resolution.fin ?? resolution[5]),
+    activeDECSnapshot: bigintToNumber(resolution?.snap ?? resolution?.[0] ?? BigInt(0)),
+    resolutionQuorum: bigintToNumber(resolution?.quorum ?? resolution?.[1] ?? BigInt(0)),
+    totalResolutionVotes: bigintToNumber(resolution?.trv ?? resolution?.[2] ?? BigInt(0)),
+    confirmedOutcome: Number(resolution?.co ?? resolution?.[3] ?? 0),
+    decSelectedOutcome: Number(resolution?.co ?? resolution?.[3] ?? 0),
+    outcomeConfirmed: Boolean(resolution?.oc ?? resolution?.[4] ?? false),
+    finalized: Boolean(resolution?.fin ?? resolution?.[5] ?? false),
     finalizationTimestamp: 0,
-    totalVolume: bigintToString(financial.tv ?? financial[0]),
-    participantCount: bigintToNumber(financial.pc ?? financial[1]),
-    creatorFeesEarned: bigintToString(financial.cfe ?? financial[2]),
-    creatorFeesClaimed: bigintToString(financial.cfc ?? financial[3]),
-    creatorSeedClaimed: bigintToString(financial.csc ?? financial[4]),
-    cancelled: Boolean(financial.can ?? financial[5]),
-    cancelReason: String(financial.cr ?? financial[6]),
-    cancelTimestamp: bigintToNumber(financial.ct ?? financial[7]),
+    totalVolume: bigintToString(financial?.tv ?? financial?.[0] ?? BigInt(0)),
+    participantCount: bigintToNumber(financial?.pc ?? financial?.[1] ?? BigInt(0)),
+    creatorFeesEarned: bigintToString(financial?.cfe ?? financial?.[2] ?? BigInt(0)),
+    creatorFeesClaimed: bigintToString(financial?.cfc ?? financial?.[3] ?? BigInt(0)),
+    creatorSeedClaimed: bigintToString(financial?.csc ?? financial?.[4] ?? BigInt(0)),
+    cancelled: Boolean(financial?.can ?? financial?.[5] ?? false),
+    cancelReason: String(financial?.cr ?? financial?.[6] ?? ''),
+    cancelTimestamp: bigintToNumber(financial?.ct ?? financial?.[7] ?? BigInt(0)),
     state,
     stateName: STATE_NAMES[state] || `Unknown State ${state}`,
     outcomeLabels,
@@ -693,6 +707,25 @@ async function loadMarketRange(
   }
 
   const values = await rpcBatchRead(accessToken, calls, 1000 + start * 100, routeStartedAt)
+
+  for (let marketId = start; marketId < endExclusive; marketId++) {
+    for (const requiredFunction of ['mb', 'ms']) {
+      const key = `${marketId}:${requiredFunction}`
+      if (values.has(key)) continue
+      if (Date.now() - routeStartedAt >= MAX_ROUTE_TIME_MS - 1_000) break
+      try {
+        const raw = await rpcCall(
+          accessToken,
+          iface.encodeFunctionData(requiredFunction, [marketId]),
+          `${requiredFunction}(${marketId}) recovery`,
+          700000 + marketId
+        )
+        values.set(key, iface.decodeFunctionResult(requiredFunction, raw))
+      } catch (error) {
+        console.warn(`[Markets API] Required recovery failed for ${requiredFunction}(${marketId}): ${getErrorMessage(error)}`)
+      }
+    }
+  }
   const markets: LoadedMarket[] = []
   const skipped: SkippedMarket[] = []
 
@@ -914,13 +947,14 @@ async function generatePayload(
   const safeStart = Math.min(Math.max(0, pageStart), totalCount)
   const endExclusive = Math.min(safeStart + pageLimit, totalCount)
   const deadlines = await loadResolutionVotingDeadlines(accessToken)
+  const marketLoadStartedAt = Date.now()
   const { markets, skipped } = await loadMarketRange(
-    accessToken, safeStart, endExclusive, deadlines, startedAt
+    accessToken, safeStart, endExclusive, deadlines, marketLoadStartedAt
   )
 
   let walletPositions: Array<Record<string, unknown>> = []
-  if (walletAddress && ENABLE_WALLET_ENRICHMENT && Date.now() - startedAt < MAX_ROUTE_TIME_MS - 5_000) {
-    const walletHistory = await enrichWalletData(accessToken, markets, walletAddress, startedAt)
+  if (walletAddress && ENABLE_WALLET_ENRICHMENT && Date.now() - marketLoadStartedAt < MAX_ROUTE_TIME_MS - 5_000) {
+    const walletHistory = await enrichWalletData(accessToken, markets, walletAddress, marketLoadStartedAt)
     walletPositions = buildWalletPositions(walletHistory, markets)
   }
 

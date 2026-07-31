@@ -133,7 +133,7 @@ export default function HomePage() {
       setIsLoading(true)
       setMarketError(null)
 
-      const PAGE_SIZE = 12
+      const PAGE_SIZE = 10
       const MAX_PAGE_ATTEMPTS = 3
       const PAGE_REQUEST_TIMEOUT_MS = 15_000
       const byId = new Map<number, MarketType>()

@@ -15,11 +15,11 @@ const RPC_URL = 'https://evm-rpc.test-net.interlinklabs.ai/v1/rpc'
 
 const MAX_RPC_ATTEMPTS = 3
 const INITIAL_RETRY_DELAY_MS = 500
-const RPC_BATCH_SIZE = 8
+const RPC_BATCH_SIZE = 12
 const RPC_BATCH_RETRY_ROUNDS = 3
-const RPC_BATCH_GAP_MS = 300
-const DEFAULT_PAGE_SIZE = 3
-const MAX_PAGE_SIZE = 5
+const RPC_BATCH_GAP_MS = 120
+const DEFAULT_PAGE_SIZE = 8
+const MAX_PAGE_SIZE = 20
 const PUBLIC_CACHE_TTL_MS = 30_000
 const WALLET_CACHE_TTL_MS = 20_000
 const MAX_ROUTE_TIME_MS = 28_000
@@ -411,9 +411,34 @@ async function rpcBatchRead(
   }
 
   if (pending.length > 0) {
-    console.warn(
-      `[Markets API] ${pending.length} calls remain unavailable. Individual fallbacks are disabled to keep the route below Netlify's timeout.`
-    )
+    console.warn(`[Markets API] Attempting individual fallback for ${pending.length} remaining calls.`)
+
+    const stillPending: BatchCall[] = []
+    for (const call of pending) {
+      if (Date.now() - routeStartedAt >= MAX_ROUTE_TIME_MS - 1_000) {
+        stillPending.push(call)
+        continue
+      }
+
+      try {
+        const result = await rpcCall(
+          accessToken,
+          iface.encodeFunctionData(call.functionName, call.args),
+          `${call.callName} fallback`,
+          startId + requestSequence++
+        )
+        output.set(call.key, iface.decodeFunctionResult(call.functionName, result))
+      } catch (error) {
+        console.warn(`[Markets API] Fallback failed for ${call.callName}: ${getErrorMessage(error)}`)
+        stillPending.push(call)
+      }
+    }
+
+    if (stillPending.length > 0) {
+      console.warn(
+        `[Markets API] ${stillPending.length} calls remain unavailable after fallback.`
+      )
+    }
   }
 
   return output

@@ -97,13 +97,13 @@ export default function HomePage() {
 
   const formatVolume = (market: MarketType) => {
     try {
-      const contractTotalVolume = BigInt(market.totalVolume || '0')
-      if (contractTotalVolume > BigInt(0)) {
-        return Number(ethers.formatEther(contractTotalVolume)).toFixed(1)
-      }
       const pools = Array.isArray(market.outcomePools) ? market.outcomePools : []
       const totalPool = pools.reduce((sum, value) => sum + BigInt(value || '0'), BigInt(0))
-      return Number(ethers.formatEther(totalPool)).toFixed(1)
+      if (totalPool > BigInt(0)) {
+        return Number(ethers.formatEther(totalPool)).toFixed(1)
+      }
+      const contractTotalVolume = BigInt(market.totalVolume || '0')
+      return Number(ethers.formatEther(contractTotalVolume)).toFixed(1)
     } catch {
       return '0.0'
     }
@@ -133,39 +133,65 @@ export default function HomePage() {
       setIsLoading(true)
       setMarketError(null)
 
-      const PAGE_SIZE = 5
+      const PAGE_SIZE = 12
+      const MAX_PAGE_ATTEMPTS = 3
+      const PAGE_REQUEST_TIMEOUT_MS = 15_000
       const byId = new Map<number, MarketType>()
-      let start = 0
-      let totalMarkets = 0
-
-      // Paginate through all markets so the home page shows every market,
-      // not just the first page returned by the API.
-      do {
-        const res = await fetch(
-          `/api/markets?start=${start}&limit=${PAGE_SIZE}`,
-          { cache: 'no-store' }
-        )
-
-        if (!res.ok) {
-          throw new Error('Failed to load public markets')
+      const fetchPage = async (start: number) => {
+        let lastError: unknown = null
+        for (let attempt = 1; attempt <= MAX_PAGE_ATTEMPTS; attempt++) {
+          const controller = new AbortController()
+          const timeoutId = window.setTimeout(() => controller.abort(), PAGE_REQUEST_TIMEOUT_MS)
+          try {
+            const res = await fetch(`/api/markets?start=${start}&limit=${PAGE_SIZE}`, {
+              cache: 'no-store',
+              signal: controller.signal,
+            })
+            if (!res.ok) {
+              throw new Error(`Failed to load market page ${start}: HTTP ${res.status}`)
+            }
+            return await res.json()
+          } catch (error) {
+            lastError = error
+            if (attempt < MAX_PAGE_ATTEMPTS) {
+              await new Promise(resolve => setTimeout(resolve, attempt * 500))
+            }
+          } finally {
+            window.clearTimeout(timeoutId)
+          }
         }
+        throw lastError || new Error(`Failed to load market page ${start}`)
+      }
 
-        const data = await res.json()
-        const pageMarkets: MarketType[] = Array.isArray(data.allMarkets)
-          ? data.allMarkets
-          : []
-
+      const mergePage = (data: any) => {
+        const pageMarkets: MarketType[] = Array.isArray(data?.allMarkets) ? data.allMarkets : []
         for (const market of pageMarkets) {
           byId.set(Number(market.id), market)
         }
+      }
 
-        const pagination = data.pagination || {}
-        totalMarkets = Number(pagination.totalMarkets || pageMarkets.length)
-        start = Number(pagination.nextStart || start + PAGE_SIZE)
+      const firstPage = await fetchPage(0)
+      mergePage(firstPage)
+      const totalMarkets = Number(firstPage?.pagination?.totalMarkets || 0)
+      const remainingStarts: number[] = []
+      for (let start = PAGE_SIZE; start < totalMarkets; start += PAGE_SIZE) {
+        remainingStarts.push(start)
+      }
 
-        // Safety guard: stop if the API reports no more pages.
-        if (pageMarkets.length === 0) break
-      } while (start < totalMarkets)
+      const remainingPages = await Promise.all(
+        remainingStarts.map(async (start) => {
+          try {
+            return await fetchPage(start)
+          } catch (error) {
+            console.warn(`[Home] Failed to load market page ${start}:`, error)
+            return null
+          }
+        })
+      )
+
+      for (const page of remainingPages) {
+        if (page) mergePage(page)
+      }
 
       const allMarkets = Array.from(byId.values()).sort((a, b) => a.id - b.id)
       const now = Math.floor(Date.now() / 1000)

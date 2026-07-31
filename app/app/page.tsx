@@ -128,15 +128,15 @@ function getOutcomePercentage(market: SmartMarket, outcomeIndex: number): string
 
 function getTotalMarketVolume(market: SmartMarket): string {
   try {
-    const contractTotalVolume = BigInt(market.totalVolume || '0')
-
-    if (contractTotalVolume > BigInt(0)) {
-      return formatTokenAmountFromWei(contractTotalVolume.toString(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-    }
-
     const pools = Array.isArray(market.outcomePools) ? market.outcomePools : []
     const totalPool = pools.reduce((sum, value) => sum + BigInt(value || '0'), BigInt(0))
-    return formatTokenAmountFromWei(totalPool.toString(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+
+    if (totalPool > BigInt(0)) {
+      return formatTokenAmountFromWei(totalPool.toString(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+    }
+
+    const contractTotalVolume = BigInt(market.totalVolume || '0')
+    return formatTokenAmountFromWei(contractTotalVolume.toString(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
   } catch (error) {
     console.warn(`Unable to calculate total volume for market ${market.id}:`, error)
     return '0.0'
@@ -236,11 +236,12 @@ export default function DAppPortal() {
       let baseMarkets: SmartMarket[] = []
 
       try {
-        const PAGE_SIZE = 5
-        const MAX_PAGE_ATTEMPTS = 4
-        const PAGE_REQUEST_TIMEOUT_MS = 30_000
-        const PAGE_GAP_MS = 500
-        const FINAL_RETRY_GAP_MS = 1_000
+        const PAGE_SIZE = 8
+        const MAX_PAGE_ATTEMPTS = 3
+        const PAGE_REQUEST_TIMEOUT_MS = 18_000
+        const PAGE_GAP_MS = 120
+        const FINAL_RETRY_GAP_MS = 500
+        const PAGE_FETCH_CONCURRENCY = 3
 
         const byId = new Map<number, SmartMarket>()
 
@@ -467,28 +468,38 @@ export default function DAppPortal() {
           remainingPageStarts.push(start)
         }
 
-        // Load every later page independently. A failed or partial page cannot
-        // block active markets that live on another page.
-        for (const start of remainingPageStarts) {
-          try {
-            await new Promise(resolve =>
-              setTimeout(resolve, PAGE_GAP_MS)
-            )
+        // Load later pages concurrently in small batches so large market sets
+        // hydrate faster without overwhelming RPC capacity.
+        for (let i = 0; i < remainingPageStarts.length; i += PAGE_FETCH_CONCURRENCY) {
+          const chunk = remainingPageStarts.slice(i, i + PAGE_FETCH_CONCURRENCY)
+          const results = await Promise.all(
+            chunk.map(async (start) => {
+              try {
+                const pageData = await fetchMarketPage(start)
+                return { start, pageData } as const
+              } catch (pageError) {
+                return { start, pageError } as const
+              }
+            })
+          )
 
-            const pageData = await fetchMarketPage(start)
-
-            mergePageMarkets(pageData)
-
-            if (isIncompletePage(pageData, start, totalMarkets)) {
-              incompletePageStarts.push(start)
+          for (const result of results) {
+            if ('pageData' in result) {
+              mergePageMarkets(result.pageData)
+              if (isIncompletePage(result.pageData, result.start, totalMarkets)) {
+                incompletePageStarts.push(result.start)
+              }
+            } else {
+              failedPageStarts.push(result.start)
+              console.warn(
+                `[Markets] Page starting at ${result.start} is temporarily unavailable:`,
+                result.pageError
+              )
             }
-          } catch (pageError) {
-            failedPageStarts.push(start)
+          }
 
-            console.warn(
-              `[Markets] Page starting at ${start} is temporarily unavailable:`,
-              pageError
-            )
+          if (i + PAGE_FETCH_CONCURRENCY < remainingPageStarts.length) {
+            await new Promise(resolve => setTimeout(resolve, PAGE_GAP_MS))
           }
         }
 

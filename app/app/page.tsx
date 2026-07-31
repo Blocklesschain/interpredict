@@ -85,6 +85,24 @@ const STATE_NAMES = [
   'Admin Ver', 'Confirmed', 'Finalized', 'Resolved'
 ]
 
+function formatTokenAmountFromWei(
+  weiValue: string,
+  options?: { minimumFractionDigits?: number; maximumFractionDigits?: number }
+): string {
+  const minimumFractionDigits = options?.minimumFractionDigits ?? 0
+  const maximumFractionDigits = options?.maximumFractionDigits ?? 1
+  try {
+    const normalizedWei = typeof weiValue === 'string' && weiValue.trim().length > 0 ? weiValue.trim() : '0'
+    const tokenAmount = Number.parseFloat(ethers.formatEther(normalizedWei))
+    if (!Number.isFinite(tokenAmount)) {
+      return minimumFractionDigits > 0 ? '0.0' : '0'
+    }
+    return tokenAmount.toLocaleString(undefined, { minimumFractionDigits, maximumFractionDigits })
+  } catch {
+    return minimumFractionDigits > 0 ? '0.0' : '0'
+  }
+}
+
 function getOutcomePercentage(market: SmartMarket, outcomeIndex: number): string {
   try {
     const pools = Array.isArray(market.outcomePools) ? market.outcomePools : []
@@ -113,12 +131,12 @@ function getTotalMarketVolume(market: SmartMarket): string {
     const contractTotalVolume = BigInt(market.totalVolume || '0')
 
     if (contractTotalVolume > BigInt(0)) {
-      return Number(ethers.formatEther(contractTotalVolume)).toFixed(1)
+      return formatTokenAmountFromWei(contractTotalVolume.toString(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
     }
 
     const pools = Array.isArray(market.outcomePools) ? market.outcomePools : []
     const totalPool = pools.reduce((sum, value) => sum + BigInt(value || '0'), BigInt(0))
-    return Number(ethers.formatEther(totalPool)).toFixed(1)
+    return formatTokenAmountFromWei(totalPool.toString(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
   } catch (error) {
     console.warn(`Unable to calculate total volume for market ${market.id}:`, error)
     return '0.0'
@@ -975,21 +993,14 @@ export default function DAppPortal() {
     return days > 0 ? `${days}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s` : `${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`
   }
 
-  const formatEther = (val: string) => {
-    try {
-      return Number(ethers.formatEther(val || "0")).toLocaleString(undefined, {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 1,
-      })
-    } catch {
-      return "0"
-    }
-  }
+  const formatEther = (val: string) => formatTokenAmountFromWei(val, { minimumFractionDigits: 0, maximumFractionDigits: 1 })
+  const formatEtherOneDecimal = (val: string) => formatTokenAmountFromWei(val, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  const walletBalanceLabel = formatEtherOneDecimal(walletBalance)
 
   return (
     <div className="min-h-screen bg-[#060117] text-slate-100 font-sans antialiased overflow-x-hidden pb-12">
       <header className="fixed top-0 inset-x-0 h-20 bg-[#0d0022]/90 backdrop-blur-md border-b border-purple-950/40 z-40 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto h-full flex items-center gap-2 sm:gap-4">
+        <div className="max-w-7xl mx-auto h-full flex items-center gap-2 max-[380px]:gap-1 sm:gap-4">
           <Link
             href="/"
             aria-label="Go to InterPredict homepage"
@@ -1004,20 +1015,18 @@ export default function DAppPortal() {
           <div
             className="
               ml-auto shrink-0
-              [&_button]:max-sm:w-10
-              [&_button]:max-sm:min-w-10
-              [&_button]:max-sm:px-2
-              [&_button]:max-sm:justify-center
-              [&_button>span:last-child]:max-sm:hidden
+              [&_select]:max-sm:max-w-[7.25rem]
+              [&_select]:max-sm:px-2
+              [&_select]:max-sm:text-xs
             "
           >
             <LanguageSelector />
           </div>
 
           {walletAddress ? (
-            <div className="min-w-0 flex shrink items-center bg-purple-950/30 border border-purple-900/40 rounded-full px-1.5 sm:pr-1.5 sm:pl-4 py-1.5 gap-1.5 sm:gap-3">
-              <span className="inline font-mono text-[10px] sm:text-xs text-emerald-400 whitespace-nowrap">
-                {Number(formatEther(walletBalance)).toFixed(1)} tITL
+            <div className="min-w-0 flex shrink items-center bg-purple-950/30 border border-purple-900/40 rounded-full px-1.5 sm:pr-1.5 sm:pl-4 py-1.5 gap-1.5 sm:gap-3 max-w-[50vw] sm:max-w-none">
+              <span title={`${walletBalanceLabel} tITL`} className="inline min-w-0 max-w-[9rem] truncate font-mono text-[10px] sm:max-w-none sm:text-xs text-emerald-400 whitespace-nowrap">
+                {walletBalanceLabel} tITL
               </span>
               <span className="hidden sm:block w-px h-4 bg-purple-900/40" />
               <span className="hidden sm:inline font-mono text-xs text-purple-300 whitespace-nowrap">
@@ -1135,7 +1144,7 @@ export default function DAppPortal() {
                                     <p className="text-[10px] font-mono text-slate-400">{label}</p>
                                     <p className="text-xs font-bold text-slate-200">{getOutcomePercentage(market, oi)}%</p>
                                     <p className="text-[9px] font-mono text-slate-500">
-                                      {Number(formatEther(market.outcomePools?.[oi] || '0')).toFixed(1)} tITL
+                                      {formatEtherOneDecimal(market.outcomePools?.[oi] || '0')} tITL
                                     </p>
                                   </div>
                                 ))}

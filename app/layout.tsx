@@ -1,4 +1,3 @@
-import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Space_Grotesk, Inter, Geist_Mono } from 'next/font/google'
 import Script from 'next/script'
@@ -67,7 +66,6 @@ export default function RootLayout({
           {/*Scroll To Top engine running smoothly across pages */}
           <ScrollToTop />
         </Web3Provider>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
   )

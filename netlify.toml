@@ -1,0 +1,16 @@
+# Netlify configuration for Next.js
+[build]
+  command = "pnpm run build"
+  publish = ".next"
+
+[build.environment]
+  NEXT_PUBLIC_CONTRACT_ADDRESS = "0x3E5936F13e1194380A66c3c1d75D4D7342299CfF"
+
+# The @netlify/plugin-nextjs plugin automatically handles:
+# - Static assets (_next/static/*)
+# - API routes (/api/*)
+# - Server-rendered pages
+# - All other routes
+# No custom redirects needed — the plugin generates them at build time.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

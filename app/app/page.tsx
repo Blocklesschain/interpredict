@@ -712,6 +712,34 @@ export default function DAppPortal() {
     if (ok) await scanBlockchainRegistry()
   }
 
+  const handleDeployToMarketplace = async (marketId: number) => {
+    // Admin deploys a pending proposal directly to the Marketplace,
+    // foregoing the 24h DEC voting countdown.
+    // Calls ePV (enter proposal voting) + fPV (finalize proposal voting) in sequence.
+    try {
+      setTxStatus("Deploying market to Marketplace...")
+
+      // Check current state via the authenticated provider
+      const stateResult = await readContract('ms', [marketId])
+      const stateNum = stateResult ? Number(stateResult) : 0
+
+      if (stateNum === 0) {
+        // Proposed -> ePV (enter proposal voting)
+        const entered = await initializeMarketOnChain(marketId)
+        if (!entered) return
+      }
+
+      // Now in DECVoting -> fPV (finalize proposal voting)
+      const finalized = await finalizeProposalVotingOnChain(marketId)
+      if (finalized) {
+        setTxStatus("Market deployed to Marketplace!")
+        scanBlockchainRegistry()
+      }
+    } catch (err: any) {
+      setTxStatus(`Deploy Error: ${err?.message || err}`)
+    }
+  }
+
   const handleFinalizeResolutionVoting = async (marketId: number) => {
     const ok = await finalizeResolutionVotingOnChain(marketId)
     if (ok) await scanBlockchainRegistry()
@@ -910,6 +938,25 @@ export default function DAppPortal() {
             {/* MARKETPLACE */}
             {activeTab === 'MarketPlace' && (
               <div className="w-full space-y-8">
+                {isOracle && pendingProposals.length > 0 && (
+                  <div className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 max-w-xl">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Admin: Deploy Pending Proposals</h3>
+                    <p className="text-[11px] text-slate-400 mb-3">Instantly deploy pending market proposals to the Marketplace, foregoing the 24h DEC voting countdown.</p>
+                    <div className="flex flex-col gap-2">
+                      {pendingProposals.map((market) => (
+                        <div key={market.id} className="flex items-center justify-between bg-secondary/30 border border-border rounded-lg p-3">
+                          <span className="text-xs font-mono text-slate-300 truncate max-w-xs">#{market.id}: {market.question}</span>
+                          <button
+                            onClick={() => handleDeployToMarketplace(market.id)}
+                            className="px-3 py-1.5 bg-gradient-to-r from-primary to-purple-600 text-white text-[10px] font-bold rounded-lg uppercase"
+                          >
+                            Deploy
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Active Markets</h3>
                   <div className="grid grid-cols-1 gap-4 w-full">

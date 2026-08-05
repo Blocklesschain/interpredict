@@ -281,9 +281,9 @@ export default function DAppPortal() {
         const timeoutId = window.setTimeout(() => controller.abort(), 30_000)
 
         try {
-          const marketsUrl = walletAddress
-            ? `/api/markets?address=${encodeURIComponent(walletAddress)}`
-            : '/api/markets'
+          // Load full market list without wallet enrichment to avoid timeout.
+          // Wallet-specific enrichment runs client-side via readContract fallback.
+          const marketsUrl = '/api/markets?start=0&limit=1000'
 
           const response = await fetch(marketsUrl, {
             method: 'GET',
@@ -502,7 +502,7 @@ export default function DAppPortal() {
     if (walletAddress) {
       const saved = localStorage.getItem(`interpredict_claimed_${walletAddress.toLowerCase()}`)
       if (saved) { try { setClaimedMarkets(JSON.parse(saved)) } catch { setClaimedMarkets([]) } }
-      const savedRes = localStorage.getItem(`interpredict_resolution_requested_${walletAddress.toLowerCase()}`)
+      const savedRes = localStorage.getItem('interpredict_resolution_requested_global')
       if (savedRes) { try { setResolutionRequestedMarkets(JSON.parse(savedRes)) } catch { setResolutionRequestedMarkets([]) } }
     } else { setClaimedMarkets([]); setResolutionRequestedMarkets([]) }
   }, [walletAddress])
@@ -697,7 +697,7 @@ export default function DAppPortal() {
         const updated = prev.includes(marketId) ? prev : [...prev, marketId]
         try {
           localStorage.setItem(
-            `interpredict_resolution_requested_${walletAddress?.toLowerCase()}`,
+            'interpredict_resolution_requested_global',
             JSON.stringify(updated)
           )
         } catch { }

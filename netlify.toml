@@ -1,0 +1,34 @@
+# Netlify configuration for Next.js
+[build]
+  command = "pnpm run build"
+  publish = ".next"
+
+[build.environment]
+  NEXT_PUBLIC_CONTRACT_ADDRESS = "0x3E5936F13e1194380A66c3c1d75D4D7342299CfF"
+
+# Next.js on Netlify requires the Essential Next.js plugin
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Handle all routes through Next.js
+[[redirects]]
+  from = "/_next/static/*"
+  to = "/_next/static/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/_next/image/*"
+  to = "/_next/image/:splat"
+  status = 200
+
+# API routes
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/___netlify-handler"
+  status = 200
+
+# All other routes go through Next.js
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/___netlify-handler"
+  status = 200

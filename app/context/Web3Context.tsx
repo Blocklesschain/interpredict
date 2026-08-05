@@ -582,14 +582,52 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
       if (!isAdmin && !paymentTransactionHash) {
         setTxStatus("Confirm the 0.1 tITL DEC application payment in your wallet...")
-        const { signer } = await getSignerContract()
         const treasuryAddress = await contract.treasury()
-        const paymentTx = await signer.sendTransaction({
-          to: treasuryAddress,
-          value: ethers.parseEther('0.1')
+
+        // Use window.ethereum.request directly instead of signer.sendTransaction.
+        // signer.sendTransaction() triggers ethers.js RPC calls (gas estimation,
+        // nonce, etc.) that fail without the Bearer auth header the Interlink
+        // testnet requires. window.ethereum.request('eth_sendTransaction') goes
+        // through MetaMask directly without additional RPC calls.
+        const valueHex = ethers.toQuantity(ethers.parseEther('0.1'))
+
+        paymentTransactionHash = await (window as any).ethereum.request({
+          method: 'eth_sendTransaction',
+          params: [{
+            from: walletAddress,
+            to: treasuryAddress,
+            value: valueHex,
+          }],
         })
-        await paymentTx.wait()
-        paymentTransactionHash = paymentTx.hash
+
+        // Poll for receipt using window.ethereum (not the authenticated provider)
+        // to avoid Bearer auth issues.
+        let receipt: any = null
+        for (let attempt = 0; attempt < 60; attempt++) {
+          try {
+            receipt = await (window as any).ethereum.request({
+              method: 'eth_getTransactionReceipt',
+              params: [paymentTransactionHash],
+            })
+            if (receipt) break
+          } catch (e) {
+            // Receipt not available yet
+          }
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+
+        if (!receipt) {
+          throw new Error('DEC payment was submitted but not confirmed within 120 seconds')
+        }
+
+        const receiptStatus = typeof receipt.status === 'string'
+          ? Number.parseInt(receipt.status, 16)
+          : Number(receipt.status)
+
+        if (receiptStatus !== 1) {
+          throw new Error('DEC payment transaction reverted on-chain')
+        }
+
         localStorage.setItem(feeStorageKey, paymentTransactionHash)
       }
 

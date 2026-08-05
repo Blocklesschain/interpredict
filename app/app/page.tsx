@@ -216,6 +216,7 @@ export default function DAppPortal() {
   const [claimedMarkets, setClaimedMarkets] = useState<number[]>([])
   const [nowSec, setNowSec] = useState<number>(() => Math.floor(Date.now() / 1000))
   const [walletBalance, setWalletBalance] = useState<string>('0')
+  const [resolutionRequestedMarkets, setResolutionRequestedMarkets] = useState<number[]>([])
   const [toastMsg, setToastMsg] = useState<string | null>(null)
 
   useEffect(() => {
@@ -236,15 +237,9 @@ export default function DAppPortal() {
       let baseMarkets: SmartMarket[] = []
 
       try {
-        const PAGE_SIZE = 5
-        const MAX_PAGE_ATTEMPTS = 3
-        const PAGE_REQUEST_TIMEOUT_MS = 18_000
-        const PAGE_GAP_MS = 120
-        const FINAL_RETRY_GAP_MS = 500
-        const PAGE_FETCH_CONCURRENCY = 3
-
-        const byId = new Map<number, SmartMarket>()
-
+        // The API now returns all relevant markets (active, pending, resolution,
+        // finalized) in a single call. Rejected/Cancelled markets are skipped
+        // server-side for efficiency.
         const normalizeMarket = (rawMarket: any): SmartMarket => ({
           ...rawMarket,
           id: Number(rawMarket.id ?? rawMarket.marketId ?? 0),
@@ -269,296 +264,76 @@ export default function DAppPortal() {
           currentWalletResolutionVote: Number(rawMarket.currentWalletResolutionVote || 0)
         })
 
-        const publishMarkets = () => {
-          baseMarkets = Array.from(byId.values()).sort((a, b) => a.id - b.id)
-          setAllOnChainMarkets(baseMarkets)
-
-          try {
-            sessionStorage.setItem(
-              'interpredict_public_markets',
-              JSON.stringify(baseMarkets)
-            )
-          } catch {
-            // sessionStorage may be unavailable in restricted browsers.
-          }
-        }
-
-        const mergePageMarkets = (pageData: any) => {
-          const pageMarkets = Array.isArray(pageData?.allMarkets)
-            ? pageData.allMarkets
-            : []
-
-          for (const rawMarket of pageMarkets) {
-            const market = normalizeMarket(rawMarket)
-            byId.set(market.id, market)
-          }
-
-          publishMarkets()
-        }
-
-        const getExpectedPageCount = (
-          pageData: any,
-          requestedStart: number,
-          totalMarketsFallback = 0
-        ) => {
-          const pagination = pageData?.pagination || {}
-          const totalMarkets = Number(
-            pagination.totalMarkets ?? totalMarketsFallback
-          )
-          const pageStart = Number(
-            pagination.start ?? requestedStart
-          )
-          const pageLimit = Number(
-            pagination.limit ?? PAGE_SIZE
-          )
-
-          return Math.max(
-            0,
-            Math.min(pageLimit, totalMarkets - pageStart)
-          )
-        }
-
-        const isIncompletePage = (
-          pageData: any,
-          requestedStart: number,
-          totalMarketsFallback = 0
-        ) => {
-          const expectedCount = getExpectedPageCount(
-            pageData,
-            requestedStart,
-            totalMarketsFallback
-          )
-          const loadedCount = Array.isArray(pageData?.allMarkets)
-            ? pageData.allMarkets.length
-            : 0
-
-          return loadedCount < expectedCount
-        }
-
-        // Show the last successfully loaded market set immediately while fresh
-        // pages are requested. This prevents the marketplace from flashing empty.
+        // Show cached markets immediately while fresh data loads
         try {
-          const cachedMarkets = sessionStorage.getItem(
-            'interpredict_public_markets'
-          )
-
+          const cachedMarkets = sessionStorage.getItem('interpredict_public_markets')
           if (cachedMarkets) {
             const parsedMarkets = JSON.parse(cachedMarkets)
-
             if (Array.isArray(parsedMarkets)) {
-              for (const rawMarket of parsedMarkets) {
-                const market = normalizeMarket(rawMarket)
-                byId.set(market.id, market)
-              }
-
-              publishMarkets()
+              baseMarkets = parsedMarkets.map(normalizeMarket)
+              setAllOnChainMarkets(baseMarkets)
             }
           }
-        } catch {
-          // Ignore malformed or unavailable browser cache.
-        }
+        } catch { }
 
-        const fetchMarketPage = async (
-          start: number
-        ): Promise<any> => {
-          let lastError: unknown = null
+        // Single fetch - the API returns all relevant markets in one call
+        const controller = new AbortController()
+        const timeoutId = window.setTimeout(() => controller.abort(), 30_000)
 
-          for (
-            let attempt = 1;
-            attempt <= MAX_PAGE_ATTEMPTS;
-            attempt++
-          ) {
-            const controller = new AbortController()
-            const timeoutId = window.setTimeout(
-              () => controller.abort(),
-              PAGE_REQUEST_TIMEOUT_MS
-            )
+        try {
+          const marketsUrl = walletAddress
+            ? `/api/markets?address=${encodeURIComponent(walletAddress)}`
+            : '/api/markets'
+
+          const response = await fetch(marketsUrl, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: { Accept: 'application/json' },
+            signal: controller.signal
+          })
+
+          const json = await response.json().catch(() => null)
+
+          if (!response.ok) {
+            throw new Error(json?.error || `Markets API returned HTTP ${response.status}`)
+          }
+
+          if (json && Array.isArray(json.allMarkets)) {
+            baseMarkets = json.allMarkets.map(normalizeMarket)
+            setAllOnChainMarkets(baseMarkets)
 
             try {
-              const response = await fetch(
-                `/api/markets?start=${start}&limit=${PAGE_SIZE}`,
-                {
-                  method: 'GET',
-                  cache: 'no-store',
-                  headers: {
-                    Accept: 'application/json'
-                  },
-                  signal: controller.signal
-                }
-              )
+              sessionStorage.setItem('interpredict_public_markets', JSON.stringify(baseMarkets))
+            } catch { }
 
-              const json = await response.json().catch(() => null)
-
-              if (!response.ok) {
-                throw new Error(
-                  json?.error ||
-                  `Markets page ${start} returned HTTP ${response.status}`
-                )
-              }
-
-              if (!json || !json.pagination) {
-                throw new Error(
-                  `Markets page ${start} returned an invalid response`
-                )
-              }
-
-              const expectedCount = getExpectedPageCount(json, start)
-              const loadedCount = Array.isArray(json.allMarkets)
-                ? json.allMarkets.length
-                : 0
-
-              // A partial page is still useful. Return it, render the markets
-              // that did load, continue to later pages, and retry this page later.
-              if (loadedCount < expectedCount) {
-                console.warn(
-                  `[Markets] Page ${start} was incomplete: ` +
-                  `${loadedCount}/${expectedCount} markets loaded`,
-                  json?.diagnostics?.skippedMarkets || []
-                )
-              }
-
-              return json
-            } catch (error) {
-              lastError = error
-
-              console.warn(
-                `[Markets] Page ${start}, attempt ${attempt}/${MAX_PAGE_ATTEMPTS} failed:`,
-                error
-              )
-
-              if (attempt < MAX_PAGE_ATTEMPTS) {
-                await new Promise(resolve =>
-                  setTimeout(resolve, attempt * 1_200)
-                )
-              }
-            } finally {
-              window.clearTimeout(timeoutId)
+            // Load wallet positions from API if available
+            if (walletAddress && Array.isArray(json.walletPositions)) {
+              const apiPositions: MyPosition[] = json.walletPositions.map((position: any) => ({
+                marketId: Number(position.marketId),
+                question: String(position.question || `Market #${position.marketId}`),
+                marketState: Number(position.marketState || 0),
+                confirmedOutcome: Number(position.confirmedOutcome || 0),
+                shares: Array.isArray(position.shares) ? position.shares.map(String) : [],
+                stakes: Array.isArray(position.stakes) ? position.stakes.map(String) : [],
+                totalStake: String(position.totalStake || '0'),
+                claimablePayout: String(position.claimablePayout || '0'),
+                claimedPayout: String(position.claimedPayout || '0'),
+                claimed: Boolean(position.claimed),
+                marketEndTime: Number(position.marketEndTime || 0),
+                outcomeLabels: Array.isArray(position.outcomeLabels) ? position.outcomeLabels : [],
+                outcomePools: Array.isArray(position.outcomePools) ? position.outcomePools.map(String) : []
+              }))
+              setMyPositions(apiPositions)
+              setClaimedMarkets(apiPositions.filter((p) => p.claimed).map((p) => p.marketId))
             }
           }
-
-          throw lastError || new Error(
-            `Unable to load markets page starting at ${start}`
-          )
-        }
-
-        // The first page tells us how many markets exist in total.
-        // Even when this page is partial, its successfully loaded markets are
-        // rendered and every later page is still requested.
-        const firstPage = await fetchMarketPage(0)
-        const totalMarkets = Number(
-          firstPage.pagination.totalMarkets || 0
-        )
-
-        const incompletePageStarts: number[] = []
-        const failedPageStarts: number[] = []
-
-        mergePageMarkets(firstPage)
-
-        if (isIncompletePage(firstPage, 0, totalMarkets)) {
-          incompletePageStarts.push(0)
-        }
-
-        const remainingPageStarts: number[] = []
-
-        for (
-          let start = PAGE_SIZE;
-          start < totalMarkets;
-          start += PAGE_SIZE
-        ) {
-          remainingPageStarts.push(start)
-        }
-
-        // Load later pages concurrently in small batches so large market sets
-        // hydrate faster without overwhelming RPC capacity.
-        for (let i = 0; i < remainingPageStarts.length; i += PAGE_FETCH_CONCURRENCY) {
-          const chunk = remainingPageStarts.slice(i, i + PAGE_FETCH_CONCURRENCY)
-          const results = await Promise.all(
-            chunk.map(async (start) => {
-              try {
-                const pageData = await fetchMarketPage(start)
-                return { start, pageData } as const
-              } catch (pageError) {
-                return { start, pageError } as const
-              }
-            })
-          )
-
-          for (const result of results) {
-            if ('pageData' in result) {
-              mergePageMarkets(result.pageData)
-              if (isIncompletePage(result.pageData, result.start, totalMarkets)) {
-                incompletePageStarts.push(result.start)
-              }
-            } else {
-              failedPageStarts.push(result.start)
-              console.warn(
-                `[Markets] Page starting at ${result.start} is temporarily unavailable:`,
-                result.pageError
-              )
-            }
-          }
-
-          if (i + PAGE_FETCH_CONCURRENCY < remainingPageStarts.length) {
-            await new Promise(resolve => setTimeout(resolve, PAGE_GAP_MS))
-          }
-        }
-
-        // Retry both completely failed pages and partially loaded pages after
-        // all other pages have had a chance to render.
-        const retryPageStarts = Array.from(
-          new Set([
-            ...failedPageStarts,
-            ...incompletePageStarts
-          ])
-        )
-
-        if (retryPageStarts.length > 0) {
-          await new Promise(resolve =>
-            setTimeout(resolve, FINAL_RETRY_GAP_MS)
-          )
-
-          for (const start of retryPageStarts) {
-            try {
-              const retryData = await fetchMarketPage(start)
-
-              // Always publish whatever the retry recovered. Never discard a
-              // useful partial response.
-              mergePageMarkets(retryData)
-
-              if (isIncompletePage(retryData, start, totalMarkets)) {
-                console.warn(
-                  `[Markets] Page ${start} remained incomplete after final retry.`,
-                  retryData?.diagnostics?.skippedMarkets || []
-                )
-              }
-            } catch (retryError) {
-              console.error(
-                `[Markets] Final retry failed for page starting at ${start}:`,
-                retryError
-              )
-            }
-
-            await new Promise(resolve =>
-              setTimeout(resolve, PAGE_GAP_MS)
-            )
-          }
-        }
-
-        if (baseMarkets.length < totalMarkets) {
-          setToastMsg(
-            `Loaded ${baseMarkets.length} of ${totalMarkets} markets. ` +
-            'Some markets are temporarily unavailable; refresh shortly.'
-          )
+        } finally {
+          window.clearTimeout(timeoutId)
         }
       } catch (error) {
-        console.error('Paginated markets API fetch failed:', error)
-
-        // Keep cached or already-loaded markets visible. Only show the full
-        // failure message when nothing at all could be restored or fetched.
+        console.error('Markets API fetch failed:', error)
         if (baseMarkets.length === 0) {
-          setToastMsg(
-            'Market data is temporarily unavailable. Please refresh shortly.'
-          )
+          setToastMsg('Market data is temporarily unavailable. Please refresh shortly.')
         }
       }
 
@@ -623,94 +398,81 @@ export default function DAppPortal() {
         setDecRewardsClaimable(unclaimedRewards.toString())
       }
 
-      // Load wallet-specific data (shares, votes, claims) for all markets.
-      // Uses the authenticated provider via readContract - window.ethereum.request
-      // does NOT carry the Bearer auth header the Interlink testnet requires.
-      try {
-        const updatedMarkets: SmartMarket[] = []
-        const positions: MyPosition[] = []
+      // Wallet enrichment (votes, shares, claims) is now handled by the API
+      // via the walletPositions field. The per-market readContract loop is
+      // retained only as a fallback when the API has not returned wallet
+      // positions, to keep the dApp functional during API transitions.
+      if (walletAddress && myPositions.length === 0 && baseMarkets.length > 0) {
+        try {
+          const updatedMarkets: SmartMarket[] = []
+          const positions: MyPosition[] = []
 
-        for (const market of baseMarkets) {
-          // Read proposal vote (0=none, 1=approve, 2=reject)
-          const proposalVote = await readContract('pv', [market.id, walletAddress])
-          const proposalVoteNum = proposalVote ? Number(proposalVote) : 0
+          for (const market of baseMarkets) {
+            const proposalVote = await readContract('pv', [market.id, walletAddress])
+            const proposalVoteNum = proposalVote ? Number(proposalVote) : 0
+            const resolutionVote = await readContract('rv', [market.id, walletAddress])
+            const resolutionVoteNum = resolutionVote ? Number(resolutionVote) : 0
+            const hasVotedOnProposal = await readContract('hvp', [market.id, walletAddress])
+            const hasVoted = hasVotedOnProposal ? Boolean(hasVotedOnProposal) : false
+            const hasClaimedResult = await readContract('hcw', [market.id, walletAddress])
+            const hasClaimed = hasClaimedResult ? Boolean(hasClaimedResult) : false
 
-          // Read resolution vote
-          const resolutionVote = await readContract('rv', [market.id, walletAddress])
-          const resolutionVoteNum = resolutionVote ? Number(resolutionVote) : 0
-
-          // Read has voted on proposal
-          const hasVotedOnProposal = await readContract('hvp', [market.id, walletAddress])
-          const hasVoted = hasVotedOnProposal ? Boolean(hasVotedOnProposal) : false
-
-          // Read has claimed winnings
-          const hasClaimedResult = await readContract('hcw', [market.id, walletAddress])
-          const hasClaimed = hasClaimedResult ? Boolean(hasClaimedResult) : false
-
-          // Read shares for each outcome
-          const shares: string[] = []
-          for (let oi = 0; oi < (market.outcomeLabels?.length || 0); oi++) {
-            const shResult = await readContract('sh', [market.id, oi, walletAddress])
-            shares.push(shResult ? BigInt(shResult.toString()).toString() : '0')
-          }
-
-          const hasAnyShares = shares.some(s => BigInt(s || '0') > BigInt(0))
-
-          // Update market with wallet vote data
-          updatedMarkets.push({
-            ...market,
-            hasCurrentWalletVoted: hasVoted || proposalVoteNum !== 0,
-            currentWalletProposalVote: proposalVoteNum,
-            hasCurrentWalletVotedOnResolution: resolutionVoteNum !== 0,
-            currentWalletResolutionVote: resolutionVoteNum
-          })
-
-          // Build position if wallet has shares or has claimed
-          if (hasAnyShares || hasClaimed) {
-            // Calculate claimable payout for finalized markets
-            let claimablePayout = '0'
-            if (market.finalized && !hasClaimed) {
-              const winningOutcome = Number(market.confirmedOutcome)
-              const userShares = BigInt(shares[winningOutcome] || '0')
-              const pools = (market.outcomePools || []).map(v => BigInt(v || '0'))
-              const totalPool = pools.reduce((sum, v) => sum + v, BigInt(0))
-              const winningPool = BigInt(market.outcomePools?.[winningOutcome] || '0')
-              if (userShares > BigInt(0) && winningPool > BigInt(0)) {
-                const grossPayout = (userShares * totalPool) / winningPool
-                claimablePayout = (grossPayout - ((grossPayout * BigInt(500)) / BigInt(10000))).toString()
-              }
+            const shares: string[] = []
+            for (let oi = 0; oi < (market.outcomeLabels?.length || 0); oi++) {
+              const shResult = await readContract('sh', [market.id, oi, walletAddress])
+              shares.push(shResult ? BigInt(shResult.toString()).toString() : '0')
             }
 
-            positions.push({
-              marketId: market.id,
-              question: market.question,
-              marketState: market.state,
-              confirmedOutcome: market.confirmedOutcome,
-              shares,
-              stakes: shares.map(() => '0'),
-              totalStake: shares.reduce((sum, s) => sum + BigInt(s || '0'), BigInt(0)).toString(),
-              claimablePayout,
-              claimedPayout: '0',
-              claimed: hasClaimed,
-              marketEndTime: market.marketEndTime,
-              outcomeLabels: market.outcomeLabels || [],
-              outcomePools: market.outcomePools || []
+            const hasAnyShares = shares.some(s => BigInt(s || '0') > BigInt(0))
+
+            updatedMarkets.push({
+              ...market,
+              hasCurrentWalletVoted: hasVoted || proposalVoteNum !== 0,
+              currentWalletProposalVote: proposalVoteNum,
+              hasCurrentWalletVotedOnResolution: resolutionVoteNum !== 0,
+              currentWalletResolutionVote: resolutionVoteNum
             })
+
+            if (hasAnyShares || hasClaimed) {
+              let claimablePayout = '0'
+              if (market.finalized && !hasClaimed) {
+                const winningOutcome = Number(market.confirmedOutcome)
+                const userShares = BigInt(shares[winningOutcome] || '0')
+                const pools = (market.outcomePools || []).map(v => BigInt(v || '0'))
+                const totalPool = pools.reduce((sum, v) => sum + v, BigInt(0))
+                const winningPool = BigInt(market.outcomePools?.[winningOutcome] || '0')
+                if (userShares > BigInt(0) && winningPool > BigInt(0)) {
+                  const grossPayout = (userShares * totalPool) / winningPool
+                  claimablePayout = (grossPayout - ((grossPayout * BigInt(500)) / BigInt(10000))).toString()
+                }
+              }
+
+              positions.push({
+                marketId: market.id,
+                question: market.question,
+                marketState: market.state,
+                confirmedOutcome: market.confirmedOutcome,
+                shares,
+                stakes: shares.map(() => '0'),
+                totalStake: shares.reduce((sum, s) => sum + BigInt(s || '0'), BigInt(0)).toString(),
+                claimablePayout,
+                claimedPayout: '0',
+                claimed: hasClaimed,
+                marketEndTime: market.marketEndTime,
+                outcomeLabels: market.outcomeLabels || [],
+                outcomePools: market.outcomePools || []
+              })
+            }
           }
-        }
 
-        // Update markets with wallet vote data so Market Proposals shows correct status
-        if (updatedMarkets.length > 0) {
-          setAllOnChainMarkets(updatedMarkets)
-          try {
-            sessionStorage.setItem('interpredict_public_markets', JSON.stringify(updatedMarkets))
-          } catch { }
+          if (updatedMarkets.length > 0) {
+            setAllOnChainMarkets(updatedMarkets)
+            try { sessionStorage.setItem('interpredict_public_markets', JSON.stringify(updatedMarkets)) } catch { }
+          }
+          setMyPositions(positions)
+        } catch (walletDataErr) {
+          console.warn('Wallet position data loading failed:', walletDataErr)
         }
-
-        // Populate My Votes tab
-        setMyPositions(positions)
-      } catch (walletDataErr) {
-        console.warn('Wallet position data loading failed:', walletDataErr)
       }
 
     } catch (err: any) {
@@ -740,7 +502,9 @@ export default function DAppPortal() {
     if (walletAddress) {
       const saved = localStorage.getItem(`interpredict_claimed_${walletAddress.toLowerCase()}`)
       if (saved) { try { setClaimedMarkets(JSON.parse(saved)) } catch { setClaimedMarkets([]) } }
-    } else { setClaimedMarkets([]) }
+      const savedRes = localStorage.getItem(`interpredict_resolution_requested_${walletAddress.toLowerCase()}`)
+      if (savedRes) { try { setResolutionRequestedMarkets(JSON.parse(savedRes)) } catch { setResolutionRequestedMarkets([]) } }
+    } else { setClaimedMarkets([]); setResolutionRequestedMarkets([]) }
   }, [walletAddress])
 
   const isOracle = !!walletAddress && walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
@@ -808,6 +572,14 @@ export default function DAppPortal() {
     const endDateTime = new Date(endDate)
     endDateTime.setHours(hours, minutes, 0, 0)
     const marketEndTimeInSeconds = Math.floor(endDateTime.getTime() / 1000)
+
+    // Contract requires community market end time to be at least 24h in the future
+    const nowSec = Math.floor(Date.now() / 1000)
+    const isTeam = walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
+    if (!isTeam && marketEndTimeInSeconds <= nowSec + 24 * 60 * 60) {
+      setToastMsg('Community market end time must be at least 24 hours in the future.')
+      return
+    }
     let thumbnailUrl = ''
     if (marketImageFile) {
       setIsUploadingImage(true)
@@ -919,7 +691,20 @@ export default function DAppPortal() {
 
   const handleRequestResolution = async (marketId: number) => {
     const ok = await requestResolutionOnChain(marketId)
-    if (ok) scanBlockchainRegistry()
+    if (ok) {
+      // Track locally so the button becomes inactive immediately
+      setResolutionRequestedMarkets((prev) => {
+        const updated = prev.includes(marketId) ? prev : [...prev, marketId]
+        try {
+          localStorage.setItem(
+            `interpredict_resolution_requested_${walletAddress?.toLowerCase()}`,
+            JSON.stringify(updated)
+          )
+        } catch { }
+        return updated
+      })
+      scanBlockchainRegistry()
+    }
   }
 
   const handleResolutionVote = async (marketId: number, outcomeIndex: number) => {
@@ -1188,27 +973,6 @@ export default function DAppPortal() {
                   </div>
                 </div>
 
-                <div>
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Inactive Markets</h3>
-                  <div className="grid grid-cols-1 gap-4 w-full">
-                    {inactiveMarkets.length === 0 ? (
-                      <div className="p-8 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No inactive markets yet.</div>
-                    ) : (
-                      inactiveMarkets.map((market) => (
-                        <div key={market.id} className="bg-secondary/20 border border-border rounded-xl p-4 sm:p-5 w-full max-w-xl opacity-70">
-                          <div className="flex justify-between items-center mb-3">
-                            <span className="px-2 py-0.5 bg-slate-500/10 border border-slate-500/20 text-slate-400 rounded text-[10px] font-bold tracking-wider uppercase">#{market.id}</span>
-                            <span className="text-[11px] text-slate-500 font-mono">{STATE_NAMES[market.state] || 'Unknown'}</span>
-                          </div>
-                          <h4 className="text-sm sm:text-base font-bold text-slate-300 leading-snug mb-2">{market.question}</h4>
-                          <div className="flex flex-col gap-1 text-[10px] font-mono">
-                            <span className="text-slate-500">Ended: <span className="text-slate-400">{formatExpiryDate(market.marketEndTime)}</span></span>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
               </div>
             )}
 
@@ -1479,6 +1243,8 @@ export default function DAppPortal() {
                                   <div className="w-full py-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold rounded-lg uppercase text-center">Outcome Confirmed</div>
                                 ) : pos.marketState === 8 ? (
                                   <div className="w-full py-2.5 bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-bold rounded-lg uppercase text-center">Resolution Requested</div>
+                                ) : resolutionRequestedMarkets.includes(pos.marketId) ? (
+                                  <div className="w-full py-2.5 bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-bold rounded-lg uppercase text-center">Resolution Requested</div>
                                 ) : (
                                   <button onClick={() => handleRequestResolution(pos.marketId)} className="w-full py-2.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-lg uppercase">Request Resolution</button>
                                 )}
@@ -1517,7 +1283,7 @@ export default function DAppPortal() {
                           ))}
                         </div>
                         <p className="text-[10px] font-mono text-slate-500 mb-3">Ended: {formatExpiryDate(market.marketEndTime)}</p>
-                        {market.state === 8 ? (
+                        {market.state === 8 || resolutionRequestedMarkets.includes(market.id) ? (
                           <div className="w-full py-2.5 bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-bold rounded-lg uppercase text-center">Resolution Requested</div>
                         ) : (
                           <button onClick={() => handleRequestResolution(market.id)} className="w-full py-2.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-lg uppercase">Request Resolution</button>

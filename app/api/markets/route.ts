@@ -18,13 +18,12 @@ const INITIAL_RETRY_DELAY_MS = 500
 const RPC_BATCH_SIZE = 8
 const RPC_BATCH_RETRY_ROUNDS = 3
 const RPC_BATCH_GAP_MS = 300
-const DEFAULT_PAGE_SIZE = 5
-const MAX_PAGE_SIZE = 10
+const DEFAULT_PAGE_SIZE = 100
+const MAX_PAGE_SIZE = 1000
 const PUBLIC_CACHE_TTL_MS = 30_000
 const WALLET_CACHE_TTL_MS = 20_000
 const MAX_ROUTE_TIME_MS = 28_000
-const ENABLE_WALLET_ENRICHMENT =
-  process.env.INTERPREDICT_ENABLE_WALLET_ENRICHMENT === 'true'
+const ENABLE_WALLET_ENRICHMENT = true
 const ENABLE_EVENT_HISTORY =
   process.env.INTERPREDICT_ENABLE_EVENT_HISTORY === 'true'
 const ENABLE_RESOLUTION_EVENT_SCAN =
@@ -976,11 +975,11 @@ export async function GET(request: Request) {
   const requestedAddress = requestUrl.searchParams.get('address')?.trim() || ''
   const walletAddress = ethers.isAddress(requestedAddress) ? requestedAddress.toLowerCase() : ''
   const requestedStart = Number.parseInt(requestUrl.searchParams.get('start') || '0', 10)
-  const requestedLimit = Number.parseInt(requestUrl.searchParams.get('limit') || String(DEFAULT_PAGE_SIZE), 10)
+  const requestedLimit = Number.parseInt(requestUrl.searchParams.get('limit') || String(MAX_PAGE_SIZE), 10)
   const pageStart = Number.isFinite(requestedStart) ? Math.max(0, requestedStart) : 0
   const pageLimit = Number.isFinite(requestedLimit)
-    ? Math.min(MAX_PAGE_SIZE, Math.max(1, requestedLimit))
-    : DEFAULT_PAGE_SIZE
+    ? Math.max(1, Math.min(MAX_PAGE_SIZE, requestedLimit))
+    : MAX_PAGE_SIZE
   const cacheKey = `${walletAddress || 'public'}:${pageStart}:${pageLimit}`
   const ttl = walletAddress ? WALLET_CACHE_TTL_MS : PUBLIC_CACHE_TTL_MS
   const now = Date.now()

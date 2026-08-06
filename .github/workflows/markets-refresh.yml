@@ -1,27 +1,76 @@
 name: Refresh Markets Cache
 
-# Runs every 60 seconds to keep the markets cache fresh.
-# Calls the Netlify Background Function which has a 15-minute execution limit —
-# plenty for scanning 34+ markets sequentially without rate-limiting the RPC.
+# Runs every 2 minutes.  Each run scans all markets in batches of 5
+# (each batch takes ~7.5s, well under Netlify's 10s serverless limit).
 #
-# GitHub Actions free tier: unlimited minutes on public repos, 2,000 min/month on private.
-# If your repo is private, reduce frequency (e.g. "*/5 * * * *" for every 5 min).
+# For 34 markets: 7 batches × ~8s each = ~56s total per run.
+# GitHub Actions has a 6-hour limit — no timeout concerns.
+#
+# GitHub Actions free tier: unlimited minutes on public repos.
+# If your repo is private, reduce frequency or use cron-job.org.
 
 on:
   schedule:
-    - cron: "* * * * *"  # Every minute
-  workflow_dispatch:      # Allow manual trigger from GitHub UI
+    - cron: "*/2 * * * *"  # Every 2 minutes
+  workflow_dispatch:         # Manual trigger from GitHub UI
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger background market scan
+      - name: Scan all markets in batches
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: https://interpredict.netlify.app
         run: |
-          curl -X POST https://interpredict.netlify.app/.netlify/functions/markets-refresh-background \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json" \
-            --max-time 15 \
-            --fail \
-            --silent \
-            --show-error
+          set -e
+
+          # First, get the total market count
+          echo "=== Starting incremental market scan ==="
+
+          # Scan in batches of 5.  We don't know the total count upfront,
+          # so we keep going until a batch returns fewer markets than requested
+          # or totalCount is reached.
+          START=0
+          BATCH_SIZE=5
+          MAX_BATCHES=20  # safety limit (100 markets max)
+
+          for i in $(seq 1 $MAX_BATCHES); do
+            echo ""
+            echo "--- Batch $i: startId=$START, count=$BATCH_SIZE ---"
+
+            RESPONSE=$(curl -s -X POST "$BASE_URL/api/markets/refresh?startId=$START&count=$BATCH_SIZE" \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              -H "Content-Type: application/json" \
+              --max-time 15)
+
+            echo "Response: $RESPONSE"
+
+            # Extract values from JSON response
+            OK=$(echo "$RESPONSE" | grep -o '"ok":[^,}]*' | head -1 | cut -d: -f2)
+            TOTAL=$(echo "$RESPONSE" | grep -o '"totalCount":[0-9]*' | head -1 | cut -d: -f2)
+            END_ID=$(echo "$RESPONSE" | grep -o '"endId":[0-9]*' | head -1 | cut -d: -f2)
+
+            if [ "$OK" != "true" ]; then
+              echo "ERROR: Batch $i failed. Response: $RESPONSE"
+              # Don't exit — continue with next batch
+            fi
+
+            # If we've reached or passed totalCount, we're done
+            if [ -n "$TOTAL" ] && [ -n "$END_ID" ] && [ "$END_ID" -ge "$TOTAL" ]; then
+              echo "=== All $TOTAL markets scanned in $i batches ==="
+              exit 0
+            fi
+
+            # If endId wasn't returned or is 0, something went wrong — try next batch anyway
+            if [ -z "$END_ID" ] || [ "$END_ID" -eq 0 ]; then
+              START=$((START + BATCH_SIZE))
+            else
+              START=$END_ID
+            fi
+
+            # Small gap between batches to let the RPC gateway breathe
+            sleep 2
+          done
+
+          echo "=== Scan complete (reached max batches: $MAX_BATCHES) ==="

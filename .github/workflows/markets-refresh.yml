@@ -1,0 +1,27 @@
+name: Refresh Markets Cache
+
+# Runs every 60 seconds to keep the markets cache fresh.
+# Calls the Netlify Background Function which has a 15-minute execution limit —
+# plenty for scanning 34+ markets sequentially without rate-limiting the RPC.
+#
+# GitHub Actions free tier: unlimited minutes on public repos, 2,000 min/month on private.
+# If your repo is private, reduce frequency (e.g. "*/5 * * * *" for every 5 min).
+
+on:
+  schedule:
+    - cron: "* * * * *"  # Every minute
+  workflow_dispatch:      # Allow manual trigger from GitHub UI
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger background market scan
+        run: |
+          curl -X POST https://interpredict.netlify.app/.netlify/functions/markets-refresh-background \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --max-time 15 \
+            --fail \
+            --silent \
+            --show-error

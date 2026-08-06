@@ -398,82 +398,12 @@ export default function DAppPortal() {
         setDecRewardsClaimable(unclaimedRewards.toString())
       }
 
-      // Wallet enrichment (votes, shares, claims) is now handled by the API
-      // via the walletPositions field. The per-market readContract loop is
-      // retained only as a fallback when the API has not returned wallet
-      // positions, to keep the dApp functional during API transitions.
-      if (walletAddress && myPositions.length === 0 && baseMarkets.length > 0) {
-        try {
-          const updatedMarkets: SmartMarket[] = []
-          const positions: MyPosition[] = []
-
-          for (const market of baseMarkets) {
-            const proposalVote = await readContract('pv', [market.id, walletAddress])
-            const proposalVoteNum = proposalVote ? Number(proposalVote) : 0
-            const resolutionVote = await readContract('rv', [market.id, walletAddress])
-            const resolutionVoteNum = resolutionVote ? Number(resolutionVote) : 0
-            const hasVotedOnProposal = await readContract('hvp', [market.id, walletAddress])
-            const hasVoted = hasVotedOnProposal ? Boolean(hasVotedOnProposal) : false
-            const hasClaimedResult = await readContract('hcw', [market.id, walletAddress])
-            const hasClaimed = hasClaimedResult ? Boolean(hasClaimedResult) : false
-
-            const shares: string[] = []
-            for (let oi = 0; oi < (market.outcomeLabels?.length || 0); oi++) {
-              const shResult = await readContract('sh', [market.id, oi, walletAddress])
-              shares.push(shResult ? BigInt(shResult.toString()).toString() : '0')
-            }
-
-            const hasAnyShares = shares.some(s => BigInt(s || '0') > BigInt(0))
-
-            updatedMarkets.push({
-              ...market,
-              hasCurrentWalletVoted: hasVoted || proposalVoteNum !== 0,
-              currentWalletProposalVote: proposalVoteNum,
-              hasCurrentWalletVotedOnResolution: resolutionVoteNum !== 0,
-              currentWalletResolutionVote: resolutionVoteNum
-            })
-
-            if (hasAnyShares || hasClaimed) {
-              let claimablePayout = '0'
-              if (market.finalized && !hasClaimed) {
-                const winningOutcome = Number(market.confirmedOutcome)
-                const userShares = BigInt(shares[winningOutcome] || '0')
-                const pools = (market.outcomePools || []).map(v => BigInt(v || '0'))
-                const totalPool = pools.reduce((sum, v) => sum + v, BigInt(0))
-                const winningPool = BigInt(market.outcomePools?.[winningOutcome] || '0')
-                if (userShares > BigInt(0) && winningPool > BigInt(0)) {
-                  const grossPayout = (userShares * totalPool) / winningPool
-                  claimablePayout = (grossPayout - ((grossPayout * BigInt(500)) / BigInt(10000))).toString()
-                }
-              }
-
-              positions.push({
-                marketId: market.id,
-                question: market.question,
-                marketState: market.state,
-                confirmedOutcome: market.confirmedOutcome,
-                shares,
-                stakes: shares.map(() => '0'),
-                totalStake: shares.reduce((sum, s) => sum + BigInt(s || '0'), BigInt(0)).toString(),
-                claimablePayout,
-                claimedPayout: '0',
-                claimed: hasClaimed,
-                marketEndTime: market.marketEndTime,
-                outcomeLabels: market.outcomeLabels || [],
-                outcomePools: market.outcomePools || []
-              })
-            }
-          }
-
-          if (updatedMarkets.length > 0) {
-            setAllOnChainMarkets(updatedMarkets)
-            try { sessionStorage.setItem('interpredict_public_markets', JSON.stringify(updatedMarkets)) } catch { }
-          }
-          setMyPositions(positions)
-        } catch (walletDataErr) {
-          console.warn('Wallet position data loading failed:', walletDataErr)
-        }
-      }
+      // Wallet enrichment (votes, shares, claims) is now handled by the
+      // /api/markets endpoint via batched server-side RPC calls. The old
+      // per-market readContract fallback loop has been removed because it
+      // caused RPC rate-limiting (429 errors) with 34+ markets.
+      // Wallet-specific fields (hasCurrentWalletVoted, walletPositions, etc.)
+      // are returned by the API in the initial fetch above.
 
     } catch (err: any) {
       console.warn("Scan error:", err?.message || err)

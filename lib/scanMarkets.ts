@@ -7,16 +7,15 @@ import type { Market } from '@/lib/marketsCache'
 // ---------------------------------------------------------------------------
 // Server-side market scanner using batched JSON-RPC calls.
 //
-// Batches 2 markets at a time (10 eth_call requests per batch in a single
+// Batches 1 market at a time (10 eth_call requests per batch in a single
 // HTTP request).  This is fast enough to stay under Netlify's 10s limit
 // while being gentle enough to avoid rate-limiting the gated RPC gateway.
 //
-// Timing (batched, 2 markets per batch):
-//   - 2 markets: ~1-2s per batch
-//   - 34 markets: 17 batches × ~1.5s = ~25s total
+// Now reads ALL market fields in a single batch per market:
+//   mb, ms, gL, gP, gPr2, pvs, tv, pc, cfe, cfc, csc, cc, cr
 //
 // For full refreshes, use the GitHub Actions workflow which calls
-// /api/markets/refresh?startId=X&count=2 repeatedly.
+// /api/markets/refresh?startId=X&count=1 repeatedly.
 // ---------------------------------------------------------------------------
 
 const CONTRACT_ADDRESS =
@@ -25,7 +24,7 @@ const CONTRACT_ADDRESS =
 
 const RPC_URL = 'https://evm-rpc.test-net.interlinklabs.ai/v1/rpc'
 
-const BATCH_SIZE = 1        // markets per batch (1 market = 5 calls, safest for gated RPC)
+const BATCH_SIZE = 1        // markets per batch (1 market = 10 calls, safest for gated RPC)
 const MAX_RETRY_ATTEMPTS = 2
 const RETRY_DELAY_MS = 500
 const RPC_CALL_TIMEOUT_MS = 8_000
@@ -203,7 +202,23 @@ export async function scanAllMarketsFromChain(
   console.info(`[scanMarkets] Scanning markets ${startId}-${endId - 1} of ${totalCount}...`)
 
   // Build batch items for all markets in range
-  const functions = ['mb', 'ms', 'gL', 'gP', 'gPr2'] as const
+  // Now includes governance and metadata fields
+  const functions = [
+    'mb',    // market base info
+    'ms',    // market state
+    'gL',    // outcome labels
+    'gP',    // outcome pools
+    'gPr2',  // outcome prices (1e18 scaled)
+    'pvs',   // proposal voting state (deadline, approval/rejection votes, finalized, decision)
+    'tv',    // total volume
+    'pc',    // participant count
+    'cfe',   // creator fees earned
+    'cfc',   // creator fees claimed
+    'csc',   // creator seed claimed
+    'cc',    // cancelled + cancel reason
+    'cr',    // resolution info (deadline, DEC snapshot, quorum, total votes, selected outcome, confirmed outcome, confirmed, finalized)
+  ] as const
+
   const batchItems: BatchItem[] = []
   for (let marketId = startId; marketId < endId; marketId++) {
     for (const fn of functions) {
@@ -223,6 +238,14 @@ export async function scanAllMarketsFromChain(
       const gLRaw = rawResults.get(`gL(${marketId})`) ?? null
       const gPRaw = rawResults.get(`gP(${marketId})`) ?? null
       const gPr2Raw = rawResults.get(`gPr2(${marketId})`) ?? null
+      const pvsRaw = rawResults.get(`pvs(${marketId})`) ?? null
+      const tvRaw = rawResults.get(`tv(${marketId})`) ?? null
+      const pcRaw = rawResults.get(`pc(${marketId})`) ?? null
+      const cfeRaw = rawResults.get(`cfe(${marketId})`) ?? null
+      const cfcRaw = rawResults.get(`cfc(${marketId})`) ?? null
+      const cscRaw = rawResults.get(`csc(${marketId})`) ?? null
+      const ccRaw = rawResults.get(`cc(${marketId})`) ?? null
+      const crRaw = rawResults.get(`cr(${marketId})`) ?? null
 
       const incompleteFields: string[] = []
       if (mbRaw === null) incompleteFields.push('mb')
@@ -230,6 +253,14 @@ export async function scanAllMarketsFromChain(
       if (gLRaw === null) incompleteFields.push('gL')
       if (gPRaw === null) incompleteFields.push('gP')
       if (gPr2Raw === null) incompleteFields.push('gPr2')
+      if (pvsRaw === null) incompleteFields.push('pvs')
+      if (tvRaw === null) incompleteFields.push('tv')
+      if (pcRaw === null) incompleteFields.push('pc')
+      if (cfeRaw === null) incompleteFields.push('cfe')
+      if (cfcRaw === null) incompleteFields.push('cfc')
+      if (cscRaw === null) incompleteFields.push('csc')
+      if (ccRaw === null) incompleteFields.push('cc')
+      if (crRaw === null) incompleteFields.push('cr')
 
       const decode = (fn: string, raw: string | null) => {
         if (!raw) return []
@@ -241,6 +272,17 @@ export async function scanAllMarketsFromChain(
       const gL = decode('gL', gLRaw)
       const gP = decode('gP', gPRaw)
       const gPr2 = decode('gPr2', gPr2Raw)
+      const pvs = decode('pvs', pvsRaw)
+      const tv = decode('tv', tvRaw)
+      const pc = decode('pc', pcRaw)
+      const cfe = decode('cfe', cfeRaw)
+      const cfc = decode('cfc', cfcRaw)
+      const csc = decode('csc', cscRaw)
+      const cc = decode('cc', ccRaw)
+      const cr = decode('cr', crRaw)
+
+      // pvs returns: [pvd (deadline), apv (approval votes), rjv (rejection votes), pvf (finalized), pvd2 (decision)]
+      // cr returns: [rvd (deadline), ads (active DEC snapshot), rq (quorum), trv (total votes), dso (selected outcome), co (confirmed outcome), oc (outcome confirmed), fn (finalized)]
 
       const market: Market = {
         id: marketId,
@@ -257,6 +299,30 @@ export async function scanAllMarketsFromChain(
         outcomeLabels: Array.isArray(gL[0]) ? (gL[0] as readonly string[]).map(String) : [],
         outcomePools: Array.isArray(gP[0]) ? (gP[0] as readonly bigint[]).map(v => v.toString()) : [],
         outcomePrices: Array.isArray(gPr2[0]) ? (gPr2[0] as readonly bigint[]).map(v => v.toString()) : [],
+
+        // Governance / voting fields
+        proposalVotingDeadline: Number(pvs[0] ?? 0),
+        approvalVotes: Number(pvs[1] ?? 0),
+        rejectionVotes: Number(pvs[2] ?? 0),
+        proposalFinalized: Boolean(pvs[3] ?? false),
+        proposalDecision: Number(pvs[4] ?? 0),
+        resolutionVotingDeadline: Number(cr[0] ?? 0),
+        activeDECSnapshot: Number(cr[1] ?? 0),
+        resolutionQuorum: Number(cr[2] ?? 0),
+        totalResolutionVotes: Number(cr[3] ?? 0),
+        decSelectedOutcome: Number(cr[4] ?? 0),
+        confirmedOutcome: Number(cr[5] ?? 0),
+        outcomeConfirmed: Boolean(cr[6] ?? false),
+        finalized: Boolean(cr[7] ?? false),
+
+        // Market metadata
+        totalVolume: tv[0] ? (tv[0] as bigint).toString() : '0',
+        participantCount: Number(pc[0] ?? 0),
+        creatorFeesEarned: cfe[0] ? (cfe[0] as bigint).toString() : '0',
+        creatorFeesClaimed: cfc[0] ? (cfc[0] as bigint).toString() : '0',
+        creatorSeedClaimed: csc[0] ? (csc[0] as bigint).toString() : '0',
+        cancelled: Boolean(cc[0] ?? false),
+        cancelReason: String(cc[1] ?? ''),
       }
 
       if (incompleteFields.length > 0) {

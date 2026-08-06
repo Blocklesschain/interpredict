@@ -26,6 +26,30 @@ export interface Market {
   outcomePrices: string[]  // 1e18-scaled prices as decimal strings
   /** Which contract calls failed during the last scan (e.g. ["gP", "gPr2"]).  Empty = all fields loaded successfully. */
   incompleteFields?: string[]
+
+  // --- Governance / voting fields (read during batch scan) ---
+  proposalVotingDeadline: number
+  approvalVotes: number
+  rejectionVotes: number
+  proposalFinalized: boolean
+  proposalDecision: number
+  resolutionVotingDeadline: number
+  activeDECSnapshot: number
+  resolutionQuorum: number
+  totalResolutionVotes: number
+  decSelectedOutcome: number
+  confirmedOutcome: number
+  outcomeConfirmed: boolean
+  finalized: boolean
+
+  // --- Market metadata ---
+  totalVolume: string
+  participantCount: number
+  creatorFeesEarned: string
+  creatorFeesClaimed: string
+  creatorSeedClaimed: string
+  cancelled: boolean
+  cancelReason: string
 }
 
 export interface MarketsSnapshot {

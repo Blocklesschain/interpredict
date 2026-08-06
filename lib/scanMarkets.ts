@@ -10,20 +10,22 @@ import type { Market } from '@/lib/marketsCache'
 //
 // ⚠️ TIMEOUT WARNING
 // Netlify's free-tier serverless functions have a 10-second execution limit.
-// Each market requires 5 independent eth_call requests (mb, ms, gL, gP, gPr2).
-// With ~20 markets that's ~100 RPC calls.  We parallelise the 5 calls *per
-// market* and batch markets in groups of 3 to avoid hammering the gateway.
+// Each market requires 5 sequential eth_call requests (mb, ms, gL, gP, gPr2)
+// with 200ms gaps between them to avoid rate-limiting the gated RPC gateway.
 //
-// Estimated timing (conservative):
-//   - 20 markets ÷ 3 per batch ≈ 7 batches
-//   - Each batch: ~1.5s (5 parallel calls + network latency + retry headroom)
-//   - Total: ~10.5s — right at the limit
+// Estimated timing:
+//   - 1 market: ~1.5s (5 calls × ~200ms + 200ms gaps + network latency)
+//   - 34 markets: ~51s — EXCEEDS the 10s limit
 //
-// If you have more than ~20 markets, consider:
-//   1. Upgrading to Netlify Background Functions (15 min timeout)
-//   2. Triggering /api/markets/refresh via a scheduled job (e.g. GitHub
-//      Action, cron-job.org) instead of on-demand from the serverless function
-//   3. Reducing MARKET_BATCH_SIZE further (trade speed for reliability)
+// This means the on-demand refresh via the serverless function WILL timeout
+// for more than ~6 markets.  The solution is the Netlify Scheduled Function
+// (netlify/functions/markets-refresh-cron.mjs) which has a 30s limit on the
+// free tier.  For 34 markets you'll need either:
+//   1. Netlify Pro (longer timeouts for scheduled functions)
+//   2. An external cron service (GitHub Actions, cron-job.org) calling the
+//      refresh endpoint — these have no timeout
+//   3. Reduce scope: only scan markets that changed since lastIndexedBlock
+//      (incremental refresh — not yet implemented)
 // ---------------------------------------------------------------------------
 
 const CONTRACT_ADDRESS =
@@ -36,15 +38,14 @@ const RPC_URL = 'https://evm-rpc.test-net.interlinklabs.ai/v1/rpc'
 // Retry configuration
 // ---------------------------------------------------------------------------
 const MAX_RETRY_ATTEMPTS = 3
-const RETRY_DELAY_MS = 500
+const RETRY_DELAY_MS = 1000
 
-// How many markets to scan in parallel.  Each market spawns 5 parallel
-// eth_call requests internally, so 3 markets = up to 15 concurrent RPC calls.
-const MARKET_BATCH_SIZE = 3
+// Gap between each of the 5 calls for a single market (ms).
+// 200ms is enough to avoid rate-limiting on the gated RPC.
+const CALL_GAP_MS = 200
 
-// Per-call timeout (ms).  The RPC gateway should respond well under this;
-// if it doesn't we fall back to empty/zero values for that field.
-const RPC_CALL_TIMEOUT_MS = 8_000
+// Per-call timeout (ms).
+const RPC_CALL_TIMEOUT_MS = 10_000
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -201,110 +202,100 @@ export async function scanAllMarketsFromChain(): Promise<{
 
   const allMarkets: Market[] = []
 
-  // 2. Process markets in small batches to avoid overwhelming the RPC gateway
-  for (let batchStart = 0; batchStart < totalCount; batchStart += MARKET_BATCH_SIZE) {
-    const batchEnd = Math.min(batchStart + MARKET_BATCH_SIZE, totalCount)
-    const batchIds: number[] = []
-    for (let id = batchStart; id < batchEnd; id++) {
-      batchIds.push(id)
-    }
+  // 2. Process markets ONE AT A TIME with gaps between each call.
+  //    This is slow but avoids rate-limiting the gated RPC gateway.
+  for (let marketId = 0; marketId < totalCount; marketId++) {
+    console.info(`[scanMarkets] Scanning market ${marketId}/${totalCount}...`)
 
-    console.info(`[scanMarkets] Processing batch: markets ${batchStart}-${batchEnd - 1}`)
+    try {
+      // Call each function sequentially with a gap between them
+      const mbRaw = await ethCallWithRetry(token, 'mb', [marketId], `mb(${marketId})`)
+      await sleep(CALL_GAP_MS)
 
-    // For each market in the batch, fire all 5 independent calls in parallel
-    const batchResults = await Promise.all(
-      batchIds.map(async (marketId): Promise<Market | null> => {
-        try {
-          const [mbRaw, msRaw, gLRaw, gPRaw, gPr2Raw] = await Promise.all([
-            ethCallWithRetry(token, 'mb', [marketId], `mb(${marketId})`),
-            ethCallWithRetry(token, 'ms', [marketId], `ms(${marketId})`),
-            ethCallWithRetry(token, 'gL', [marketId], `gL(${marketId})`),
-            ethCallWithRetry(token, 'gP', [marketId], `gP(${marketId})`),
-            ethCallWithRetry(token, 'gPr2', [marketId], `gPr2(${marketId})`),
-          ])
+      const msRaw = await ethCallWithRetry(token, 'ms', [marketId], `ms(${marketId})`)
+      await sleep(CALL_GAP_MS)
 
-          // Track which fields failed so the frontend can distinguish
-          // "genuinely empty" from "RPC was temporarily unavailable".
-          const incompleteFields: string[] = []
-          if (mbRaw === null) incompleteFields.push('mb')
-          if (msRaw === null) incompleteFields.push('ms')
-          if (gLRaw === null) incompleteFields.push('gL')
-          if (gPRaw === null) incompleteFields.push('gP')
-          if (gPr2Raw === null) incompleteFields.push('gPr2')
+      const gLRaw = await ethCallWithRetry(token, 'gL', [marketId], `gL(${marketId})`)
+      await sleep(CALL_GAP_MS)
 
-          const mb = decodeResult('mb', mbRaw)
-          const ms = decodeResult('ms', msRaw)
-          const gL = decodeResult('gL', gLRaw)
-          const gP = decodeResult('gP', gPRaw)
-          const gPr2 = decodeResult('gPr2', gPr2Raw)
+      const gPRaw = await ethCallWithRetry(token, 'gP', [marketId], `gP(${marketId})`)
+      await sleep(CALL_GAP_MS)
 
-          // mb returns: (q, d, cat, cc, tu, o, cr, et, rc, pe, be)
-          const question = String(mb[0] ?? '')
-          const description = String(mb[1] ?? '')
-          const category = Number(mb[2] ?? 0)
-          const customCategory = String(mb[3] ?? '')
-          const thumbnailUri = String(mb[4] ?? '')
-          const origin = Number(mb[5] ?? 0)
-          const creator = String(mb[6] ?? ethers.ZeroAddress)
-          const marketEndTime = Number(mb[7] ?? 0)
-          const resolutionCriteria = String(mb[8] ?? '')
+      const gPr2Raw = await ethCallWithRetry(token, 'gPr2', [marketId], `gPr2(${marketId})`)
 
-          // ms returns: (uint8 state)
-          const state = Number(ms[0] ?? 0)
+      // Track which fields failed so the frontend can distinguish
+      // "genuinely empty" from "RPC was temporarily unavailable".
+      const incompleteFields: string[] = []
+      if (mbRaw === null) incompleteFields.push('mb')
+      if (msRaw === null) incompleteFields.push('ms')
+      if (gLRaw === null) incompleteFields.push('gL')
+      if (gPRaw === null) incompleteFields.push('gP')
+      if (gPr2Raw === null) incompleteFields.push('gPr2')
 
-          // gL returns: (string[] labels)
-          const outcomeLabels: string[] = Array.isArray(gL[0])
-            ? (gL[0] as readonly string[]).map(String)
-            : []
+      const mb = decodeResult('mb', mbRaw)
+      const ms = decodeResult('ms', msRaw)
+      const gL = decodeResult('gL', gLRaw)
+      const gP = decodeResult('gP', gPRaw)
+      const gPr2 = decodeResult('gPr2', gPr2Raw)
 
-          // gP returns: (uint256[] pools)
-          const outcomePools: string[] = Array.isArray(gP[0])
-            ? (gP[0] as readonly bigint[]).map(v => v.toString())
-            : []
+      // mb returns: (q, d, cat, cc, tu, o, cr, et, rc, pe, be)
+      const question = String(mb[0] ?? '')
+      const description = String(mb[1] ?? '')
+      const category = Number(mb[2] ?? 0)
+      const customCategory = String(mb[3] ?? '')
+      const thumbnailUri = String(mb[4] ?? '')
+      const origin = Number(mb[5] ?? 0)
+      const creator = String(mb[6] ?? ethers.ZeroAddress)
+      const marketEndTime = Number(mb[7] ?? 0)
+      const resolutionCriteria = String(mb[8] ?? '')
 
-          // gPr2 returns: (uint256[] prices) — 1e18-scaled
-          const outcomePrices: string[] = Array.isArray(gPr2[0])
-            ? (gPr2[0] as readonly bigint[]).map(v => v.toString())
-            : []
+      // ms returns: (uint8 state)
+      const state = Number(ms[0] ?? 0)
 
-          const market: Market = {
-            id: marketId,
-            question,
-            description,
-            category,
-            customCategory,
-            thumbnailUri,
-            origin,
-            creator,
-            marketEndTime,
-            resolutionCriteria,
-            state,
-            outcomeLabels,
-            outcomePools,
-            outcomePrices,
-          }
+      // gL returns: (string[] labels)
+      const outcomeLabels: string[] = Array.isArray(gL[0])
+        ? (gL[0] as readonly string[]).map(String)
+        : []
 
-          // Only attach incompleteFields if something actually failed
-          if (incompleteFields.length > 0) {
-            market.incompleteFields = incompleteFields
-            console.warn(
-              `[scanMarkets] Market ${marketId} has incomplete fields: ${incompleteFields.join(', ')}`,
-            )
-          }
+      // gP returns: (uint256[] pools)
+      const outcomePools: string[] = Array.isArray(gP[0])
+        ? (gP[0] as readonly bigint[]).map(v => v.toString())
+        : []
 
-          return market
-        } catch (error) {
-          console.error(`[scanMarkets] Failed to scan market ${marketId}:`, error)
-          return null // skip this market rather than failing the whole batch
-        }
-      }),
-    )
+      // gPr2 returns: (uint256[] prices) — 1e18-scaled
+      const outcomePrices: string[] = Array.isArray(gPr2[0])
+        ? (gPr2[0] as readonly bigint[]).map(v => v.toString())
+        : []
 
-    // Filter out any markets that failed entirely
-    for (const market of batchResults) {
-      if (market) {
-        allMarkets.push(market)
+      const market: Market = {
+        id: marketId,
+        question,
+        description,
+        category,
+        customCategory,
+        thumbnailUri,
+        origin,
+        creator,
+        marketEndTime,
+        resolutionCriteria,
+        state,
+        outcomeLabels,
+        outcomePools,
+        outcomePrices,
       }
+
+      // Only attach incompleteFields if something actually failed
+      if (incompleteFields.length > 0) {
+        market.incompleteFields = incompleteFields
+        console.warn(
+          `[scanMarkets] Market ${marketId} has incomplete fields: ${incompleteFields.join(', ')}`,
+        )
+      }
+
+      allMarkets.push(market)
+    } catch (error) {
+      console.error(`[scanMarkets] Failed to scan market ${marketId}:`, error)
+      // Skip this market rather than failing the whole scan
     }
   }
 

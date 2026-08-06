@@ -7,7 +7,8 @@ const BASE = 'https://evm-rpc.test-net.interlinklabs.ai/v1/auth'
 const CHAIN_ID = '19042026'
 
 const SERVICE_WALLET_PRIVATE_KEY =
-  process.env.SERVICE_WALLET_PRIVATE_KEY?.trim()
+  process.env.SERVICE_WALLET_PRIVATE_KEY?.trim() ||
+  process.env.INTERLINK_BACKEND_PRIVATE_KEY?.trim()
 
 function createServiceWallet(): ethers.Wallet | null {
   if (!SERVICE_WALLET_PRIVATE_KEY) {

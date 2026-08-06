@@ -12,5 +12,18 @@
 # - Server-rendered pages
 # - All other routes
 # No custom redirects needed — the plugin generates them at build time.
+# Netlify Scheduled Function — automatically refreshes the markets cache
+# every 45 seconds so the GET /api/markets endpoint always serves fresh data
+# without ever hitting the gated RPC directly.
+#
+# ⚠️ Free-tier scheduled functions have a 30-second execution limit.
+# If your scan exceeds this, either reduce MARKET_BATCH_SIZE in
+# lib/scanMarkets.ts or upgrade to Netlify Pro for longer timeouts.
+[functions]
+  directory = "netlify/functions"
+
+[functions."markets-refresh-cron"]
+  schedule = "*/45 * * * *"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"

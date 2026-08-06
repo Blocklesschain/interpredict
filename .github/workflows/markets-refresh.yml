@@ -1,9 +1,9 @@
 name: Refresh Markets Cache
 
-# Runs every 2 minutes.  Each run scans all markets in batches of 5
-# (each batch takes ~7.5s, well under Netlify's 10s serverless limit).
+# Runs every 2 minutes.  Each run scans all markets in batches of 1
+# (each batch = 1 market × 13 contract calls, ~3-5s per batch).
 #
-# For 34 markets: 7 batches × ~8s each = ~56s total per run.
+# For 34 markets: 34 batches × ~4s each = ~136s total per run.
 # GitHub Actions has a 6-hour limit — no timeout concerns.
 #
 # GitHub Actions free tier: unlimited minutes on public repos.
@@ -28,12 +28,11 @@ jobs:
           # First, get the total market count
           echo "=== Starting incremental market scan ==="
 
-          # Scan in batches of 5.  We don't know the total count upfront,
-          # so we keep going until a batch returns fewer markets than requested
-          # or totalCount is reached.
+          # Scan 1 market per batch (13 contract calls per market).
+          # This stays well under Netlify's 10s serverless limit.
           START=0
-          BATCH_SIZE=5
-          MAX_BATCHES=20  # safety limit (100 markets max)
+          BATCH_SIZE=1
+          MAX_BATCHES=100  # safety limit (100 markets max)
 
           for i in $(seq 1 $MAX_BATCHES); do
             echo ""

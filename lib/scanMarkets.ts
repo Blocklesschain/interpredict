@@ -25,7 +25,7 @@ const CONTRACT_ADDRESS =
 
 const RPC_URL = 'https://evm-rpc.test-net.interlinklabs.ai/v1/rpc'
 
-const BATCH_SIZE = 2        // markets per batch
+const BATCH_SIZE = 1        // markets per batch (1 market = 5 calls, safest for gated RPC)
 const MAX_RETRY_ATTEMPTS = 2
 const RETRY_DELAY_MS = 500
 const RPC_CALL_TIMEOUT_MS = 8_000

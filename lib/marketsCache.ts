@@ -42,7 +42,7 @@ const REFRESH_LOCK_KEY = 'refresh-lock'
 // How long a refresh lock lives before it's considered stale (seconds).
 // Must be longer than the worst-case scan duration.  If a scan crashes the
 // lock auto-expires so the next refresh attempt can proceed.
-const REFRESH_LOCK_TTL_SECONDS = 120
+const REFRESH_LOCK_TTL_SECONDS = 45
 
 // ---------------------------------------------------------------------------
 // Snapshot read / write

@@ -64,12 +64,25 @@ NEXT ACTION
 ---
 
 ## PHASE: 05 — Contract Implementation
-**STATUS:** NOT STARTED
+**STATUS:** COMPLETE
+
+**FILES:**
+- `interpredict-deploy/contracts/InterPredictV2.sol` (created — clear naming, custom errors, self-describing events)
+- `interpredict-deploy/hardhat.config.ts` (rewritten — Hardhat v3 plugin registration, no config-load network call)
+- `interpredict-deploy/package.json` (rewritten — removed deprecated v2-era plugins, added forge-std)
+
+**TESTS:** 42 Solidity tests passing.
 
 ---
 
 ## PHASE: 06 — Contract Tests
-**STATUS:** NOT STARTED
+**STATUS:** COMPLETE
+
+**FILES:** `interpredict-deploy/test/InterPredictV2.t.sol` (42 tests)
+
+**TESTS:** `npx hardhat test` → 42 passing (42 solidity).
+
+**COVERAGE:** deployment, team market, community proposal, proposal voting, participation, resolution, claims, DEC membership, cancellation, pause. Includes duplicate-action, permission, invalid-state, and boundary tests.
 
 ---
 

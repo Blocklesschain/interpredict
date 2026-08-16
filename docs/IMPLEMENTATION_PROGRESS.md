@@ -94,27 +94,43 @@ NEXT ACTION
 ---
 
 ## PHASE: 08 — Supabase Migrations
-**STATUS:** NOT STARTED (schema specified; migrations pending)
+**STATUS:** COMPLETE
+
+**FILES:**
+- `supabase/migrations/0001_schema.sql` (schema, indexes, provenance, RLS enable)
+- `supabase/migrations/0002_rls_policies.sql` (RLS policies)
 
 ---
 
 ## PHASE: 09 — Indexer
-**STATUS:** NOT STARTED (architecture specified in `docs/INDEXER_ARCHITECTURE.md`)
+**STATUS:** COMPLETE (implementation)
+
+**FILES:**
+- `services/indexer/indexer.ts` (incremental, resumable, idempotent, retry-safe)
+- `lib/config.ts` (typed config)
+- `lib/supabase.ts` (server-only Supabase client)
+- `netlify/functions/indexer-sync.mjs` (background function)
 
 ---
 
 ## PHASE: 10 — Indexer Tests
-**STATUS:** NOT STARTED
+**STATUS:** NOT STARTED (implementation complete; tests pending)
 
 ---
 
 ## PHASE: 11 — Backend Repositories/Services
-**STATUS:** NOT STARTED
+**STATUS:** COMPLETE
+
+**FILES:** `repositories/markets.ts` (typed read access, no N+1)
 
 ---
 
 ## PHASE: 12 — APIs
-**STATUS:** NOT STARTED (specified in `docs/API_SPEC.md`)
+**STATUS:** COMPLETE (read APIs)
+
+**FILES:**
+- `app/api/markets/route.ts` (envelope, pagination, filtering, freshness)
+- `app/api/health/route.ts` (safe health endpoint)
 
 ---
 
@@ -124,7 +140,17 @@ NEXT ACTION
 ---
 
 ## PHASE: 14 — Design System
-**STATUS:** NOT STARTED (specified in `docs/UI_UX_SPEC.md`)
+**STATUS:** COMPLETE (core primitives)
+
+**FILES:**
+- `components/ui/card.tsx`
+- `components/ui/badge.tsx`
+- `components/ui/skeleton.tsx`
+- `components/ui/empty-state.tsx`
+- `components/ui/transaction-status.tsx`
+- `components/ui/button.tsx` (existing, retained)
+- `lib/errors.ts` (error normalization)
+- `lib/actions.ts` (dynamic action engine)
 
 ---
 

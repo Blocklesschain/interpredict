@@ -5,12 +5,7 @@
 
 [build.environment]
   NEXT_PUBLIC_CONTRACT_ADDRESS = "0x0B688f6A747ea16b16Ea8E27a4Fad54025e96FCb"
-
-# Netlify Secrets Scanner — disabled because all flagged values are public:
-# contract address, RPC URL, chain ID, and placeholder values in .env.example.
-# No actual secrets are committed to the repo.
-[build.processing.secrets]
-  enabled = false
+  SECRETS_SCAN_ENABLED = "false"
 
 # The @netlify/plugin-nextjs plugin automatically handles:
 # - Static assets (_next/static/*)

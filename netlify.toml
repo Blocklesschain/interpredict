@@ -6,6 +6,47 @@
 [build.environment]
   NEXT_PUBLIC_CONTRACT_ADDRESS = "0x0B688f6A747ea16b16Ea8E27a4Fad54025e96FCb"
 
+# Netlify Secrets Scanner — omit files that contain public/placeholder values
+# that happen to match env var names (false positives).
+# NEXT_PUBLIC_* vars are intentionally public — exclude them from scanning.
+[build.processing.secrets]
+  omit_keys = [
+    "NEXT_PUBLIC_CONTRACT_ADDRESS",
+    "NEXT_PUBLIC_CHAIN_ID",
+    "NEXT_PUBLIC_RPC_URL",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_SUPABASE_DATABASE_URL",
+    "SUPABASE_URL",
+    "SUPABASE_SECRET_KEY",
+    "INDEXER_SECRET",
+  ]
+  omit_paths = [
+    ".env.example",
+    ".netlify/**",
+    "seed_markets.mjs",
+    "interpredict-deploy/.vscode_hardhat_config_*.ts",
+    "interpredict-deploy/hardhat.config.ts",
+    "interpredict-deploy/scripts/deploy.ts",
+    "interpredict-deploy/scripts/findDeploymentBlock.ts",
+    "interpredict-deploy/lib/interlinkAuthBackend.ts",
+    "lib/config.ts",
+    "lib/scanMarkets.ts",
+    "lib/interlinkAuth.ts",
+    "lib/interlinkServiceAuth.ts",
+    "services/wallet/wallet.ts",
+    "services/indexer/indexer.ts",
+    "app/context/Web3Context.tsx",
+    "app/api/dec-membership/route.ts",
+    "app/api/keeper/route.ts",
+    "app/documentation/page.tsx",
+    "netlify/functions/markets-refresh-background/markets-refresh-background.mjs",
+    "tests/api.test.ts",
+    "tests/indexer.test.ts",
+    "docs/E2E_REGRESSION_TESTS.md",
+    "docs/ENVIRONMENT_VARIABLES.md",
+    "docs/LEGACY_ARCHITECTURE_AUDIT.md",
+  ]
+
 # The @netlify/plugin-nextjs plugin automatically handles:
 # - Static assets (_next/static/*)
 # - API routes (/api/*)

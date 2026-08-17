@@ -70,6 +70,7 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
     error MarketDoesNotExist();
     error InvalidEndTime();
     error SlippageExceeded();
+    error NoSharesToExit();
 
     // ---------------------------------------------------------------------
     // Constants
@@ -91,6 +92,7 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
     uint256 public constant REPUTATION_INCREASE = 10;
     uint256 public constant REPUTATION_DECREASE = 20;
     uint256 public constant MAX_REPUTATION = 1000;
+    uint256 public constant EXIT_FEE_BPS = 50;       // 0.5% exit fee
     uint256 public constant BPS_DENOMINATOR = 10000;
 
     // Fee split (community markets) — participation fee
@@ -212,6 +214,7 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
     mapping(uint256 => mapping(address => bool)) public hasClaimedWinnings;
     mapping(address => DecMember) public decMember;
     mapping(uint256 => mapping(address => bool)) public decRewardDistributed;
+    mapping(uint256 => mapping(address => bool)) public hasExited;
 
     // ---------------------------------------------------------------------
     // Events
@@ -240,6 +243,7 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
     event DECRewardClaimed(address indexed member, uint256 amount);
     event ReputationUpdated(address indexed member, uint256 reputation);
     event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
+    event PositionExited(uint256 indexed id, address indexed participant, uint256 grossPayout, uint256 fee, uint256 netPayout);
 
     // ---------------------------------------------------------------------
     // Modifiers
@@ -596,6 +600,50 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
             if (!sent) revert InsufficientFee();
             decRewardPool += decShare;
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Exit Position (sell shares while market is active)
+    // ---------------------------------------------------------------------
+    function exitPosition(uint256 id, uint8 outcomeIndex, uint256 minPayout)
+        external
+        whenNotPaused
+        nonReentrant
+        marketExists(id)
+    {
+        if (marketState[id] != State.Active ||
+            block.timestamp >= marketContext[id].endTime ||
+            outcomeIndex >= outcomeLabels[id].length) {
+            revert InvalidMarketState();
+        }
+        if (hasExited[id][msg.sender]) revert NoSharesToExit();
+
+        uint256 userShares = shares[id][outcomeIndex][msg.sender];
+        if (userShares == 0) revert NoSharesToExit();
+
+        uint256 totalPool = getTotalPool(id);
+        uint256 outcomePool = outcomePools[id][outcomeIndex];
+        if (outcomePool == 0 || totalPool == 0) revert NoSharesToExit();
+
+        // Calculate payout: user's proportional share of the outcome pool
+        uint256 grossPayout = (userShares * totalPool) / outcomePool;
+        uint256 exitFee = (grossPayout * EXIT_FEE_BPS) / BPS_DENOMINATOR;
+        uint256 netPayout = grossPayout - exitFee;
+        if (netPayout < minPayout) revert SlippageExceeded();
+
+        // Burn the user's shares and reduce the outcome pool
+        shares[id][outcomeIndex][msg.sender] = 0;
+        hasExited[id][msg.sender] = true;
+        outcomePools[id][outcomeIndex] -= netPayout;
+
+        // Distribute exit fee
+        _distributeParticipationFee(id, exitFee);
+
+        // Send net payout to user
+        (bool sent, ) = payable(msg.sender).call{value: netPayout}("");
+        if (!sent) revert InsufficientFee();
+
+        emit PositionExited(id, msg.sender, grossPayout, exitFee, netPayout);
     }
 
     // ---------------------------------------------------------------------

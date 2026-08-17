@@ -4,7 +4,7 @@
   publish = ".next"
 
 [build.environment]
-  NEXT_PUBLIC_CONTRACT_ADDRESS = "0x0B688f6A747ea16b16Ea8E27a4Fad54025e96FCb"
+  NEXT_PUBLIC_CONTRACT_ADDRESS = "0xDf020BE3EdC46e80f75496191dC457d9FebBBd4C"
   SECRETS_SCAN_ENABLED = "false"
 
 # The @netlify/plugin-nextjs plugin automatically handles:

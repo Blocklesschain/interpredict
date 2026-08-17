@@ -729,60 +729,7 @@ export default function DAppPortal() {
 
   return (
     <div className="min-h-screen bg-[#060117] text-slate-100 font-sans antialiased overflow-x-hidden pb-12">
-      <header className="fixed top-0 inset-x-0 h-20 bg-[#0d0022]/90 backdrop-blur-md border-b border-purple-950/40 z-40 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto h-full flex items-center gap-2 max-[380px]:gap-1 sm:gap-4">
-          <Link
-            href="/"
-            aria-label="Go to InterPredict homepage"
-            className="flex shrink-0 items-center gap-2.5 group"
-          >
-            <Logo className="size-9 rounded-xl" />
-            <span className="hidden sm:inline font-heading text-lg font-bold tracking-tight text-white group-hover:text-primary transition-colors">
-              InterPredict
-            </span>
-          </Link>
-
-          <div
-            className="
-              ml-auto shrink-0
-              [&_select]:max-sm:max-w-[7.25rem]
-              [&_select]:max-sm:px-2
-              [&_select]:max-sm:text-xs
-            "
-          >
-            <LanguageSelector />
-          </div>
-
-          {walletAddress ? (
-            <div className="min-w-0 flex shrink items-center bg-purple-950/30 border border-purple-900/40 rounded-full px-1.5 sm:pr-1.5 sm:pl-4 py-1.5 gap-1.5 sm:gap-3 max-w-[50vw] sm:max-w-none">
-              <span title={`${walletBalanceLabel} tITL`} className="inline min-w-0 max-w-[9rem] truncate font-mono text-[10px] sm:max-w-none sm:text-xs text-emerald-400 whitespace-nowrap">
-                {walletBalanceLabel} tITL
-              </span>
-              <span className="hidden sm:block w-px h-4 bg-purple-900/40" />
-              <span className="hidden sm:inline font-mono text-xs text-purple-300 whitespace-nowrap">
-                {`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}
-              </span>
-              <button
-                onClick={disconnectWallet}
-                aria-label="Disconnect wallet"
-                className="shrink-0 p-2 bg-purple-900/40 hover:bg-rose-950/40 rounded-full text-slate-400 hover:text-rose-400 transition-colors"
-              >
-                <LogOut className="size-3.5" />
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={connectWallet}
-              className="shrink-0 flex items-center gap-2 px-3 sm:px-5 py-2.5 bg-gradient-to-r from-primary to-purple-600 text-xs sm:text-sm font-semibold rounded-full border border-purple-500/20 shadow-lg"
-            >
-              <Wallet className="size-3.5" />
-              <span className="hidden min-[360px]:inline">{t('connectBtn')}</span>
-            </button>
-          )}
-        </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto pt-28 px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
+      <div className="max-w-7xl mx-auto pt-6 px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
         <div className="lg:hidden w-full relative z-30">
           <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="w-full flex items-center justify-between bg-secondary/20 border border-secondary/30 rounded-xl px-4 py-3 text-sm font-semibold text-slate-200">
             <div className="flex items-center gap-2"><Menu className="size-4 text-primary" /><span>{getTabLabel(activeTab)}</span></div>

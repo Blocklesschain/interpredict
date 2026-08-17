@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { href: '/app/activity', labelKey: 'nav.activity' as const },
   { href: '/app/create', labelKey: 'nav.create' as const },
   { href: '/app/dec', labelKey: 'nav.dec' as const },
+  { href: '/app', labelKey: 'nav.dapp' as const },
   { href: '/app/help', labelKey: 'nav.help' as const },
 ]
 

@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { useLocale } from '@/hooks/useLocale'
+import { useWeb3 } from '@/app/context/Web3Context'
 import { getWalletState } from '@/services/wallet/wallet'
 import { MarketState } from '@/lib/actions'
 import { Upload } from 'lucide-react'
@@ -21,6 +22,7 @@ const CATEGORY_NAMES = [
 
 export default function CreatePage() {
   const { t } = useLocale()
+  const { createMarketOnChain, connectWallet, txStatus } = useWeb3()
   const walletAddress = getWalletState().address
 
   const [question, setQuestion] = useState('')
@@ -32,12 +34,21 @@ export default function CreatePage() {
   const [marketImage, setMarketImage] = useState<string | null>(null)
   const [marketImageFile, setMarketImageFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   if (!walletAddress) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-8">
-        <EmptyState variant="no-activity" description="Connect your wallet to create a market." />
+        <div className="text-center">
+          <EmptyState
+            variant="no-activity"
+            description="Connect your wallet to create a market."
+          />
+          <Button className="mt-4" onClick={connectWallet}>
+            Connect Wallet
+          </Button>
+        </div>
       </div>
     )
   }
@@ -67,10 +78,11 @@ export default function CreatePage() {
   const handleSubmit = async () => {
     if (!question || !resolutionCriteria) return
 
-    setIsUploading(true)
+    setIsSubmitting(true)
     let thumbnailUrl = ''
 
     if (marketImageFile) {
+      setIsUploading(true)
       try {
         const formData = new FormData()
         formData.append('file', marketImageFile)
@@ -79,19 +91,40 @@ export default function CreatePage() {
         if (!uploadRes.ok) {
           alert(uploadJson.error || 'Image upload failed')
           setIsUploading(false)
+          setIsSubmitting(false)
           return
         }
         thumbnailUrl = uploadJson.url
       } catch (err: any) {
         alert('Image upload failed: ' + (err.message || 'unknown error'))
         setIsUploading(false)
+        setIsSubmitting(false)
         return
       }
+      setIsUploading(false)
     }
 
-    setIsUploading(false)
-    // TODO: Contract interaction via wallet service
-    alert('Market creation will be enabled after contract deployment.')
+    // Calculate end time from duration
+    const endTime = Math.floor(Date.now() / 1000) + endDays * 86400
+
+    const success = await createMarketOnChain(
+      question,
+      endTime,
+      outcomes,
+      category,
+      thumbnailUrl,
+      resolutionCriteria
+    )
+
+    if (success) {
+      setQuestion('')
+      setDescription('')
+      setOutcomes(['Yes', 'No'])
+      setMarketImage(null)
+      setMarketImageFile(null)
+      setResolutionCriteria('')
+    }
+    setIsSubmitting(false)
   }
 
   return (

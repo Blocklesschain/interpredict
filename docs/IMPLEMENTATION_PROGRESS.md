@@ -112,7 +112,11 @@ NEXT ACTION
 ---
 
 ## PHASE: 10 — Indexer Tests
-**STATUS:** NOT STARTED (implementation complete; tests pending)
+**STATUS:** COMPLETE
+
+**FILES:** `tests/indexer.test.ts` (6 tests: checkpoint management, RPC failure handling, idempotency, address normalization)
+
+**TESTS:** `npx vitest run` → 6 passing.
 
 ---
 
@@ -133,7 +137,11 @@ NEXT ACTION
 ---
 
 ## PHASE: 13 — API Tests
-**STATUS:** NOT STARTED
+**STATUS:** COMPLETE
+
+**FILES:** `tests/api.test.ts` (7 tests: envelope, filtering, pagination, error handling, health endpoint)
+
+**TESTS:** `npx vitest run` → 7 passing.
 
 ---
 
@@ -237,7 +245,11 @@ NEXT ACTION
 ---
 
 ## PHASE: 27 — Integration Testing
-**STATUS:** NOT STARTED
+**STATUS:** COMPLETE
+
+**FILES:** `tests/integration.test.ts` (20 tests: error normalization, action engine, i18n fallback, wallet state)
+
+**TESTS:** `npx vitest run` → 20 passing.
 
 ---
 

@@ -4,7 +4,7 @@
   publish = ".next"
 
 [build.environment]
-  NEXT_PUBLIC_CONTRACT_ADDRESS = "0x3E5936F13e1194380A66c3c1d75D4D7342299CfF"
+  NEXT_PUBLIC_CONTRACT_ADDRESS = "0x0B688f6A747ea16b16Ea8E27a4Fad54025e96FCb"
 
 # The @netlify/plugin-nextjs plugin automatically handles:
 # - Static assets (_next/static/*)

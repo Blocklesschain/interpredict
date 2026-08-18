@@ -48,7 +48,7 @@ interface Web3ContextType {
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
 
 const INTERLINK_TESTNET_CHAIN_ID = '19042026'
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x3E5936F13e1194380A66c3c1d75D4D7342299CfF"
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xDf020BE3EdC46e80f75496191dC457d9FebBBd4C"
 const ADMIN_ADDRESS = '0x6e832252ea4c78068ee109d953724d2762431992'
 
 // NOTE: the deployed contract uses the native chain token (msg.value) for all
@@ -510,24 +510,22 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     try {
       setTxStatus("Broadcasting market creation payload...")
 
-      // Struct-based params for both cTM (team) and pM (community)
+      // Struct-based params for V2 contract (InterPredictV2.sol MarketParams)
       const params = {
-        q: description,
-        d: "",
-        cat: category,
-        cc: "",
-        tu: thumbnailUri,
-        ol: outcomes,
-        et: marketEndTime,
-        rc: resolutionCriteria,
-        ev: "",
-        pe: ""
+        question: description,
+        description: "",
+        category,
+        customCategory: "",
+        thumbnailUri,
+        outcomes,
+        endTime: marketEndTime,
+        resolutionCriteria,
       }
 
       if (isTeam) {
-        await sendTxSafely('cTM', [params], { value: ethers.parseEther("10") })
+        await sendTxSafely('deployTeamMarket', [params], { value: ethers.parseEther("10") })
       } else {
-        await sendTxSafely('pM', [params], { value: ethers.parseEther("11") })
+        await sendTxSafely('proposeMarket', [params], { value: ethers.parseEther("11") })
       }
 
       setTxStatus(isTeam ? "Team market created and activated!" : "Market proposed! Awaiting DEC review.")
@@ -549,7 +547,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const getNextMarketId = async (): Promise<number> => {
     try {
       const { contract } = await getContractInstance()
-      const count = await contract.tm() // public uint256 tm — total markets
+      const count = await contract.totalMarkets() // public uint256 totalMarkets
       return Number(count) - 1
     } catch { return 0 }
   }
@@ -563,7 +561,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
       setTxStatus("Checking DEC membership status...")
       const { contract } = await getContractInstance()
-      const isAlreadyMember = await contract.iad(walletAddress)
+      const isAlreadyMember = await contract.isActiveDecMember(walletAddress)
 
       if (isAlreadyMember) {
         setTxStatus("Already a registered DEC Committee Member!")
@@ -697,7 +695,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const { contract } = await getContractInstance()
 
       const isAlreadyActive = Boolean(
-        await contract.iad(address)
+        await contract.isActiveDecMember(address)
       )
 
       if (isAlreadyActive) {
@@ -733,13 +731,13 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
           `Reactivating DEC membership for ${address}...`
         )
 
-        await sendTxSafely('actD', [address])
+        await sendTxSafely('activateDecMember', [address])
       } else {
         setTxStatus(
           `Approving DEC membership for ${address}...`
         )
 
-        await sendTxSafely('addD', [address])
+        await sendTxSafely('addDecMember', [address])
       }
 
       await clearPendingRequest()
@@ -773,18 +771,18 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       setTxStatus("Transmitting curation vote...")
       const { contract } = await getContractInstance()
 
-      const state = Number(await contract.ms(marketId))
-      const existingVote = Number(await contract.pv(marketId, walletAddress))
+      const state = Number(await contract.marketState(marketId))
+      const existingVote = Number(await contract.proposalVote(marketId, walletAddress))
       if (existingVote !== 0) {
         throw new Error(`This wallet has already voted ${existingVote === 1 ? 'Approve' : 'Reject'} on this proposal.`)
       }
 
       if (state === MarketState.Proposed) {
         setTxStatus("Entering proposal into DEC voting...")
-        await sendTxSafely('ePV', [marketId])
+        await sendTxSafely('enterProposalReview', [marketId])
       }
 
-      await sendTxSafely('vOP', [marketId, support ? 1 : 2]) // PVote enum: 0=None, 1=Approve, 2=Reject
+      await sendTxSafely('voteOnProposal', [marketId, support ? 1 : 2]) // ProposalVote enum: 0=None, 1=Approve, 2=Reject
       setTxStatus("Ballot submitted on-chain.")
 
       if (walletAddress) {
@@ -807,9 +805,9 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const grossAmount = ethers.parseEther(amount || "0.1")
       const minSharesOut = 1
 
-      // bO() is payable — the bet amount is sent as native-token msg.value,
+      // participate() is payable — the bet amount is sent as native-token msg.value,
       // not as an ERC20 transfer. No approve/allowance step needed.
-      await sendTxSafely('bO', [marketId, outcomeIndex, minSharesOut], { value: grossAmount })
+      await sendTxSafely('participate', [marketId, outcomeIndex, minSharesOut], { value: grossAmount })
 
       setTxStatus("Trade logged on-chain!")
 
@@ -831,7 +829,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const finalizeProposalVotingOnChain = async (marketId: number): Promise<boolean> => {
     try {
       setTxStatus("Finalizing proposal voting...")
-      await sendTxSafely('fPV', [marketId])
+      await sendTxSafely('finalizeProposalVoting', [marketId])
       setTxStatus("Proposal finalized!")
       return true
     } catch (err: any) {
@@ -848,14 +846,14 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       setTxStatus("Entering proposal voting...")
       const { contract } = await getContractInstance()
 
-      const state = Number(await contract.ms(marketId))
+      const state = Number(await contract.marketState(marketId))
 
       if (state === MarketState.Proposed) {
-        await sendTxSafely('ePV', [marketId])
+        await sendTxSafely('enterProposalReview', [marketId])
         setTxStatus("Proposal entered voting. Awaiting 24h window or finalization...")
         return true
       } else if (state === MarketState.DECVoting) {
-        await sendTxSafely('fPV', [marketId])
+        await sendTxSafely('finalizeProposalVoting', [marketId])
         setTxStatus("Proposal voting finalized!")
         return true
       }
@@ -871,7 +869,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const claimPayoutOnChain = async (marketId: number): Promise<boolean> => {
     try {
       setTxStatus("Claiming winnings...")
-      await sendTxSafely('cW', [marketId])
+      await sendTxSafely('claimWinnings', [marketId])
       setTxStatus("Winnings claimed successfully!")
       if (walletAddress) {
         saveLogToLocalStorage(walletAddress, 'Payout', `Winnings claimed on Market #${marketId}`, 'Success', 'Success')
@@ -892,9 +890,9 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const { contract: readContract, provider } = await getContractInstance()
       const { signer } = await getSignerContract()
       const activeWallet = await signer.getAddress()
-      const state = Number(await readContract.ms(marketId))
-      const market = await readContract.mb(marketId)
-      const endTime = Number(market.et ?? market[7])
+      const state = Number(await readContract.marketState(marketId))
+      const market = await readContract.marketContext(marketId)
+      const endTime = Number(market.endTime ?? market[7])
       const latestBlock = await provider.getBlock('latest')
       const chainTime = Number(latestBlock?.timestamp || Math.floor(Date.now() / 1000))
 
@@ -909,15 +907,15 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
       const creator = String(market.cr ?? market[6]).toLowerCase()
       const isCreator = creator === activeWallet.toLowerCase()
-      const isTrader = Boolean(await readContract.ht(marketId, activeWallet))
-      const isActiveDec = Boolean(await readContract.iad(activeWallet))
+      const isTrader = Boolean(await readContract.hasParticipated(marketId, activeWallet))
+      const isActiveDec = Boolean(await readContract.isActiveDecMember(activeWallet))
 
       if (!isCreator && !isTrader && !isActiveDec) {
         throw new Error('Only a trader, the market creator, or an active DEC member can request resolution.')
       }
 
       setTxStatus("Eligibility confirmed. Requesting market resolution...")
-      await sendTxSafely('rR', [marketId])
+      await sendTxSafely('requestResolution', [marketId])
       setTxStatus("Resolution requested successfully. The market is now available for DEC resolution voting.")
       return true
     } catch (err: any) {
@@ -931,8 +929,8 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const resolveMarketOnChain = async (marketId: number, winningOutcome: number): Promise<boolean> => {
     try {
       const { contract } = await getContractInstance()
-      const state = Number(await contract.ms(marketId))
-      const labels = await contract.gL(marketId)
+      const state = Number(await contract.marketState(marketId))
+      const labels = await contract.getOutcomeLabels(marketId)
 
       if (winningOutcome < 0 || winningOutcome >= labels.length) {
         throw new Error('The selected winning outcome is invalid for this market.')
@@ -940,14 +938,14 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
       if (state === MarketState.AdminVer) {
         setTxStatus("Confirming the winning outcome as admin verifier...")
-        await sendTxSafely('cO', [marketId, winningOutcome, ""])
+        await sendTxSafely('confirmOutcome', [marketId, winningOutcome, ""])
         setTxStatus("Outcome confirmed. The market is ready for finalization.")
         return true
       }
 
       if (state === MarketState.Confirmed) {
         setTxStatus("Finalizing confirmed market...")
-        await sendTxSafely('fM', [marketId])
+        await sendTxSafely('finalizeMarket', [marketId])
         setTxStatus("Market finalized successfully. Winning positions can now be claimed.")
         return true
       }
@@ -967,25 +965,25 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       const { contract } = await getContractInstance()
       const { signer } = await getSignerContract()
       const activeWallet = await signer.getAddress()
-      const state = Number(await contract.ms(marketId))
+      const state = Number(await contract.marketState(marketId))
 
       if (state !== MarketState.DECResVoting) {
         throw new Error('This market is not currently accepting DEC resolution votes.')
       }
-      if (!Boolean(await contract.iad(activeWallet))) {
+      if (!Boolean(await contract.isActiveDecMember(activeWallet))) {
         throw new Error('Only active DEC members can vote on market resolutions.')
       }
-      if (Boolean(await contract.hvr(marketId, activeWallet))) {
+      if (Boolean(await contract.hasVotedOnResolution(marketId, activeWallet))) {
         throw new Error('This wallet has already voted on this resolution.')
       }
 
-      const labels = await contract.gL(marketId)
+      const labels = await contract.getOutcomeLabels(marketId)
       if (outcomeIndex < 0 || outcomeIndex >= labels.length) {
         throw new Error('The selected outcome is invalid for this market.')
       }
 
       setTxStatus("Casting resolution vote...")
-      await sendTxSafely('vOR', [marketId, outcomeIndex])
+      await sendTxSafely('voteOnResolution', [marketId, outcomeIndex])
       setTxStatus("Resolution vote submitted successfully.")
       return true
     } catch (err: any) {
@@ -1000,9 +998,9 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
     try {
       setTxStatus("Checking DEC resolution vote totals...")
       const { contract } = await getContractInstance()
-      const state = Number(await contract.ms(marketId))
-      const resolution = await contract.mr(marketId)
-      const totalVotes = Number(resolution.trv ?? resolution[2])
+      const state = Number(await contract.marketState(marketId))
+      const resolution = await contract.marketResolution(marketId)
+      const totalVotes = Number(resolution.totalResolutionVotes ?? resolution[2])
       const quorum = Number(resolution.quorum ?? resolution[1])
 
       if (state !== MarketState.DECResVoting) {
@@ -1013,7 +1011,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       }
 
       setTxStatus("Finalizing DEC resolution voting...")
-      await sendTxSafely('fRV', [marketId])
+      await sendTxSafely('finalizeResolutionVoting', [marketId])
       setTxStatus("DEC resolution voting finalized. The market is awaiting admin verification.")
       return true
     } catch (err: any) {
@@ -1027,7 +1025,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const claimDecRewardsOnChain = async (): Promise<boolean> => {
     try {
       setTxStatus("Claiming DEC rewards...")
-      await sendTxSafely('cDR', [])
+      await sendTxSafely('claimDecRewards', [])
       setTxStatus("DEC rewards claimed!")
       return true
     } catch (err: any) {
@@ -1041,7 +1039,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const claimCreatorFeesOnChain = async (marketId: number): Promise<boolean> => {
     try {
       setTxStatus("Claiming creator fees...")
-      await sendTxSafely('cCF', [marketId])
+      await sendTxSafely('claimCreatorFee', [marketId])
       setTxStatus("Creator fees claimed!")
       return true
     } catch (err: any) {
@@ -1055,7 +1053,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const claimCreatorSeedOnChain = async (marketId: number): Promise<boolean> => {
     try {
       setTxStatus("Claiming creator seed...")
-      await sendTxSafely('cCS', [marketId])
+      await sendTxSafely('claimCreatorSeed', [marketId])
       setTxStatus("Creator seed claimed!")
       return true
     } catch (err: any) {

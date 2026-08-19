@@ -38,7 +38,21 @@ export function subscribe(listener: Listener): () => void {
   return () => listeners.delete(listener)
 }
 
+const STORAGE_KEY = 'interpredict_wallet_connected'
+
 export function getWalletState(): WalletState {
+  // Rehydrate from localStorage on every read so the in-memory state
+  // survives page reloads. The connection is only cleared by an explicit
+  // disconnectWallet() call — never by a page refresh.
+  const cached = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
+  if (cached) {
+    try {
+      const parsed = JSON.parse(cached)
+      walletState = parsed
+    } catch {
+      // Fall through to existing in-memory state
+    }
+  }
   return walletState
 }
 
@@ -71,6 +85,9 @@ export async function connectWallet(): Promise<WalletState> {
     isConnected: true,
   }
 
+  // Persist to localStorage so the connection survives page reloads.
+  // It is only cleared by an explicit disconnectWallet() call.
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(walletState))
   notify()
   return walletState
 }
@@ -81,6 +98,7 @@ export function disconnectWallet(): WalletState {
     chainId: null,
     isConnected: false,
   }
+  localStorage.removeItem(STORAGE_KEY)
   notify()
   return walletState
 }
@@ -99,6 +117,7 @@ export async function reconnectWallet(): Promise<WalletState> {
       chainId: network.chainId.toString(),
       isConnected: true,
     }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(walletState))
     notify()
   } catch {
     // Silently fail — user may not have authorized yet.

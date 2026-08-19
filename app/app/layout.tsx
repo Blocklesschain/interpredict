@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useLocale } from '@/hooks/useLocale'
 import { useTheme } from '@/hooks/useTheme'
-import { getWalletState, connectWallet, disconnectWallet, subscribe } from '@/services/wallet/wallet'
+import { getWalletState, connectWallet, disconnectWallet, reconnectWallet, subscribe } from '@/services/wallet/wallet'
 import { SUPPORTED_LOCALES, type Locale } from '@/i18n/index'
 import { cn } from '@/lib/utils'
 import { Menu, X, Sun, Moon, Monitor, Globe, Wallet } from 'lucide-react'
@@ -39,6 +39,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [walletAddress, setWalletAddress] = useState<string | null>(getWalletState().address)
 
+  // Rehydrate from localStorage and attempt reconnection on mount.
+  // Wallet connection persists across page reloads — it is only cleared
+  // when the user explicitly clicks the "Disconnect" button.
+  useEffect(() => {
+    const state = getWalletState()
+    if (state.isConnected) {
+      setWalletAddress(state.address)
+      void reconnectWallet()
+    }
+  }, [])
+
   // Subscribe to wallet state changes
   useState(() => {
     return subscribe(() => {
@@ -56,6 +67,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const handleDisconnect = () => {
     disconnectWallet()
+    setWalletAddress(null)
   }
 
   const cycleTheme = () => {
@@ -74,7 +86,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Navbar */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 h-14">
-          {/* Logo + Home */}
+          {/* Logo + dApp nav */}
           <div className="flex items-center gap-6">
             <Link href="/app" className="text-lg font-bold tracking-tight">
               {t('app.title')}
@@ -99,6 +111,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
+            {/* Back to Home (marketing site) */}
+            <Link
+              href="/"
+              className="hidden md:inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
+            >
+              ← Home
+            </Link>
+
             {/* Locale */}
             <Button variant="ghost" size="icon-sm" onClick={cycleLocale} title={locale.toUpperCase()}>
               <Globe className="size-4" />
@@ -142,6 +162,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {mobileOpen && (
           <nav className="border-t border-border md:hidden">
             <div className="flex flex-col gap-1 p-2">
+              <Link
+                href="/"
+                onClick={() => setMobileOpen(false)}
+                className={cn(
+                  'rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                  pathname === '/'
+                    ? 'bg-muted text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                ← Home
+              </Link>
               {NAV_ITEMS.map((item) => (
                 <Link
                   key={item.href}

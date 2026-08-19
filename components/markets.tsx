@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useEffect, useState, useContext } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Bitcoin,
   Landmark,
@@ -21,7 +21,6 @@ import {
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useWeb3 } from "@/app/context/Web3Context"
 
 type Outcome = { label: string; prob: number }
 
@@ -491,7 +490,7 @@ function MarketModal({
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            <span className="flex size-11 shrink-0 items-center justify-rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
               <Icon className="size-5" />
             </span>
             <div>
@@ -583,36 +582,78 @@ function MarketModal({
 }
 
 export function Markets() {
-  const web3 = useWeb3()
   const [active, setActive] = useState<(typeof CATEGORIES)[number]>("Trending")
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState<Market | null>(null)
-  const [localCache, setLocalCache] = useState<Market[]>([])
+  const [apiMarkets, setApiMarkets] = useState<Record<string, unknown>[]>([])
+  const [apiLoaded, setApiLoaded] = useState(false)
 
-  // Load from API on mount
+  // Load from API on mount — markets are cached in state so they don't
+  // re-fetch on every render, only on initial mount.
   useEffect(() => {
-    void fetch('/api/markets')
-      .then(res => res.json())
-      .then(data => setLocalCache(data?.data?.markets ?? []))
-      .catch(err => console.error('[Markets] failed to fetch:', err))
+    void fetch("/api/markets")
+      .then((res) => res.json())
+      .then((data) => {
+        const fetched = data?.data?.markets ?? []
+        setApiMarkets(fetched)
+        setApiLoaded(true)
+      })
+      .catch((err) => {
+        console.error("[Markets] failed to fetch:", err)
+        setApiLoaded(true) // Still allow rendering from static MARKETS
+      })
   }, [])
 
-  // Prefer web3 cache (newly created markets), fall back to API fetch
-  const web3Markets = web3.cachedMarkets.length
-    ? web3.cachedMarkets
-    : localCache.length
-      ? localCache
-      : []
+  // Build the display list: start with the static demo markets (which have
+  // icon + history), then optionally merge fresh API data if available.
+  const displayMarkets = useMemo(() => {
+    if (!apiLoaded || apiMarkets.length === 0) {
+      return MARKETS
+    }
+
+    // Merge: API markets overlaid onto static demo data so every market
+    // that the API knows about shows up, while any that are only in the
+    // static set still render with their icon/history.
+    const byId = new Map<string, Market>(MARKETS.map((m) => [m.id, m]))
+    for (const raw of apiMarkets) {
+      const id = String(raw.id ?? raw.question ?? Math.random().toString(36))
+      const existing = byId.get(id)
+      const merged: Market = {
+        id,
+        category: String(raw.category ?? existing?.category ?? "Trending"),
+        icon: existing?.icon ?? Globe,
+        question: String(raw.question ?? existing?.question ?? "Untitled market"),
+        volume: String(raw.volume ?? "$0"),
+        liquidity: String(raw.liquidity ?? "$0"),
+        endDate: String(raw.endDate ?? existing?.endDate ?? "TBD"),
+        outcomes:
+          Array.isArray(raw.outcomes) && raw.outcomes.length > 0
+            ? (raw.outcomes as { label: string; prob: number }[])
+            : existing?.outcomes ?? [
+                { label: "Yes", prob: 50 },
+                { label: "No", prob: 50 },
+              ],
+        description:
+          String(raw.description ?? existing?.description ?? ""),
+        history:
+          Array.isArray(raw.history) && raw.history.length > 0
+            ? (raw.history as number[])
+            : existing?.history ?? [50, 50, 50, 50, 50],
+      }
+      byId.set(id, merged)
+    }
+    return Array.from(byId.values())
+  }, [apiLoaded, apiMarkets])
 
   const filtered = useMemo(() => {
-    return web3Markets.filter((m) => {
+    return displayMarkets.filter((m) => {
       const matchesCat = active === "Trending" || m.category === active
       const matchesQuery = m.question
         .toLowerCase()
         .includes(query.toLowerCase())
       return matchesCat && matchesQuery
     })
-  }, [active, query, web3Markets])
+  }, [active, query, displayMarkets])
 
   return (
     <section id="markets" className="relative scroll-mt-24 py-16 sm:py-20">
@@ -661,7 +702,7 @@ export function Markets() {
           <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((m) => (
               <MarketCard key={m.id} market={m} onOpen={setSelected} />
-            ))
+            ))}
           </div>
         ) : (
           <p className="mt-12 text-center text-muted-foreground">

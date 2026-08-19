@@ -15,17 +15,6 @@ export interface HistoryRecord {
   timestamp: string
 }
 
-export interface Market {
-  id: string
-  category: string
-  question: string
-  volume: string
-  liquidity: string
-  endDate: string
-  outcomes: { label: string; prob: number }[]
-  description: string
-}
-
 interface Web3ContextType {
   walletAddress: string | null
   txStatus: string | null
@@ -54,7 +43,6 @@ interface Web3ContextType {
   voteOnResolutionOnChain: (marketId: number, outcomeIndex: number) => Promise<boolean>
   finalizeResolutionVotingOnChain: (marketId: number) => Promise<boolean>
   finalizeProposalVotingOnChain: (marketId: number) => Promise<boolean>
-  cachedMarkets: Market[]
 }
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined)
@@ -117,7 +105,6 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const [historyLogs, setHistoryLogs] = useState<HistoryRecord[]>([])
   const [locale, setLocaleState] = useState<LocaleType>('en')
   const [decMembers, setDecMembers] = useState<string[]>([])
-  const [cachedMarkets, setCachedMarkets] = useState<Market[]>([])
 
   useEffect(() => {
     const savedLocale = localStorage.getItem('interpredict_lang') as LocaleType
@@ -1087,8 +1074,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       resolveMarketOnChain, claimDecRewardsOnChain,
       claimCreatorFeesOnChain, claimCreatorSeedOnChain,
       voteOnResolutionOnChain, finalizeResolutionVotingOnChain,
-      finalizeProposalVotingOnChain,
-      cachedMarkets: cachedMarkets
+      finalizeProposalVotingOnChain
     }}>
       {children}
     </Web3Context.Provider>

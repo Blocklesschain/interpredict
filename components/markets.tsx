@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useEffect, useState, useContext } from "react"
 import {
   Bitcoin,
   Landmark,
@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useWeb3 } from "@/app/context/Web3Context"
 
 type Outcome = { label: string; prob: number }
 
@@ -147,7 +148,7 @@ const MARKETS: Market[] = [
       { label: "No", prob: 91 },
     ],
     description:
-      "Resolves YES if ETH total market capitalization exceeds BTC market capitalization at any point during 2026, per CoinGecko snapshots verified on-chain.",
+      "Resolves YES if ETH total market capitalization exceeds BTC total market capitalization at any point during 2026, per CoinGecko snapshots verified on-chain.",
     history: [11, 10, 12, 9, 8, 10, 9, 9, 9],
   },
   {
@@ -490,7 +491,7 @@ function MarketModal({
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
+            <span className="flex size-11 shrink-0 items-center justify-rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
               <Icon className="size-5" />
             </span>
             <div>
@@ -582,19 +583,36 @@ function MarketModal({
 }
 
 export function Markets() {
+  const web3 = useWeb3()
   const [active, setActive] = useState<(typeof CATEGORIES)[number]>("Trending")
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState<Market | null>(null)
+  const [localCache, setLocalCache] = useState<Market[]>([])
+
+  // Load from API on mount
+  useEffect(() => {
+    void fetch('/api/markets')
+      .then(res => res.json())
+      .then(data => setLocalCache(data?.data?.markets ?? []))
+      .catch(err => console.error('[Markets] failed to fetch:', err))
+  }, [])
+
+  // Prefer web3 cache (newly created markets), fall back to API fetch
+  const web3Markets = web3.cachedMarkets.length
+    ? web3.cachedMarkets
+    : localCache.length
+      ? localCache
+      : []
 
   const filtered = useMemo(() => {
-    return MARKETS.filter((m) => {
+    return web3Markets.filter((m) => {
       const matchesCat = active === "Trending" || m.category === active
       const matchesQuery = m.question
         .toLowerCase()
         .includes(query.toLowerCase())
       return matchesCat && matchesQuery
     })
-  }, [active, query])
+  }, [active, query, web3Markets])
 
   return (
     <section id="markets" className="relative scroll-mt-24 py-16 sm:py-20">
@@ -643,7 +661,7 @@ export function Markets() {
           <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((m) => (
               <MarketCard key={m.id} market={m} onOpen={setSelected} />
-            ))}
+            ))
           </div>
         ) : (
           <p className="mt-12 text-center text-muted-foreground">

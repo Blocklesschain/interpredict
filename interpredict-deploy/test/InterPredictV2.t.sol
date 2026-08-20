@@ -56,20 +56,25 @@ contract InterPredictV2Test is Test {
         vm.stopPrank();
     }
 
-    function _params() internal view returns (InterPredictV2.MarketParams memory) {
+    function _params()
+        internal
+        view
+        returns (InterPredictV2.MarketParams memory)
+    {
         string[] memory outcomes = new string[](2);
         outcomes[0] = "Yes";
         outcomes[1] = "No";
-        return InterPredictV2.MarketParams({
-            question: "Will Interlink process 10M transactions this week?",
-            description: "A test market",
-            category: InterPredictV2.Category.Crypto,
-            customCategory: "",
-            thumbnailUri: "https://example.com/thumb.png",
-            outcomes: outcomes,
-            endTime: block.timestamp + 7 days,
-            resolutionCriteria: "Resolved by official Interlink stats"
-        });
+        return
+            InterPredictV2.MarketParams({
+                question: "Will Interlink process 10M transactions this week?",
+                description: "A test market",
+                category: InterPredictV2.Category.Crypto,
+                customCategory: "",
+                thumbnailUri: "https://example.com/thumb.png",
+                outcomes: outcomes,
+                endTime: block.timestamp + 7 days,
+                resolutionCriteria: "Resolved by official Interlink stats"
+            });
     }
 
     function _deployTeamMarket() internal returns (uint256) {
@@ -79,7 +84,9 @@ contract InterPredictV2Test is Test {
 
     function _proposeAndEnter() internal returns (uint256) {
         vm.prank(user1);
-        uint256 id = market.proposeMarket{value: PROPOSAL_FEE + SEED_AMOUNT}(_params());
+        uint256 id = market.proposeMarket{value: PROPOSAL_FEE + SEED_AMOUNT}(
+            _params()
+        );
         vm.prank(user1);
         market.enterProposalReview(id);
         return id;
@@ -161,7 +168,9 @@ contract InterPredictV2Test is Test {
     // ------------------------------------------------------------------
     function test_Proposal_CreatesInProposedState() public {
         vm.prank(user1);
-        uint256 id = market.proposeMarket{value: PROPOSAL_FEE + SEED_AMOUNT}(_params());
+        uint256 id = market.proposeMarket{value: PROPOSAL_FEE + SEED_AMOUNT}(
+            _params()
+        );
         assertEq(uint8(market.marketState(id)), S_PROPOSED);
         assertEq(market.totalMarkets(), 1);
     }
@@ -202,7 +211,8 @@ contract InterPredictV2Test is Test {
         vm.prank(dec2);
         market.voteOnProposal(id, InterPredictV2.ProposalVote.Reject);
 
-        (,, uint256 approvalVotes, uint256 rejectionVotes,,,,,,) = market.marketVoting(id);
+        (, , uint256 approvalVotes, uint256 rejectionVotes, , , , , , ) = market
+            .marketVoting(id);
         assertEq(approvalVotes, 1);
         assertEq(rejectionVotes, 1);
     }
@@ -265,7 +275,8 @@ contract InterPredictV2Test is Test {
         vm.prank(user1);
         market.participate{value: 1 ether}(id, 0, 1);
         assertTrue(market.hasParticipated(id, user1));
-        (uint256 totalVolume, uint256 participantCount,,,,,,) = market.marketFinance(id);
+        (uint256 totalVolume, uint256 participantCount, , , , , , ) = market
+            .marketFinance(id);
         assertEq(totalVolume, 1 ether);
         assertEq(participantCount, 1);
     }
@@ -347,7 +358,8 @@ contract InterPredictV2Test is Test {
         vm.prank(dec2);
         market.voteOnResolution(id, 0);
 
-        (,, uint256 totalResolutionVotes,,,) = market.marketResolution(id);
+        (, , uint256 totalResolutionVotes, , , , , , , ) = market
+            .marketResolution(id);
         assertEq(totalResolutionVotes, 2);
     }
 

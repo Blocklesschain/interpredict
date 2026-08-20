@@ -1,21 +1,11 @@
+// Incremental blockchain event indexer with targeted market reconciliation.
+
 import 'server-only'
 import { ethers } from 'ethers'
 import { getSupabase } from '@/lib/supabase'
 import { getIndexerConfig } from '@/lib/config'
 import { getValidServiceToken } from '@/lib/interlinkServiceAuth'
 import contractABI from '@/lib/interpredictAbi.json'
-
-// ---------------------------------------------------------------------------
-// InterPredict V2 Blockchain Indexer
-//
-// Incremental, resumable, idempotent, observable, retry-safe.
-//
-// Loop:
-//   Read checkpoint → determine safe confirmed block → read bounded range
-//   → decode events → validate → upsert transactionally → advance checkpoint
-//
-// If persistence fails, the checkpoint is NOT advanced.
-// ---------------------------------------------------------------------------
 
 interface SyncCheckpoint {
   chain_id: string
@@ -47,9 +37,6 @@ function withJitter(baseMs: number): number {
   return Math.floor(baseMs + Math.random() * baseMs)
 }
 
-// ---------------------------------------------------------------------------
-// RPC helpers (retry with exponential backoff + jitter)
-// ---------------------------------------------------------------------------
 async function rpcCall(
   url: string,
   token: string,
@@ -96,13 +83,9 @@ async function rpcCall(
     }
   }
 
-  // NEVER convert an RPC failure into legitimate-looking empty data.
   throw lastError ?? new Error('RPC call failed')
 }
 
-// ---------------------------------------------------------------------------
-// Checkpoint
-// ---------------------------------------------------------------------------
 async function readCheckpoint(
   chainId: string,
   contractAddress: string,
@@ -112,6 +95,7 @@ async function readCheckpoint(
     .from('sync_checkpoints')
     .select('*')
     .eq('chain_id', chainId)
+    .eq('contract_address', contractAddress)
     .maybeSingle()
 
   if (error) throw error
@@ -122,13 +106,10 @@ async function writeCheckpoint(checkpoint: SyncCheckpoint): Promise<void> {
   const supabase = getSupabase()
   const { error } = await supabase
     .from('sync_checkpoints')
-    .upsert(checkpoint, { onConflict: 'chain_id' })
+    .upsert(checkpoint, { onConflict: 'chain_id,contract_address' })
   if (error) throw error
 }
 
-// ---------------------------------------------------------------------------
-// Event → table upserts
-// ---------------------------------------------------------------------------
 function normalizeAddress(addr: string): string {
   return addr.toLowerCase()
 }
@@ -171,23 +152,9 @@ async function upsertEvent(
     case 'MarketDeployed': {
       const args = parsed.args
       const id = Number(args.id)
-      const question = String(args.question)
-      const creator = normalizeAddress(String(args.creator))
-      // For creation events we only have partial data; a follow-up
-      // targeted sync fills the rest. Upsert the known fields.
-      const { error } = await supabase.from('markets').upsert(
-        {
-          id,
-          question,
-          creator,
-          state: parsed.name === 'MarketDeployed' ? 5 : 0,
-          origin: parsed.name === 'MarketDeployed' ? 1 : 0,
-          ...provenance,
-          created_at: new Date().toISOString(),
-        },
-        { onConflict: 'id' },
-      )
-      if (error) throw error
+
+      const { syncMarketById } = await import('./syncMarket')
+      await syncMarketById(id)
       records++
       break
     }
@@ -199,18 +166,9 @@ async function upsertEvent(
     case 'MarketFinalized': {
       const args = parsed.args
       const id = Number(args.id)
-      const stateMap: Record<string, number> = {
-        MarketActivated: 5,
-        MarketApproved: 4,
-        MarketRejected: 2,
-        MarketCancelled: 3,
-        MarketFinalized: 12,
-      }
-      const { error } = await supabase
-        .from('markets')
-        .update({ state: stateMap[parsed.name], ...provenance })
-        .eq('id', id)
-      if (error) throw error
+
+      const { syncMarketById } = await import('./syncMarket')
+      await syncMarketById(id)
       records++
       break
     }
@@ -236,6 +194,10 @@ async function upsertEvent(
       )
       if (error) throw error
       records++
+
+      const { syncMarketById } = await import('./syncMarket')
+      await syncMarketById(id)
+      records++
       break
     }
 
@@ -258,9 +220,10 @@ async function upsertEvent(
 
     case 'ResolutionRequested': {
       const args = parsed.args
+      const id = Number(args.id)
       const { error } = await supabase.from('resolution_requests').upsert(
         {
-          market_id: Number(args.id),
+          market_id: id,
           requester: normalizeAddress(String(args.requester)),
           deadline: Number(args.deadline),
           ...provenance,
@@ -269,6 +232,9 @@ async function upsertEvent(
         { onConflict: 'market_id' },
       )
       if (error) throw error
+      records++
+      const { syncMarketById } = await import('./syncMarket')
+      await syncMarketById(id)
       records++
       break
     }
@@ -287,6 +253,39 @@ async function upsertEvent(
       )
       if (error) throw error
       records++
+
+      const { syncMarketById } = await import('./syncMarket')
+      await syncMarketById(Number(args.id))
+      records++
+      break
+    }
+
+    case 'ResolutionFinalized': {
+      const args = parsed.args
+      const id = Number(args.id)
+      const quorumReached = Boolean(args.quorumReached)
+      const tied = Boolean(args.tied)
+      const outcomeAvailable = Boolean(args.outcomeAvailable)
+      const suggestedOutcome = outcomeAvailable ? Number(args.suggestedOutcome) : null
+
+      const { error } = await supabase.from('market_resolutions').upsert(
+        {
+          market_id: id,
+          quorum_reached: quorumReached,
+          tied,
+          dec_outcome_available: outcomeAvailable,
+          dec_suggested_outcome: suggestedOutcome,
+          ...provenance,
+          created_at: new Date().toISOString(),
+        },
+        { onConflict: 'market_id' },
+      )
+      if (error) throw error
+      records++
+
+      const { syncMarketById } = await import('./syncMarket')
+      await syncMarketById(id)
+      records++
       break
     }
 
@@ -297,6 +296,10 @@ async function upsertEvent(
         .update({ confirmed_outcome: Number(args.outcomeIndex), ...provenance })
         .eq('id', Number(args.id))
       if (error) throw error
+      records++
+
+      const { syncMarketById } = await import('./syncMarket')
+      await syncMarketById(Number(args.id))
       records++
       break
     }
@@ -348,16 +351,13 @@ async function upsertEvent(
     }
 
     default:
-      // Unknown event: skip (not an error).
+
       break
   }
 
   return records
 }
 
-// ---------------------------------------------------------------------------
-// Main sync
-// ---------------------------------------------------------------------------
 export async function syncOnce(): Promise<SyncResult> {
   const config = getIndexerConfig()
   const supabase = getSupabase()
@@ -365,11 +365,9 @@ export async function syncOnce(): Promise<SyncResult> {
 
   const token = await getValidServiceToken()
 
-  // 1. Read checkpoint
   let checkpoint = await readCheckpoint(config.chainId, config.contractAddress)
   const lastProcessed = checkpoint?.last_processed_block ?? config.startBlock - 1
 
-  // 2. Determine safe confirmed block
   const latestHex = (await rpcCall(
     config.rpcUrl,
     token,
@@ -394,11 +392,9 @@ export async function syncOnce(): Promise<SyncResult> {
     }
   }
 
-  // 3. Determine missing range (bounded)
   const startBlock = lastProcessed + 1
   let endBlock = Math.min(startBlock + config.batchSize - 1, safeBlock)
 
-  // 4. Read events in the range
   const logs = (await rpcCall(
     config.rpcUrl,
     token,
@@ -415,7 +411,6 @@ export async function syncOnce(): Promise<SyncResult> {
     config.backoffMaxMs,
   )) as RawLog[]
 
-  // 5. Decode + validate + upsert
   let eventsProcessed = 0
   let recordsUpserted = 0
   let retryCount = 0
@@ -440,13 +435,11 @@ export async function syncOnce(): Promise<SyncResult> {
         retry_count: 1,
       })
       console.error(`[indexer] Failed to process log: ${message}`)
-      // Do not throw here; continue processing other logs, but do NOT
-      // advance the checkpoint past this block.
+
       endBlock = Math.min(endBlock, Number(rawLog.blockNumber) - 1)
     }
   }
 
-  // 6. Advance checkpoint (only if no fatal error)
   const newCheckpoint: SyncCheckpoint = {
     chain_id: config.chainId,
     contract_address: config.contractAddress,

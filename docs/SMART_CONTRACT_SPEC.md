@@ -95,7 +95,7 @@ Proposed → DECReview → {Rejected | Cancelled | Approved} → Active → Clos
 | `ParticipationRecorded(uint256 id, address participant, uint8 outcomeIndex, uint256 gross, uint256 net, uint256 shares, uint256 fee)` | Stake placed | id, participant |
 | `ResolutionRequested(uint256 id, address requester, uint256 deadline)` | Resolution requested | id, requester |
 | `ResolutionVoteCast(uint256 id, address voter, uint8 outcomeIndex)` | DEC resolution vote | id, voter |
-| `ResolutionFinalized(uint256 id, bool quorumReached, uint8 winningOutcome)` | Resolution voting finalized | id |
+| `ResolutionFinalized(uint256 id, bool quorumReached, bool tied, bool outcomeAvailable, uint8 suggestedOutcome)` | Resolution voting finalized with explicit tie/quorum semantics | id |
 | `OutcomeConfirmed(uint256 id, uint8 outcomeIndex)` | Admin confirms outcome | id |
 | `MarketFinalized(uint256 id)` | Market finalized | id |
 | `WinningsClaimed(uint256 id, address claimant, uint256 amount)` | Winnings claimed | id, claimant |

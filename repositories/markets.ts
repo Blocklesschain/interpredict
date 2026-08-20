@@ -1,10 +1,7 @@
+// Typed Supabase repository for markets, outcomes, and resolution metadata.
+
 import 'server-only'
 import { getSupabase } from '@/lib/supabase'
-
-// ---------------------------------------------------------------------------
-// Markets repository — typed read access to the PostgreSQL read model.
-// No N+1: outcomes are fetched in a single joined query.
-// ---------------------------------------------------------------------------
 
 export interface MarketRow {
   id: number
@@ -25,6 +22,17 @@ export interface MarketRow {
   cancelled: boolean
   cancel_reason: string | null
   indexed_at: string
+  resolution?: MarketResolutionRow | null
+}
+
+export interface MarketResolutionRow {
+  market_id: number
+  quorum: number
+  total_votes: number
+  dec_suggested_outcome: number | null
+  tied: boolean
+  quorum_reached: boolean | null
+  dec_outcome_available: boolean
 }
 
 export interface MarketOutcomeRow {
@@ -73,7 +81,6 @@ export async function listMarkets(query: MarketListQuery): Promise<MarketListRes
 
   const markets = (data ?? []) as MarketRow[]
 
-  // Fetch outcomes for the page of markets in a single query (no N+1).
   const marketIds = markets.map((m) => m.id)
   let outcomes: MarketOutcomeRow[] = []
   if (marketIds.length > 0) {
@@ -93,8 +100,27 @@ export async function listMarkets(query: MarketListQuery): Promise<MarketListRes
     outcomesByMarket.set(o.market_id, list)
   }
 
+  let resolutions: MarketResolutionRow[] = []
+  if (marketIds.length > 0) {
+    const { data: resolutionData, error: resolutionError } = await supabase
+      .from('market_resolutions')
+      .select('*')
+      .in('market_id', marketIds)
+    if (resolutionError) throw resolutionError
+    resolutions = (resolutionData ?? []) as MarketResolutionRow[]
+  }
+
+  const resolutionByMarket = new Map<number, MarketResolutionRow>()
+  for (const r of resolutions) {
+    resolutionByMarket.set(r.market_id, r)
+  }
+
   return {
-    markets: markets.map((m) => ({ ...m, outcomes: outcomesByMarket.get(m.id) ?? [] })),
+    markets: markets.map((m) => ({
+      ...m,
+      outcomes: outcomesByMarket.get(m.id) ?? [],
+      resolution: resolutionByMarket.get(m.id) ?? null,
+    })),
     total: count ?? 0,
     page,
     pageSize,
@@ -117,9 +143,17 @@ export async function getMarketById(
     .order('outcome_index', { ascending: true })
   if (outcomeError) throw outcomeError
 
+  const { data: resolutionData, error: resolutionError } = await supabase
+    .from('market_resolutions')
+    .select('*')
+    .eq('market_id', id)
+    .maybeSingle()
+  if (resolutionError) throw resolutionError
+
   return {
     ...(data as MarketRow),
     outcomes: (outcomeData ?? []) as MarketOutcomeRow[],
+    resolution: (resolutionData ?? null) as MarketResolutionRow | null,
   }
 }
 
@@ -128,9 +162,12 @@ export async function getSyncFreshness(): Promise<{
   lagSeconds: number | null
 }> {
   const supabase = getSupabase()
+
   const { data, error } = await supabase
     .from('sync_checkpoints')
     .select('last_successful_sync_at')
+    .order('last_successful_sync_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
 
   if (error) throw error

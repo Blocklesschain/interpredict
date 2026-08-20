@@ -1,3 +1,5 @@
+// Market detail page using the single-market API and Realtime.
+
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -9,32 +11,9 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { useLocale } from '@/hooks/useLocale'
 import { MarketState } from '@/lib/actions'
-
-// ---------------------------------------------------------------------------
-// Market detail page (V2 §40). Reads from PostgreSQL via /api/markets/:id.
-// Resolution criteria visible BEFORE participation.
-// ---------------------------------------------------------------------------
-
-interface Market {
-  id: number
-  question: string
-  description: string
-  category: number
-  custom_category: string | null
-  origin: number
-  creator: string
-  state: number
-  end_time: number
-  resolution_criteria: string
-  thumbnail_url: string | null
-  total_volume: string
-  participant_count: number
-  confirmed_outcome: number | null
-  finalized: boolean
-  cancelled: boolean
-  cancel_reason: string | null
-  outcomes: Array<{ label: string; pool: string; price: string }>
-}
+import { useMarketRealtime } from '@/hooks/useMarketsRealtime'
+import type { MarketDto } from '@/types/market'
+import { getResolutionStatus } from '@/lib/resolution-status'
 
 const STATE_LABELS: Record<number, string> = {
   [MarketState.Proposed]: 'Pending',
@@ -78,8 +57,8 @@ function formatPrice(price: string): string {
 export default function MarketDetailPage() {
   const { t } = useLocale()
   const params = useParams()
-  const id = params.id as string
-  const [market, setMarket] = useState<Market | null>(null)
+  const id = Number(params.id as string)
+  const [market, setMarket] = useState<MarketDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -87,13 +66,10 @@ export default function MarketDetailPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/markets?page=1&pageSize=1`)
+      const res = await fetch(`/api/markets/${id}`)
       const json = await res.json()
       if (json.error) throw new Error(json.error.message)
-      const markets = json.data?.markets ?? []
-      const found = markets.find((m: Market) => m.id === Number(id))
-      if (!found) throw new Error('Market not found')
-      setMarket(found)
+      setMarket(json.data?.market ?? null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load market')
     } finally {
@@ -104,6 +80,10 @@ export default function MarketDetailPage() {
   useEffect(() => {
     fetchMarket()
   }, [fetchMarket])
+
+  useMarketRealtime(id, (updated) => {
+    setMarket(updated)
+  })
 
   if (loading) {
     return (
@@ -124,6 +104,17 @@ export default function MarketDetailPage() {
     )
   }
 
+  const resolution = market.resolution
+    ? getResolutionStatus({
+      quorumReached: market.resolution.quorumReached,
+      tied: market.resolution.tied,
+      outcomeAvailable: market.resolution.outcomeAvailable,
+      suggestedOutcome: market.resolution.decSuggestedOutcome,
+      confirmedOutcome: market.confirmedOutcome,
+      finalized: market.finalized,
+    })
+    : null
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
       <Card>
@@ -134,7 +125,7 @@ export default function MarketDetailPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Description */}
+          { }
           {market.description && (
             <div>
               <h4 className="text-sm font-semibold">{t('market.description')}</h4>
@@ -142,26 +133,41 @@ export default function MarketDetailPage() {
             </div>
           )}
 
-          {/* Resolution criteria — visible BEFORE participation (V2 §40) */}
+          { }
           <div>
             <h4 className="text-sm font-semibold">{t('market.resolutionCriteria')}</h4>
-            <p className="text-sm text-muted-foreground">{market.resolution_criteria}</p>
+            <p className="text-sm text-muted-foreground">{market.resolutionCriteria}</p>
           </div>
 
-          {/* Outcomes */}
+          { }
+          {resolution && (
+            <div className="rounded-lg border border-border p-3">
+              <h4 className="text-sm font-semibold mb-1">{t('resolution.status.title')}</h4>
+              <p className="text-sm font-medium">{t(resolution.labelKey)}</p>
+              <p className="text-sm text-muted-foreground">{t(resolution.explanationKey)}</p>
+              {resolution.hasDecRecommendation && resolution.suggestedOutcome !== null && (
+                <p className="text-sm mt-1">
+                  {t('resolution.decSuggestedOutcome')}:{' '}
+                  <span className="font-medium">{market.outcomeLabels[resolution.suggestedOutcome]}</span>
+                </p>
+              )}
+            </div>
+          )}
+
+          { }
           <div>
             <h4 className="text-sm font-semibold mb-2">{t('market.outcomes')}</h4>
             <div className="space-y-2">
-              {market.outcomes.map((outcome, i) => (
+              {market.outcomeLabels.map((label, i) => (
                 <div key={i} className="flex items-center justify-between rounded-lg border border-border p-3">
-                  <span className="text-sm font-medium">{outcome.label}</span>
-                  <span className="text-sm text-muted-foreground">{formatPrice(outcome.price)}</span>
+                  <span className="text-sm font-medium">{label}</span>
+                  <span className="text-sm text-muted-foreground">{formatPrice(market.outcomePrices[i] ?? '0')}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Metadata */}
+          { }
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div>
               <span className="text-muted-foreground">{t('market.category')}:</span>{' '}
@@ -173,15 +179,15 @@ export default function MarketDetailPage() {
             </div>
             <div>
               <span className="text-muted-foreground">{t('market.endTime')}:</span>{' '}
-              {formatDate(market.end_time)}
+              {formatDate(market.marketEndTime)}
             </div>
             <div>
               <span className="text-muted-foreground">{t('market.totalVolume')}:</span>{' '}
-              {formatVolume(market.total_volume)}
+              {formatVolume(market.totalVolume)}
             </div>
             <div>
               <span className="text-muted-foreground">{t('market.participants')}:</span>{' '}
-              {market.participant_count}
+              {market.participantCount}
             </div>
           </div>
         </CardContent>

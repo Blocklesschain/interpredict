@@ -172,11 +172,11 @@ export async function getWalletBalance(address: string): Promise<string> {
 }
 
 export function watchAccounts(callback: (accounts: string[]) => void): () => void {
-  if (typeof window === 'undefined') return () => {}
+  if (typeof window === 'undefined') return () => { }
 
   const ethereum = (window as unknown as { ethereum?: { on?: (event: string, handler: (...args: string[][]) => void) => void; removeListener?: (event: string, handler: (...args: string[][]) => void) => void } }).ethereum
 
-  if (!ethereum?.on) return () => {}
+  if (!ethereum?.on) return () => { }
 
   const handler = (accounts: string[]) => {
     callback(accounts)

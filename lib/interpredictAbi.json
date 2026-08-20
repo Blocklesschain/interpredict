@@ -615,8 +615,20 @@
       },
       {
         "indexed": false,
+        "internalType": "bool",
+        "name": "tied",
+        "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "outcomeAvailable",
+        "type": "bool"
+      },
+      {
+        "indexed": false,
         "internalType": "uint8",
-        "name": "winningOutcome",
+        "name": "suggestedOutcome",
         "type": "uint8"
       }
     ],
@@ -2226,6 +2238,26 @@
         "internalType": "bool",
         "name": "finalized",
         "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "quorumReached",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "tied",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "decOutcomeAvailable",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint8",
+        "name": "decSuggestedOutcome",
+        "type": "uint8"
       }
     ],
     "stateMutability": "view",

@@ -1,9 +1,4 @@
-// ---------------------------------------------------------------------------
-// Dynamic action engine (V2 §29).
-//
-// Centralizes action availability so state logic is NOT duplicated across
-// React components. Returns { visible, enabled, label, reasonDisabled }.
-// ---------------------------------------------------------------------------
+// Centralized market action availability engine.
 
 export const MarketState = {
   Proposed: 0,
@@ -87,23 +82,23 @@ export function getAvailableActions(
   })
 
   const actions: Record<ActionKey, ActionAvailability> = {
-    // Proposal review
+
     enterProposalReview: hidden,
     voteOnProposal: hidden,
     finalizeProposalVoting: hidden,
-    // Participation
+
     participate: hidden,
-    // Resolution
+
     requestResolution: hidden,
     voteOnResolution: hidden,
     finalizeResolutionVoting: hidden,
     confirmOutcome: hidden,
     finalizeMarket: hidden,
-    // Claims
+
     claimWinnings: hidden,
     claimCreatorFee: hidden,
     claimDecRewards: hidden,
-    // Admin
+
     cancelMarket: hidden,
   }
 
@@ -111,7 +106,6 @@ export function getAvailableActions(
     return actions
   }
 
-  // ---- Proposal review ----
   if (state === MarketState.Proposed) {
     actions.enterProposalReview = enabled('Start DEC review')
   }
@@ -124,14 +118,12 @@ export function getAvailableActions(
     actions.finalizeProposalVoting = enabled('Finalize proposal voting')
   }
 
-  // ---- Participation ----
   if (state === MarketState.Active) {
     actions.participate = user.hasParticipated
       ? disabled('Participate', 'You have already participated in this market.')
       : enabled('Participate')
   }
 
-  // ---- Resolution ----
   if (
     state === MarketState.Active ||
     state === MarketState.Closed ||
@@ -163,7 +155,6 @@ export function getAvailableActions(
     actions.finalizeMarket = enabled('Finalize market')
   }
 
-  // ---- Claims ----
   if (state === MarketState.Finalized) {
     if (user.hasParticipated) {
       actions.claimWinnings = user.hasClaimedWinnings
@@ -178,7 +169,6 @@ export function getAvailableActions(
     }
   }
 
-  // ---- Admin cancel ----
   if (
     user.isAdmin &&
     state !== MarketState.Finalized &&

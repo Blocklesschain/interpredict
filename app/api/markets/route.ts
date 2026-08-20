@@ -1,12 +1,8 @@
+// Lists markets from the Supabase read model.
+
 import { NextRequest, NextResponse } from 'next/server'
 import { listMarkets, getSyncFreshness } from '@/repositories/markets'
-
-// ---------------------------------------------------------------------------
-// GET /api/markets
-//
-// Reads the PostgreSQL read model (no RPC, no full-chain scans).
-// Standard envelope: { data, meta, error }.
-// ---------------------------------------------------------------------------
+import { mapMarketRowsToDtos } from '@/lib/market-dto'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,7 +35,7 @@ export async function GET(request: NextRequest) {
     const freshness = await getSyncFreshness()
 
     return NextResponse.json({
-      data: { markets: result.markets },
+      data: { markets: mapMarketRowsToDtos(result.markets) },
       meta: {
         page: result.page,
         pageSize: result.pageSize,

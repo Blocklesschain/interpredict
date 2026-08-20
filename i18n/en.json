@@ -85,6 +85,26 @@
     "dark": "Dark",
     "system": "System"
   },
+  "resolution": {
+    "status": {
+      "title": "Resolution Status",
+      "uniqueDecWinner": "DEC Consensus",
+      "tie": "DEC Vote Tied",
+      "quorumNotReached": "Quorum Not Reached",
+      "adminVerified": "Admin Verified",
+      "finalized": "Finalized",
+      "unknown": "Unknown"
+    },
+    "explanation": {
+      "uniqueDecWinner": "The DEC produced a unique outcome recommendation. The market has moved to Admin Verification.",
+      "tie": "DEC voting ended in a tie. No unique outcome recommendation was produced. The market has moved to Admin Verification.",
+      "quorumNotReached": "The DEC did not reach quorum. No outcome recommendation was produced. The market has moved to Admin Verification.",
+      "adminVerified": "An administrator has verified and confirmed the final outcome.",
+      "finalized": "The market has been finalized and claims are available.",
+      "unknown": "Resolution status is not yet available."
+    },
+    "decSuggestedOutcome": "DEC Suggested Outcome"
+  },
   "common": {
     "loading": "Loading...",
     "retry": "Retry",

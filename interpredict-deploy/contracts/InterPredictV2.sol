@@ -1,3 +1,4 @@
+// InterPredict V2 forecasting market contract with explicit resolution tie handling.
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
@@ -5,22 +6,12 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
-/// @title InterPredictV2
-/// @notice Community-driven forecasting market on the InterLink testnet.
-/// @dev Native ITL (msg.value) is used for stakes, payouts, creator fees and
-///      DEC rewards. TESTNET ONLY — no Mainnet deployment.
 contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
-    // ---------------------------------------------------------------------
-    // Roles
-    // ---------------------------------------------------------------------
     bytes32 public constant TEAM_ROLE = keccak256("TEAM_MARKET_ROLE");
     bytes32 public constant DEC_ROLE = keccak256("DEC_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_VERIFIER_ROLE");
     bytes32 public constant PAUSE_ROLE = keccak256("PAUSER_ROLE");
 
-    // ---------------------------------------------------------------------
-    // Enums
-    // ---------------------------------------------------------------------
     enum Origin { Community, Team }
 
     enum Category {
@@ -30,27 +21,24 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
     }
 
     enum State {
-        Proposed,            // 0
-        DECReview,           // 1
-        Rejected,            // 2
-        Cancelled,           // 3
-        Approved,            // 4
-        Active,              // 5
-        Closed,              // 6  (derived: endTime passed)
-        Unresolved,          // 7  (derived: ended, no resolution)
-        ResolutionRequested, // 8
-        DECResolutionVoting, // 9
-        AdminVerification,   // 10
-        Confirmed,           // 11
-        Finalized,           // 12
-        Resolved             // 13 (derived: all claims settled)
+        Proposed,
+        DECReview,
+        Rejected,
+        Cancelled,
+        Approved,
+        Active,
+        Closed,
+        Unresolved,
+        ResolutionRequested,
+        DECResolutionVoting,
+        AdminVerification,
+        Confirmed,
+        Finalized,
+        Resolved
     }
 
     enum ProposalVote { None, Approve, Reject }
 
-    // ---------------------------------------------------------------------
-    // Custom errors
-    // ---------------------------------------------------------------------
     error InvalidMarketState();
     error AlreadyParticipated();
     error AlreadyVoted();
@@ -72,9 +60,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
     error SlippageExceeded();
     error NoSharesToExit();
 
-    // ---------------------------------------------------------------------
-    // Constants
-    // ---------------------------------------------------------------------
     uint256 public constant PROPOSAL_FEE = 1 ether;
     uint256 public constant SEED_AMOUNT = 10 ether;
     uint256 public constant MIN_STAKE = 0.001 ether;
@@ -86,36 +71,25 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
     uint256 public constant MAX_OUTCOME_LEN = 64;
     uint256 public constant MAX_CUSTOM_CATEGORY_LEN = 32;
     uint256 public constant MAX_THUMBNAIL_LEN = 256;
-    uint256 public constant FEE_BPS = 50;          // 0.5% participation fee
-    uint256 public constant SETTLE_BPS = 500;       // 5% settlement fee
-    uint256 public constant RESOLUTION_QUORUM_BPS = 500; // 5% quorum
+    uint256 public constant FEE_BPS = 50;
+    uint256 public constant SETTLE_BPS = 500;
+    uint256 public constant RESOLUTION_QUORUM_BPS = 500;
     uint256 public constant REPUTATION_INCREASE = 10;
     uint256 public constant REPUTATION_DECREASE = 20;
     uint256 public constant MAX_REPUTATION = 1000;
-    uint256 public constant EXIT_FEE_BPS = 50;       // 0.5% exit fee
+    uint256 public constant EXIT_FEE_BPS = 50;
     uint256 public constant BPS_DENOMINATOR = 10000;
 
-    // Fee split (community markets) — participation fee
     uint256 public constant COMMUNITY_TREASURY_BPS = 20;
     uint256 public constant COMMUNITY_DEC_BPS = 20;
-    // remainder goes to creator fee pool
 
-    // Fee split (team markets) — participation fee
     uint256 public constant TEAM_TREASURY_BPS = 30;
-    // remainder goes to DEC pool
 
-    // Settlement fee split (community markets)
     uint256 public constant SETTLE_TREASURY_BPS = 200;
     uint256 public constant SETTLE_DEC_BPS = 200;
-    // remainder goes to creator fee pool
 
-    // Settlement fee split (team markets)
     uint256 public constant SETTLE_TEAM_TREASURY_BPS = 300;
-    // remainder goes to DEC pool
 
-    // ---------------------------------------------------------------------
-    // Structs
-    // ---------------------------------------------------------------------
     struct MarketContext {
         string question;
         string description;
@@ -148,6 +122,10 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         uint8 confirmedOutcome;
         bool outcomeConfirmed;
         bool finalized;
+        bool quorumReached;
+        bool tied;
+        bool decOutcomeAvailable;
+        uint8 decSuggestedOutcome;
     }
 
     struct MarketFinance {
@@ -185,9 +163,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         string resolutionCriteria;
     }
 
-    // ---------------------------------------------------------------------
-    // Storage
-    // ---------------------------------------------------------------------
     address payable public treasury;
     uint256 public totalMarkets;
     uint256 public decRewardPool;
@@ -216,9 +191,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
     mapping(uint256 => mapping(address => bool)) public decRewardDistributed;
     mapping(uint256 => mapping(address => bool)) public hasExited;
 
-    // ---------------------------------------------------------------------
-    // Events
-    // ---------------------------------------------------------------------
     event MarketProposed(uint256 indexed id, string question, Category category, Origin origin, address indexed creator);
     event MarketDeployed(uint256 indexed id, string question, address indexed creator);
     event MarketActivated(uint256 indexed id);
@@ -230,7 +202,7 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
     event ParticipationRecorded(uint256 indexed id, address indexed participant, uint8 outcomeIndex, uint256 gross, uint256 net, uint256 sharesOut, uint256 fee);
     event ResolutionRequested(uint256 indexed id, address indexed requester, uint256 deadline);
     event ResolutionVoteCast(uint256 indexed id, address indexed voter, uint8 outcomeIndex);
-    event ResolutionFinalized(uint256 indexed id, bool quorumReached, uint8 winningOutcome);
+    event ResolutionFinalized(uint256 indexed id, bool quorumReached, bool tied, bool outcomeAvailable, uint8 suggestedOutcome);
     event OutcomeConfirmed(uint256 indexed id, uint8 outcomeIndex);
     event MarketFinalized(uint256 indexed id);
     event WinningsClaimed(uint256 indexed id, address indexed claimant, uint256 amount);
@@ -245,9 +217,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
     event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
     event PositionExited(uint256 indexed id, address indexed participant, uint256 grossPayout, uint256 fee, uint256 netPayout);
 
-    // ---------------------------------------------------------------------
-    // Modifiers
-    // ---------------------------------------------------------------------
     modifier marketExists(uint256 id) {
         if (id >= totalMarkets) revert MarketDoesNotExist();
         _;
@@ -260,9 +229,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         _;
     }
 
-    // ---------------------------------------------------------------------
-    // Constructor
-    // ---------------------------------------------------------------------
     constructor(address payable _treasury, address _admin) {
         treasury = _treasury;
         decRewardThreshold = 50;
@@ -271,9 +237,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         _grantRole(PAUSE_ROLE, _admin);
     }
 
-    // ---------------------------------------------------------------------
-    // Admin
-    // ---------------------------------------------------------------------
     function updateTreasury(address payable _newTreasury) external onlyRole(DEFAULT_ADMIN_ROLE) {
         emit TreasuryUpdated(treasury, _newTreasury);
         treasury = _newTreasury;
@@ -291,9 +254,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         _unpause();
     }
 
-    // ---------------------------------------------------------------------
-    // DEC membership management
-    // ---------------------------------------------------------------------
     function addDecMember(address _member) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (hasRole(DEC_ROLE, _member)) revert Unauthorized();
         _grantRole(DEC_ROLE, _member);
@@ -338,9 +298,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         return count;
     }
 
-    // ---------------------------------------------------------------------
-    // Validation helpers
-    // ---------------------------------------------------------------------
     function _validateOutcomes(string[] calldata outcomes) internal pure {
         uint256 n = outcomes.length;
         if (n < MIN_OUTCOMES || n > MAX_OUTCOMES) revert InvalidOutcomes();
@@ -356,9 +313,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         }
     }
 
-    // ---------------------------------------------------------------------
-    // Market creation
-    // ---------------------------------------------------------------------
     function deployTeamMarket(MarketParams calldata params)
         external
         payable
@@ -420,7 +374,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         }
         _validateOutcomes(params.outcomes);
 
-        // Transfer proposal fee to treasury
         (bool feeSent, ) = treasury.call{value: PROPOSAL_FEE}("");
         if (!feeSent) revert InsufficientFee();
 
@@ -446,9 +399,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         return id;
     }
 
-    // ---------------------------------------------------------------------
-    // Proposal voting
-    // ---------------------------------------------------------------------
     function enterProposalReview(uint256 id) external marketExists(id) {
         if (marketState[id] != State.Proposed || marketContext[id].origin != Origin.Community) {
             revert InvalidMarketState();
@@ -531,9 +481,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         }
     }
 
-    // ---------------------------------------------------------------------
-    // Participation
-    // ---------------------------------------------------------------------
     function getTotalPool(uint256 id) public view returns (uint256) {
         uint256 total;
         uint256[] memory pools = outcomePools[id];
@@ -602,9 +549,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         }
     }
 
-    // ---------------------------------------------------------------------
-    // Exit Position (sell shares while market is active)
-    // ---------------------------------------------------------------------
     function exitPosition(uint256 id, uint8 outcomeIndex, uint256 minPayout)
         external
         whenNotPaused
@@ -625,30 +569,23 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         uint256 outcomePool = outcomePools[id][outcomeIndex];
         if (outcomePool == 0 || totalPool == 0) revert NoSharesToExit();
 
-        // Calculate payout: user's proportional share of the outcome pool
         uint256 grossPayout = (userShares * totalPool) / outcomePool;
         uint256 exitFee = (grossPayout * EXIT_FEE_BPS) / BPS_DENOMINATOR;
         uint256 netPayout = grossPayout - exitFee;
         if (netPayout < minPayout) revert SlippageExceeded();
 
-        // Burn the user's shares and reduce the outcome pool
         shares[id][outcomeIndex][msg.sender] = 0;
         hasExited[id][msg.sender] = true;
         outcomePools[id][outcomeIndex] -= netPayout;
 
-        // Distribute exit fee
         _distributeParticipationFee(id, exitFee);
 
-        // Send net payout to user
         (bool sent, ) = payable(msg.sender).call{value: netPayout}("");
         if (!sent) revert InsufficientFee();
 
         emit PositionExited(id, msg.sender, grossPayout, exitFee, netPayout);
     }
 
-    // ---------------------------------------------------------------------
-    // Resolution
-    // ---------------------------------------------------------------------
     function requestResolution(uint256 id) external marketExists(id) {
         State state = marketState[id];
         if ((state != State.Active && state != State.Closed && state != State.Unresolved) ||
@@ -681,7 +618,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         if (outcomeIndex >= outcomeLabels[id].length) revert InvalidOutcome();
         if (hasVotedOnResolution[id][msg.sender]) revert AlreadyVoted();
 
-        // Enter resolution voting if not already
         if (marketState[id] == State.ResolutionRequested) {
             marketState[id] = State.DECResolutionVoting;
         }
@@ -699,9 +635,14 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         MarketResolution storage resolution = marketResolution[id];
         if (marketState[id] != State.DECResolutionVoting) revert InvalidMarketState();
 
+        resolution.quorumReached = false;
+        resolution.tied = false;
+        resolution.decOutcomeAvailable = false;
+        resolution.decSuggestedOutcome = 0;
+
         if (resolution.totalResolutionVotes < resolution.quorum) {
             marketState[id] = State.AdminVerification;
-            emit ResolutionFinalized(id, false, 0);
+            emit ResolutionFinalized(id, false, false, false, 0);
             return;
         }
 
@@ -720,7 +661,20 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         }
 
         marketState[id] = State.AdminVerification;
-        emit ResolutionFinalized(id, true, tied ? winningOutcome : winningOutcome);
+
+        if (tied) {
+            resolution.quorumReached = true;
+            resolution.tied = true;
+            resolution.decOutcomeAvailable = false;
+            resolution.decSuggestedOutcome = 0;
+            emit ResolutionFinalized(id, true, true, false, 0);
+        } else {
+            resolution.quorumReached = true;
+            resolution.tied = false;
+            resolution.decOutcomeAvailable = true;
+            resolution.decSuggestedOutcome = winningOutcome;
+            emit ResolutionFinalized(id, true, false, true, winningOutcome);
+        }
     }
 
     function confirmOutcome(uint256 id, uint8 outcomeIndex, string calldata)
@@ -739,7 +693,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         marketState[id] = State.Confirmed;
         emit OutcomeConfirmed(id, outcomeIndex);
 
-        // Update DEC reputation
         for (uint256 i; i < decMemberList.length; i++) {
             address member = decMemberList[i];
             if (hasVotedOnResolution[id][member] && !decRewardDistributed[id][member]) {
@@ -771,9 +724,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         emit MarketFinalized(id);
     }
 
-    // ---------------------------------------------------------------------
-    // Claims
-    // ---------------------------------------------------------------------
     function claimWinnings(uint256 id) external nonReentrant marketExists(id) {
         if (!marketResolution[id].finalized || hasClaimedWinnings[id][msg.sender]) {
             revert InvalidMarketState();
@@ -880,9 +830,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         decRewardPool -= totalDistributed;
     }
 
-    // ---------------------------------------------------------------------
-    // Cancellation
-    // ---------------------------------------------------------------------
     function cancelMarket(uint256 id, string calldata reason, string calldata)
         external
         onlyRole(ADMIN_ROLE)
@@ -906,9 +853,6 @@ contract InterPredictV2 is AccessControl, ReentrancyGuard, Pausable {
         emit MarketCancelled(id, reason);
     }
 
-    // ---------------------------------------------------------------------
-    // Getters
-    // ---------------------------------------------------------------------
     function getOutcomeLabels(uint256 id) external view returns (string[] memory) {
         return outcomeLabels[id];
     }

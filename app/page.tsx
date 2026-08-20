@@ -1,3 +1,5 @@
+// Public homepage loading markets from the Supabase-backed API.
+
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -143,7 +145,8 @@ export default function HomePage() {
           const controller = new AbortController()
           const timeoutId = window.setTimeout(() => controller.abort(), PAGE_REQUEST_TIMEOUT_MS)
           try {
-            const res = await fetch(`/api/markets?start=${start}&limit=${PAGE_SIZE}`, {
+            const page = Math.floor(start / PAGE_SIZE) + 1
+            const res = await fetch(`/api/markets?page=${page}&pageSize=${PAGE_SIZE}`, {
               cache: 'no-store',
               signal: controller.signal,
             })
@@ -164,7 +167,14 @@ export default function HomePage() {
       }
 
       const mergePage = (data: any) => {
-        const pageMarkets: MarketType[] = Array.isArray(data?.allMarkets) ? data.allMarkets : []
+
+        const pageMarkets: MarketType[] = Array.isArray(data?.data?.markets)
+          ? data.data.markets
+          : Array.isArray(data?.markets)
+            ? data.markets
+            : Array.isArray(data?.allMarkets)
+              ? data.allMarkets
+              : []
         for (const market of pageMarkets) {
           byId.set(Number(market.id), market)
         }
@@ -172,7 +182,12 @@ export default function HomePage() {
 
       const firstPage = await fetchPage(0)
       mergePage(firstPage)
-      const totalMarkets = Number(firstPage?.pagination?.totalMarkets || 0)
+      const totalMarkets = Number(
+        firstPage?.meta?.total ??
+        firstPage?.pagination?.totalMarkets ??
+        firstPage?.data?.markets?.length ??
+        0,
+      )
       const remainingStarts: number[] = []
       for (let start = PAGE_SIZE; start < totalMarkets; start += PAGE_SIZE) {
         remainingStarts.push(start)
@@ -232,7 +247,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-background text-foreground font-sans antialiased selection:bg-primary/20 overflow-x-hidden">
       <Navbar />
 
-      {/* --- HERO SECTION --- */}
+      {}
       <section className="relative pt-32 pb-16 md:pt-44 md:pb-28 overflow-hidden px-4">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(98,0,238,0.06),transparent_50%)]" />
         <div className="max-w-5xl mx-auto text-center relative z-10">
@@ -269,7 +284,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* --- EXPLORE MARKETS SECTION --- */}
+      {}
       <section id="markets" className="py-20 border-t border-border bg-secondary/20 px-4">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-10 gap-4">
@@ -312,7 +327,7 @@ export default function HomePage() {
             activeMarkets.length === 0 &&
             inactiveMarkets.length === 0 ? (
             <p className="text-sm font-mono text-primary animate-pulse">
-              Syncing smart contract registries...
+              Loading markets...
             </p>
           ) : (
             <div className="space-y-12">
@@ -358,7 +373,7 @@ export default function HomePage() {
                         key={market.id}
                         className="bg-background border border-border rounded-2xl p-5 shadow-sm hover:border-primary/40 transition-colors relative"
                       >
-                        {/* Thumbnail */}
+                        {}
                         <div className="absolute top-5 right-5 size-12 rounded-xl bg-secondary/60 border border-border overflow-hidden">
                           <MarketThumbnail
                             src={market.thumbnailUri}
@@ -379,13 +394,13 @@ export default function HomePage() {
                           {market.question}
                         </p>
 
-                        {/* Timer & Expiry */}
+                        {}
                         <div className="mb-3 flex flex-col gap-0.5 text-[10px] font-mono">
                           <span className="text-muted-foreground">Expires: <span className="text-foreground/80">{formatExpiryDate(market.marketEndTime)}</span></span>
                           <span className="text-primary">⏳ {formatCountdown(market.marketEndTime)}</span>
                         </div>
 
-                        {/* Outcome pools */}
+                        {}
                         <div className="border-t border-border pt-3">
                           <div className={`grid gap-2 ${outcomeGridClass} text-[11px] font-mono text-muted-foreground`}>
                             {(market.outcomeLabels || [])
@@ -398,7 +413,7 @@ export default function HomePage() {
                           </div>
                         </div>
 
-                        {/* Volume */}
+                        {}
                         <div className="mt-3 pt-3 border-t border-border flex items-center justify-between text-[11px] font-mono">
                           <span className="text-muted-foreground font-bold uppercase tracking-wider">Volume</span>
                           <span className="text-primary font-bold">{formatVolume(market)} ITL</span>
@@ -456,47 +471,47 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* --- PROTOCOL ARCHITECTURE WORKFLOW --- */}
+      {}
       <section id="architecture" className="py-24 border-t border-border px-4">
         <div className="max-w-7xl mx-auto">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <span className="text-xs font-bold text-primary uppercase tracking-widest bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
-              {t('infraBadge')} {/* 🔄 Localized */}
+              {t('infraBadge')} {}
             </span>
             <h2 className="text-3xl sm:text-5xl font-heading font-bold tracking-tight mt-4">
-              {t('howItWorksBtn')} {/* 🔄 Localized */}
+              {t('howItWorksBtn')} {}
             </h2>
             <p className="text-muted-foreground text-sm sm:text-base mt-2">
-              {t('infraSub')} {/* 🔄 Localized */}
+              {t('infraSub')} {}
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
-            {/* 🔄 Card 01 Localized */}
+            {}
             <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
               <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">01</div>
               <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><Layers className="size-4 text-primary" /><span>{t('step1Title')}</span></h3>
               <p className="text-xs text-muted-foreground leading-relaxed">{t('step1Desc')}</p>
             </div>
-            {/* 🔄 Card 02 Localized */}
+            {}
             <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
               <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">02</div>
               <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><Coins className="size-4 text-primary" /><span>{t('step2Title')}</span></h3>
               <p className="text-xs text-muted-foreground leading-relaxed">{t('step2Desc')}</p>
             </div>
-            {/* 🔄 Card 03 Localized */}
+            {}
             <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
               <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">03</div>
               <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><Gavel className="size-4 text-primary" /><span>{t('step3Title')}</span></h3>
               <p className="text-xs text-muted-foreground leading-relaxed">{t('step3Desc')}</p>
             </div>
-            {/* 🔄 Card 04 Localized */}
+            {}
             <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
               <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">04</div>
               <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><CheckCircle2 className="size-4 text-primary" /><span>{t('step4Title')}</span></h3>
               <p className="text-xs text-muted-foreground leading-relaxed">{t('step4Desc')}</p>
             </div>
-            {/* 🔄 Card 05 Localized */}
+            {}
             <div className="bg-secondary/40 border border-border rounded-2xl p-5 shadow-sm">
               <div className="size-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-mono text-sm font-bold mb-4">05</div>
               <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-1.5"><ShieldCheck className="size-4 text-primary" /><span>{t('step5Title')}</span></h3>
@@ -506,11 +521,11 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* --- FOOTER COMPONENT --- */}
+      {}
       <footer className="border-t border-border bg-secondary/30 py-12 text-xs text-muted-foreground px-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex flex-col gap-3 text-center md:text-left">
-            <p className="font-semibold text-slate-400">{t('footerRights')}</p> {/* 🔄 Localized Copyright */}
+            <p className="font-semibold text-slate-400">{t('footerRights')}</p> {}
             <div className="flex flex-wrap justify-center md:justify-start gap-x-5 gap-y-2">
               <Link href="/whitepaper" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">{t('navWhitepaper')}</Link>
               <Link href="/documentation" className="px-3 py-1 bg-secondary/40 hover:bg-secondary/80 text-slate-300 hover:text-primary rounded-md border border-border transition-all font-medium shadow-sm">{t('docDocumentation')}</Link>

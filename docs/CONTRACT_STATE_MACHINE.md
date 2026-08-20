@@ -117,6 +117,11 @@
 - **Valid previous:** DECResolutionVoting.
 - **Permitted:** `confirmOutcome` (ADMIN).
 - **UI:** "Under Resolution" (admin action).
+- **Resolution metadata (explicit, never overload outcome 0):**
+  - UNIQUE DEC WINNER: `quorumReached=true`, `tied=false`, `outcomeAvailable=true`, `suggestedOutcome=N`
+  - QUORUM NOT REACHED: `quorumReached=false`, `tied=false`, `outcomeAvailable=false`
+  - TIE: `quorumReached=true`, `tied=true`, `outcomeAvailable=false` (no DEC recommendation)
+- A tied DEC vote MUST NOT masquerade as a DEC consensus. Admin confirmation remains required in all three cases.
 
 ### Confirmed
 - **Entered by:** `confirmOutcome`.

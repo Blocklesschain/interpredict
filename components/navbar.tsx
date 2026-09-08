@@ -46,7 +46,7 @@ export function Navbar() {
             </span>
           </a>
 
-          <div className="hidden items-center gap-8 md:flex">
+          <div className="hidden items-center gap-6 whitespace-nowrap xl:flex xl:gap-8">
             {links.map((link) => (
               <a
                 key={link.label}
@@ -59,21 +59,21 @@ export function Navbar() {
           </div>
 
           {/* DESKTOP NAV WRAPPER PANEL */}
-          <div className="hidden md:flex md:items-center md:gap-3">
+          <div className="hidden shrink-0 items-center gap-3 xl:flex">
             <ThemeToggle />
             <LanguageSelector />
             <Link
               href="/spin-to-win"
               className={cn(
                 buttonVariants(),
-                "glow-purple rounded-full bg-primary px-5 font-semibold text-primary-foreground hover:bg-[#4f00c5]",
+                "glow-purple whitespace-nowrap rounded-full bg-primary px-5 font-semibold text-primary-foreground hover:bg-[#4f00c5]",
               )}
             >
               {t('spinToWinBtn')}
             </Link>
           </div>
 
-          <div className="flex items-center gap-1 md:hidden">
+          <div className="flex items-center gap-1 xl:hidden">
             <ThemeToggle />
             <button
               className="rounded-xl p-2 text-foreground transition-colors hover:bg-secondary"
@@ -86,7 +86,7 @@ export function Navbar() {
 
         {/* MOBILE LAYOUT COLLAPSE MENU CHANNELS */}
         {open && (
-          <div className="nav-glass mt-2 flex flex-col gap-2 rounded-2xl p-3 md:hidden">
+          <div className="nav-glass mt-2 flex flex-col gap-2 rounded-2xl p-3 xl:hidden">
             {links.map((link) => (
               <a
                 key={link.label}

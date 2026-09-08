@@ -91,13 +91,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Link href="/app" className="text-lg font-bold tracking-tight">
               {t('app.title')}
             </Link>
-            <nav className="hidden md:flex items-center gap-1">
+            <nav className="hidden xl:flex items-center gap-1">
               {NAV_ITEMS.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                    'whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                     pathname === item.href
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:text-foreground',
@@ -114,7 +114,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {/* Back to Home (marketing site) */}
             <Link
               href="/"
-              className="hidden md:inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
+              className="hidden xl:inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
             >
               ← Home
             </Link>
@@ -150,7 +150,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Button
               variant="ghost"
               size="icon-sm"
-              className="md:hidden"
+              className="xl:hidden"
               onClick={() => setMobileOpen(!mobileOpen)}
             >
               {mobileOpen ? <X className="size-4" /> : <Menu className="size-4" />}
@@ -160,7 +160,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Mobile nav */}
         {mobileOpen && (
-          <nav className="border-t border-border md:hidden">
+          <nav className="border-t border-border xl:hidden">
             <div className="flex flex-col gap-1 p-2">
               <Link
                 href="/"

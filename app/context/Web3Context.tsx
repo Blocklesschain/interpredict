@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { ethers } from 'ethers'
 import { translations, LocaleType } from './translations'
 import { getValidToken } from '@/lib/interlinkAuth'
@@ -105,6 +105,28 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   const [historyLogs, setHistoryLogs] = useState<HistoryRecord[]>([])
   const [locale, setLocaleState] = useState<LocaleType>('en')
   const [decMembers, setDecMembers] = useState<string[]>([])
+  const connectionInFlight = useRef(false)
+
+  useEffect(() => {
+    async function restoreWalletSession() {
+      if (typeof window === 'undefined' || !(window as any).ethereum) return
+      try {
+        const injectedProviders = (window as any).ethereum.providers as any[] | undefined
+        const ethereum = injectedProviders?.find((candidate) => candidate.isMetaMask) || (window as any).ethereum
+        const accounts = await ethereum.request({ method: 'eth_accounts' }) as string[]
+        if (accounts.length === 0 || localStorage.getItem('interpredict_connected') !== 'true') return
+        const activeAddress = accounts[0]
+        setWalletAddress(activeAddress)
+        const storageKey = `interpredict_logs_${activeAddress.toLowerCase()}`
+        const savedLogs = localStorage.getItem(storageKey)
+        setHistoryLogs(savedLogs ? JSON.parse(savedLogs) : [])
+      } catch (error) {
+        console.warn('Wallet session restore skipped:', error)
+      }
+    }
+
+    void restoreWalletSession()
+  }, [])
 
   useEffect(() => {
     const savedLocale = localStorage.getItem('interpredict_lang') as LocaleType
@@ -146,32 +168,6 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    async function checkExistingConnection() {
-      if (typeof window !== 'undefined' && (window as any).ethereum) {
-        try {
-          const provider = new ethers.BrowserProvider((window as any).ethereum)
-          const accounts = await provider.listAccounts()
-          const cachedConnected = localStorage.getItem('interpredict_connected')
-
-          if (accounts.length > 0 && cachedConnected === 'true') {
-            const activeAddress = accounts[0].address
-            setWalletAddress(activeAddress)
-
-            const storageKey = `interpredict_logs_${activeAddress.toLowerCase()}`
-            const savedLogs = localStorage.getItem(storageKey)
-            if (savedLogs) {
-              setHistoryLogs(JSON.parse(savedLogs))
-            }
-          }
-        } catch (e) {
-          console.error("Session rehydration skipped:", e)
-        }
-      }
-    }
-    checkExistingConnection()
-  }, [])
-
-  useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).ethereum) {
       const handleAccountsChanged = (accounts: string[]) => {
         if (accounts.length > 0) {
@@ -195,25 +191,6 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       }
     }
   }, [])
-
-  useEffect(() => {
-    if (!walletAddress) return
-
-    const keepTokenWarm = async () => {
-      try {
-        if (typeof window === 'undefined' || !(window as any).ethereum) return
-        const browserProvider = new ethers.BrowserProvider((window as any).ethereum)
-        const signer = await browserProvider.getSigner()
-        await getValidToken(walletAddress, signer)
-      } catch (err: any) {
-        console.warn('[Web3Context] Background token keep-warm failed:', err?.message || err)
-      }
-    }
-
-    keepTokenWarm()
-    const intervalId = setInterval(keepTokenWarm, 14 * 60 * 1000)
-    return () => clearInterval(intervalId)
-  }, [walletAddress])
 
   const verifyNetwork = async (provider: any) => {
     try {
@@ -246,13 +223,18 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
       setTxStatus("Error: Web3 Wallet extension not identified.")
       return
     }
+    if (connectionInFlight.current) return
+    connectionInFlight.current = true
     try {
       setTxStatus("Synchronizing credentials...")
-      const provider = new ethers.BrowserProvider((window as any).ethereum)
-      await (window as any).ethereum.request({ method: 'eth_requestAccounts' })
-      await verifyNetwork((window as any).ethereum)
+      const injectedProviders = (window as any).ethereum.providers as any[] | undefined
+      const ethereum = injectedProviders?.find((candidate) => candidate.isMetaMask) || (window as any).ethereum
+      const requestedAccounts = await ethereum.request({ method: 'eth_requestAccounts' }) as string[]
+      if (!requestedAccounts.length) throw new Error('No wallet account was selected.')
+      await verifyNetwork(ethereum)
 
-      const signer = await provider.getSigner()
+      const provider = new ethers.BrowserProvider(ethereum)
+      const signer = await provider.getSigner(requestedAccounts[0])
       const address = await signer.getAddress()
       setWalletAddress(address)
       localStorage.setItem('interpredict_connected', 'true')
@@ -263,15 +245,40 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
 
       setTxStatus("Wallet interface integrated successfully.")
     } catch (err: any) {
-      setTxStatus(`Connection Error: ${err.message}`)
+      const message = String(err?.shortMessage || err?.message || err || 'Unknown wallet error')
+      if (err?.code === 4001 || message.toLowerCase().includes('user rejected')) {
+        setTxStatus('Connection cancelled in MetaMask. Approve the account request to continue.')
+      } else if (message.toLowerCase().includes('failed to connect to metamask')) {
+        setTxStatus('MetaMask is not connected to this browser tab. Unlock MetaMask, then try again.')
+      } else {
+        setTxStatus(`Connection Error: ${message}`)
+      }
+    } finally {
+      connectionInFlight.current = false
     }
   }
 
   const disconnectWallet = () => {
-    setWalletAddress(null)
-    setHistoryLogs([])
-    localStorage.removeItem('interpredict_connected')
-    setTxStatus("Wallet session cleared successfully.")
+    const revokeWalletPermission = async () => {
+      try {
+        const injectedProviders = (window as any).ethereum?.providers as any[] | undefined
+        const ethereum = injectedProviders?.find((candidate) => candidate.isMetaMask) || (window as any).ethereum
+        if (ethereum?.request) {
+          await ethereum.request({
+            method: 'wallet_revokePermissions',
+            params: [{ eth_accounts: {} }],
+          })
+        }
+      } catch {
+        // Some wallet versions do not expose permission revocation; local disconnect still applies.
+      }
+      setWalletAddress(null)
+      setHistoryLogs([])
+      localStorage.removeItem('interpredict_connected')
+      setTxStatus("Wallet session disconnected. Select another account before reconnecting.")
+    }
+
+    void revokeWalletPermission()
   }
 
   const getContractInstance = async () => {

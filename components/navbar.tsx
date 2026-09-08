@@ -63,13 +63,13 @@ export function Navbar() {
             <ThemeToggle />
             <LanguageSelector />
             <Link
-              href="/app"
+              href="/spin-to-win"
               className={cn(
                 buttonVariants(),
                 "glow-purple rounded-full bg-primary px-5 font-semibold text-primary-foreground hover:bg-[#4f00c5]",
               )}
             >
-              {t('launchBtn')}
+              {t('spinToWinBtn')}
             </Link>
           </div>
 
@@ -102,14 +102,14 @@ export function Navbar() {
               <LanguageSelector />
             </div>
             <Link
-              href="/app"
+              href="/spin-to-win"
               onClick={() => setOpen(false)}
               className={cn(
                 buttonVariants(),
                 "glow-purple mt-2 rounded-full bg-primary font-semibold text-primary-foreground text-center",
               )}
             >
-              {t('launchBtn')}
+              {t('spinToWinBtn')}
             </Link>
           </div>
         )}

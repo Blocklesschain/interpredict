@@ -42,6 +42,13 @@
 | `INDEXER_BATCH_SIZE` | server secret, runtime | Blocks per sync batch |
 | `INDEXER_CONFIRMATION_DEPTH` | server secret, runtime | Confirmation depth |
 | `CRON_SECRET` | server secret, runtime | Protects keeper/cron routes |
+| `SPIN_TREASURY_ADDRESS` | server secret, runtime | Recipient wallet for Spin to Win tITL multiplier payments (lowercase) |
+| `SPIN_TELEGRAM_BOT_TOKEN` | server secret, runtime | Telegram bot token for social verification |
+| `SPIN_TELEGRAM_BOT_HANDLE` | server secret, runtime | Telegram bot handle (defaults to `InterPredictVerifyBot`) |
+| `SPIN_TELEGRAM_WEBHOOK_SECRET` | server secret, runtime | Secret token used to authenticate Telegram webhook calls |
+| `SPIN_X_API_KEY` | server secret, runtime | X API key (OAuth 2.0 app-only) for tweet verification |
+| `SPIN_X_API_SECRET` | server secret, runtime | X API secret (OAuth 2.0 app-only) |
+| `SPIN_X_BEARER_TOKEN` | server secret, runtime | Alternative ready-made X app-only bearer token |
 
 ---
 

@@ -5,6 +5,17 @@ import Link from 'next/link'
 import { ArrowLeft, Check, ChevronDown, Coins, ExternalLink, Link2, Plus, Send, ShieldCheck, TimerReset, Volume2, VolumeX, WalletCards, X, Zap } from 'lucide-react'
 import { Navbar } from '@/components/navbar'
 import { useWeb3 } from '@/app/context/Web3Context'
+import {
+  isBackendAvailable,
+  authenticate,
+  getStoredToken,
+  getServerState,
+  getTasks as fetchServerTasks,
+  recordResult as recordServerResult,
+  submitVerification,
+  linkSocial,
+  getAdminLedger,
+} from '@/lib/spin-to-win/client'
 
 const prizes = [
   { label: '2.1 ITP', detail: 'A little lucky start', color: '#7c3aed', weight: 28 },
@@ -89,6 +100,9 @@ export default function SpinToWinPage() {
   const [taskLinks, setTaskLinks] = useState<Record<string, string>>({})
   const [loadedWalletState, setLoadedWalletState] = useState<string | null>(null)
   const [loadedTasks, setLoadedTasks] = useState(false)
+  const [backendReady, setBackendReady] = useState(false)
+  const [serverToken, setServerToken] = useState<string | null>(null)
+  const [serverSyncedWallet, setServerSyncedWallet] = useState<string | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const soundTimerRef = useRef<number | null>(null)
 
@@ -106,6 +120,53 @@ export default function SpinToWinPage() {
   useEffect(() => {
     setNow(Date.now())
   }, [])
+
+  useEffect(() => {
+    if (!walletAddress) {
+      setServerToken(null)
+      setServerSyncedWallet(null)
+      return
+    }
+    const detectAndSync = async () => {
+      const ready = await isBackendAvailable()
+      setBackendReady(ready)
+      if (!ready) {
+        setServerToken(null)
+        return
+      }
+      const stored = getStoredToken()
+      let token = stored?.wallet === walletAddress.toLowerCase() ? stored.token : null
+      if (!token) {
+        try {
+          const session = await authenticate(walletAddress)
+          token = session.accessToken
+        } catch {
+          token = null
+        }
+      }
+      setServerToken(token)
+      if (!token) {
+        setServerSyncedWallet(walletAddress.toLowerCase())
+        return
+      }
+      try {
+        const state = await getServerState(sessionStart, token)
+        if (state.sessionStart === sessionStart) {
+          if (state.bonusSpins > 0) setBonusSpins(state.bonusSpins)
+          if (state.verifiedTaskIds.length) setVerifiedTaskIds(state.verifiedTaskIds)
+          if (state.accounts.x || state.accounts.telegram) setAccounts(state.accounts)
+        }
+        const serverTasks = await fetchServerTasks()
+        if (serverTasks.tasks.length) setTasks(serverTasks.tasks as Task[])
+        setServerSyncedWallet(walletAddress.toLowerCase())
+      } catch {
+        // Server unreachable/permission issues → keep local state.
+        setServerSyncedWallet(walletAddress.toLowerCase())
+      }
+    }
+    void detectAndSync()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walletAddress, sessionStart])
 
   useEffect(() => {
     if (!now) return
@@ -152,11 +213,31 @@ export default function SpinToWinPage() {
       } catch {
         setWalletRewards([])
       }
+      if (serverToken && serverSyncedWallet === walletAddress?.toLowerCase()) {
+        void getAdminLedger(serverToken)
+          .then((data) => {
+            const aggregated: WalletReward[] = []
+            for (const row of data.ledger) {
+              const key = String(row.wallet || '').toLowerCase()
+              if (!key) continue
+              const itp = Number(row.won_itp || 0)
+              const existing = aggregated.find((item) => item.wallet === key)
+              if (existing) {
+                existing.itp += itp
+                existing.spins += 1
+              } else {
+                aggregated.push({ wallet: key, itp, spins: 1 })
+              }
+            }
+            if (aggregated.length) setWalletRewards(aggregated)
+          })
+          .catch(() => {})
+      }
     }
     refreshRewards()
     const interval = window.setInterval(refreshRewards, 3000)
     return () => window.clearInterval(interval)
-  }, [isAdmin])
+  }, [isAdmin, serverToken, serverSyncedWallet, walletAddress])
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000)
@@ -242,14 +323,40 @@ export default function SpinToWinPage() {
       }
       setIsSpinning(false)
       playTick(360)
+      if (serverToken && serverSyncedWallet === walletAddress?.toLowerCase()) {
+        void recordServerResult(serverToken, {
+          sessionStart,
+          prizeIndex: winningIndex,
+          prizeLabel: winningPrize.label,
+          multiplier: selectedMultiplier,
+          wonItp: String(earnedItp),
+          wonSpins: earnedSpins,
+          merchantClientId: `spin-${walletAddress?.toLowerCase()}-${Date.now()}`,
+        }).catch(() => {})
+      }
     }, 4800)
   }
 
-  const connectAccount = (provider: 'x' | 'telegram') => {
+  const connectAccount = async (provider: 'x' | 'telegram') => {
     if (!isWalletConnected) return
     const label = provider === 'x' ? 'X username' : 'Telegram username'
     const handle = window.prompt(`Enter your ${label} to connect it:`)?.trim().replace(/^@/, '')
-    if (handle) setAccounts(value => ({ ...value, [provider]: handle }))
+    if (!handle) return
+    if (serverToken && serverSyncedWallet === walletAddress?.toLowerCase()) {
+      try {
+        await linkSocial(serverToken, provider, handle)
+        setAccounts(value => ({ ...value, [provider]: handle }))
+      } catch (error) {
+        const message = error instanceof Error ? error.message : ''
+        if (message.includes('ACCOUNT_ALREADY_LINKED')) {
+          window.alert('This social account or handle is already linked to another wallet.')
+        } else {
+          window.alert(`Could not link your ${label}: ${message}`)
+        }
+      }
+      return
+    }
+    setAccounts(value => ({ ...value, [provider]: handle }))
   }
 
   const verifyTask = (task: Task) => {
@@ -264,6 +371,9 @@ export default function SpinToWinPage() {
         setBonusSpins(value => value + 2)
       }
       setSubmittedTaskId(null)
+      if (serverToken && serverSyncedWallet === walletAddress?.toLowerCase() && link) {
+        void submitVerification(serverToken, task.id, link).catch(() => {})
+      }
     }, 900)
   }
 

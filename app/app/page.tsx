@@ -1,3 +1,5 @@
+// Main dApp portal consuming Supabase-backed market APIs.
+
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
@@ -52,6 +54,11 @@ interface SmartMarket {
   confirmedOutcome: number
   outcomeConfirmed: boolean
   finalized: boolean
+
+  resolutionTied?: boolean
+  resolutionQuorumReached?: boolean | null
+  resolutionOutcomeAvailable?: boolean
+  resolutionSuggestedOutcome?: number | null
 }
 
 interface MyPosition {
@@ -124,7 +131,6 @@ function getOutcomePercentage(market: SmartMarket, outcomeIndex: number): string
 
   return '0.00'
 }
-
 
 function getTotalMarketVolume(market: SmartMarket): string {
   try {
@@ -237,34 +243,72 @@ export default function DAppPortal() {
       let baseMarkets: SmartMarket[] = []
 
       try {
-        // The API now returns all relevant markets (active, pending, resolution,
-        // finalized) in a single call. Rejected/Cancelled markets are skipped
-        // server-side for efficiency.
-        const normalizeMarket = (rawMarket: any): SmartMarket => ({
-          ...rawMarket,
-          id: Number(rawMarket.id ?? rawMarket.marketId ?? 0),
-          thumbnailUri:
-            rawMarket.thumbnailUri ||
-            rawMarket.thumbnailURI ||
-            rawMarket.thumbnailUrl ||
-            rawMarket.thumbnailURL ||
-            '',
-          outcomeLabels: Array.isArray(rawMarket.outcomeLabels)
-            ? rawMarket.outcomeLabels.map(String)
-            : [],
-          outcomePools: Array.isArray(rawMarket.outcomePools)
-            ? rawMarket.outcomePools.map(String)
-            : [],
-          outcomePrices: Array.isArray(rawMarket.outcomePrices)
-            ? rawMarket.outcomePrices.map(String)
-            : [],
-          hasCurrentWalletVoted: Boolean(rawMarket.hasCurrentWalletVoted),
-          currentWalletProposalVote: Number(rawMarket.currentWalletProposalVote || 0),
-          hasCurrentWalletVotedOnResolution: Boolean(rawMarket.hasCurrentWalletVotedOnResolution),
-          currentWalletResolutionVote: Number(rawMarket.currentWalletResolutionVote || 0)
-        })
 
-        // Show cached markets immediately while fresh data loads
+        const normalizeMarket = (rawMarket: any): SmartMarket => {
+          const resolution = rawMarket.resolution || {}
+          const outcomeAvailable = Boolean(
+            resolution.outcomeAvailable ??
+            resolution.dec_outcome_available ??
+            rawMarket.resolutionOutcomeAvailable,
+          )
+          const suggested =
+            resolution.suggestedOutcome ??
+            resolution.decSuggestedOutcome ??
+            resolution.dec_suggested_outcome ??
+            rawMarket.resolutionSuggestedOutcome
+          return {
+            ...rawMarket,
+            id: Number(rawMarket.id ?? rawMarket.marketId ?? 0),
+            marketEndTime: Number(rawMarket.marketEndTime ?? rawMarket.end_time ?? 0),
+            resolutionCriteria: String(rawMarket.resolutionCriteria ?? rawMarket.resolution_criteria ?? ''),
+            thumbnailUri:
+              rawMarket.thumbnailUri ||
+              rawMarket.thumbnailURI ||
+              rawMarket.thumbnailUrl ||
+              rawMarket.thumbnailURL ||
+              rawMarket.thumbnail_url ||
+              '',
+            outcomeLabels: Array.isArray(rawMarket.outcomeLabels)
+              ? rawMarket.outcomeLabels.map(String)
+              : [],
+            outcomePools: Array.isArray(rawMarket.outcomePools)
+              ? rawMarket.outcomePools.map(String)
+              : [],
+            outcomePrices: Array.isArray(rawMarket.outcomePrices)
+              ? rawMarket.outcomePrices.map(String)
+              : [],
+            totalVolume: String(rawMarket.totalVolume ?? rawMarket.total_volume ?? '0'),
+            participantCount: Number(rawMarket.participantCount ?? rawMarket.participant_count ?? 0),
+            confirmedOutcome: Number(rawMarket.confirmedOutcome ?? rawMarket.confirmed_outcome ?? 0),
+            finalized: Boolean(rawMarket.finalized),
+            cancelled: Boolean(rawMarket.cancelled),
+            cancelReason: String(rawMarket.cancelReason ?? rawMarket.cancel_reason ?? ''),
+            hasCurrentWalletVoted: Boolean(rawMarket.hasCurrentWalletVoted),
+            currentWalletProposalVote: Number(rawMarket.currentWalletProposalVote || 0),
+            hasCurrentWalletVotedOnResolution: Boolean(rawMarket.hasCurrentWalletVotedOnResolution),
+            currentWalletResolutionVote: Number(rawMarket.currentWalletResolutionVote || 0),
+            resolutionTied: Boolean(resolution.tied ?? rawMarket.resolutionTied),
+            resolutionQuorumReached:
+              resolution.quorumReached ??
+              resolution.quorum_reached ??
+              rawMarket.resolutionQuorumReached ??
+              null,
+            resolutionOutcomeAvailable: outcomeAvailable,
+            resolutionSuggestedOutcome: outcomeAvailable && suggested !== undefined && suggested !== null
+              ? Number(suggested)
+              : null,
+            decSelectedOutcome: outcomeAvailable && suggested !== undefined && suggested !== null
+              ? Number(suggested)
+              : Number(rawMarket.decSelectedOutcome ?? 0),
+            resolutionQuorum: Number(
+              resolution.quorum ?? rawMarket.resolutionQuorum ?? 0,
+            ),
+            totalResolutionVotes: Number(
+              resolution.totalVotes ?? resolution.total_votes ?? rawMarket.totalResolutionVotes ?? 0,
+            ),
+          }
+        }
+
         try {
           const cachedMarkets = sessionStorage.getItem('interpredict_public_markets')
           if (cachedMarkets) {
@@ -276,7 +320,6 @@ export default function DAppPortal() {
           }
         } catch { }
 
-        // Single fetch - the API returns all relevant markets in one call
         const controller = new AbortController()
         const timeoutId = window.setTimeout(() => controller.abort(), 30_000)
 
@@ -298,33 +341,53 @@ export default function DAppPortal() {
             throw new Error(json?.error || `Markets API returned HTTP ${response.status}`)
           }
 
-          if (json && Array.isArray(json.allMarkets)) {
-            baseMarkets = json.allMarkets.map(normalizeMarket)
+          const marketsPayload = Array.isArray(json?.data?.markets)
+            ? json.data.markets
+            : Array.isArray(json?.markets)
+              ? json.markets
+              : null
+
+          if (marketsPayload) {
+            baseMarkets = marketsPayload.map(normalizeMarket)
             setAllOnChainMarkets(baseMarkets)
 
             try {
               sessionStorage.setItem('interpredict_public_markets', JSON.stringify(baseMarkets))
             } catch { }
+          }
 
-            // Load wallet positions from API if available
-            if (walletAddress && Array.isArray(json.walletPositions)) {
-              const apiPositions: MyPosition[] = json.walletPositions.map((position: any) => ({
-                marketId: Number(position.marketId),
-                question: String(position.question || `Market #${position.marketId}`),
-                marketState: Number(position.marketState || 0),
-                confirmedOutcome: Number(position.confirmedOutcome || 0),
-                shares: Array.isArray(position.shares) ? position.shares.map(String) : [],
-                stakes: Array.isArray(position.stakes) ? position.stakes.map(String) : [],
-                totalStake: String(position.totalStake || '0'),
-                claimablePayout: String(position.claimablePayout || '0'),
-                claimedPayout: String(position.claimedPayout || '0'),
-                claimed: Boolean(position.claimed),
-                marketEndTime: Number(position.marketEndTime || 0),
-                outcomeLabels: Array.isArray(position.outcomeLabels) ? position.outcomeLabels : [],
-                outcomePools: Array.isArray(position.outcomePools) ? position.outcomePools.map(String) : []
-              }))
-              setMyPositions(apiPositions)
-              setClaimedMarkets(apiPositions.filter((p) => p.claimed).map((p) => p.marketId))
+          if (walletAddress) {
+            try {
+              const activityRes = await fetch(
+                `/api/activity?wallet=${encodeURIComponent(walletAddress)}`,
+                { cache: 'no-store', headers: { Accept: 'application/json' } },
+              )
+              const activityJson = await activityRes.json().catch(() => null)
+              const participations = activityJson?.data?.participations
+              if (Array.isArray(participations)) {
+                const apiPositions: MyPosition[] = participations.map((p: any) => {
+                  const market = baseMarkets.find((m) => m.id === Number(p.market_id))
+                  return {
+                    marketId: Number(p.market_id),
+                    question: market?.question || `Market #${p.market_id}`,
+                    marketState: market?.state ?? 0,
+                    confirmedOutcome: market?.confirmedOutcome ?? 0,
+                    shares: [String(p.shares || '0')],
+                    stakes: [String(p.gross || '0')],
+                    totalStake: String(p.gross || '0'),
+                    claimablePayout: '0',
+                    claimedPayout: '0',
+                    claimed: Boolean(p.claimed),
+                    marketEndTime: market?.marketEndTime ?? 0,
+                    outcomeLabels: market?.outcomeLabels ?? [],
+                    outcomePools: market?.outcomePools ?? [],
+                  }
+                })
+                setMyPositions(apiPositions)
+                setClaimedMarkets(apiPositions.filter((p) => p.claimed).map((p) => p.marketId))
+              }
+            } catch (activityError) {
+              console.warn('Activity API failed:', activityError)
             }
           }
         } finally {
@@ -360,19 +423,16 @@ export default function DAppPortal() {
       const shouldUsePublicAPI = !walletAddress || typeof window === 'undefined' || !(window as any).ethereum
       if (shouldUsePublicAPI) return
 
-      // Fetch wallet balance through the authenticated provider
       try {
         const bal = await getWalletBalance(walletAddress)
         setWalletBalance(bal)
       } catch { }
 
-      // Check DEC membership through authenticated provider
       const isMember = await readContract('iad', [walletAddress])
       if (isMember) {
         setHasJoinedDEC(Boolean(isMember))
       }
 
-      // Admin DEC list
       if (walletAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
         const members = await readContract('gAD', [])
         if (members) {
@@ -380,9 +440,6 @@ export default function DAppPortal() {
         }
       }
 
-      // DEC rewards through authenticated provider.
-      // Use member-level unclaimed rewards (ur) so rewards are scoped to each
-      // member's tenure and participation, not equal split of historic pool.
       if (hasJoinedDEC || isMember) {
         const memberInfo = await readContract('gDMI', [walletAddress])
         const unclaimedRewards = memberInfo
@@ -397,13 +454,6 @@ export default function DAppPortal() {
         setDecMemberCount(Number(membersVal))
         setDecRewardsClaimable(unclaimedRewards.toString())
       }
-
-      // Wallet enrichment (votes, shares, claims) is now handled by the
-      // /api/markets endpoint via batched server-side RPC calls. The old
-      // per-market readContract fallback loop has been removed because it
-      // caused RPC rate-limiting (429 errors) with 34+ markets.
-      // Wallet-specific fields (hasCurrentWalletVoted, walletPositions, etc.)
-      // are returned by the API in the initial fetch above.
 
     } catch (err: any) {
       console.warn("Scan error:", err?.message || err)
@@ -503,7 +553,6 @@ export default function DAppPortal() {
     endDateTime.setHours(hours, minutes, 0, 0)
     const marketEndTimeInSeconds = Math.floor(endDateTime.getTime() / 1000)
 
-    // Contract requires community market end time to be at least 24h in the future
     const nowSec = Math.floor(Date.now() / 1000)
     const isTeam = walletAddress?.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
     if (!isTeam && marketEndTimeInSeconds <= nowSec + 24 * 60 * 60) {
@@ -547,7 +596,7 @@ export default function DAppPortal() {
 
   const executeTradeAction = async (marketId: number, outcomeIndex: number) => {
     if (!walletAddress) return connectWallet()
-    // Check balance before trading
+
     const stakeWei = BigInt(ethers.parseEther(stakeAmount || '0').toString())
     if (stakeWei > BigInt(walletBalance)) {
       setToastMsg(`Insufficient balance. You have ${formatEther(walletBalance)} tITL but need ${stakeAmount} tITL.`)
@@ -622,7 +671,7 @@ export default function DAppPortal() {
   const handleRequestResolution = async (marketId: number) => {
     const ok = await requestResolutionOnChain(marketId)
     if (ok) {
-      // Track locally so the button becomes inactive immediately
+
       setResolutionRequestedMarkets((prev) => {
         const updated = prev.includes(marketId) ? prev : [...prev, marketId]
         try {
@@ -729,60 +778,7 @@ export default function DAppPortal() {
 
   return (
     <div className="min-h-screen bg-[#060117] text-slate-100 font-sans antialiased overflow-x-hidden pb-12">
-      <header className="fixed top-0 inset-x-0 h-20 bg-[#0d0022]/90 backdrop-blur-md border-b border-purple-950/40 z-40 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto h-full flex items-center gap-2 max-[380px]:gap-1 sm:gap-4">
-          <Link
-            href="/"
-            aria-label="Go to InterPredict homepage"
-            className="flex shrink-0 items-center gap-2.5 group"
-          >
-            <Logo className="size-9 rounded-xl" />
-            <span className="hidden sm:inline font-heading text-lg font-bold tracking-tight text-white group-hover:text-primary transition-colors">
-              InterPredict
-            </span>
-          </Link>
-
-          <div
-            className="
-              ml-auto shrink-0
-              [&_select]:max-sm:max-w-[7.25rem]
-              [&_select]:max-sm:px-2
-              [&_select]:max-sm:text-xs
-            "
-          >
-            <LanguageSelector />
-          </div>
-
-          {walletAddress ? (
-            <div className="min-w-0 flex shrink items-center bg-purple-950/30 border border-purple-900/40 rounded-full px-1.5 sm:pr-1.5 sm:pl-4 py-1.5 gap-1.5 sm:gap-3 max-w-[50vw] sm:max-w-none">
-              <span title={`${walletBalanceLabel} tITL`} className="inline min-w-0 max-w-[9rem] truncate font-mono text-[10px] sm:max-w-none sm:text-xs text-emerald-400 whitespace-nowrap">
-                {walletBalanceLabel} tITL
-              </span>
-              <span className="hidden sm:block w-px h-4 bg-purple-900/40" />
-              <span className="hidden sm:inline font-mono text-xs text-purple-300 whitespace-nowrap">
-                {`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}
-              </span>
-              <button
-                onClick={disconnectWallet}
-                aria-label="Disconnect wallet"
-                className="shrink-0 p-2 bg-purple-900/40 hover:bg-rose-950/40 rounded-full text-slate-400 hover:text-rose-400 transition-colors"
-              >
-                <LogOut className="size-3.5" />
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={connectWallet}
-              className="shrink-0 flex items-center gap-2 px-3 sm:px-5 py-2.5 bg-gradient-to-r from-primary to-purple-600 text-xs sm:text-sm font-semibold rounded-full border border-purple-500/20 shadow-lg"
-            >
-              <Wallet className="size-3.5" />
-              <span className="hidden min-[360px]:inline">{t('connectBtn')}</span>
-            </button>
-          )}
-        </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto pt-28 px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
+      <div className="max-w-7xl mx-auto pt-6 px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
         <div className="lg:hidden w-full relative z-30">
           <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="w-full flex items-center justify-between bg-secondary/20 border border-secondary/30 rounded-xl px-4 py-3 text-sm font-semibold text-slate-200">
             <div className="flex items-center gap-2"><Menu className="size-4 text-primary" /><span>{getTabLabel(activeTab)}</span></div>
@@ -837,7 +833,7 @@ export default function DAppPortal() {
               <p className="text-purple-400 text-[10px] sm:text-xs font-semibold tracking-wide mt-1">{t('taglineSub')}</p>
             </div>
 
-            {/* MARKETPLACE */}
+            {}
             {activeTab === 'MarketPlace' && (
               <div className="w-full space-y-8">
                 <div>
@@ -865,7 +861,7 @@ export default function DAppPortal() {
                             <span className="text-slate-400">Expires: <span className="text-slate-300">{formatExpiryDate(market.marketEndTime)}</span></span>
                             <span className="text-purple-300">⏳ {formatCountdown(market.marketEndTime)}</span>
                           </div>
-                          {/* Market depth */}
+                          {}
                           {market.outcomeLabels?.length > 0 && (
                             <div className="mb-3 space-y-2">
                               <div className={`grid gap-2 ${market.outcomeLabels.length === 3 ? 'grid-cols-3' : market.outcomeLabels.length === 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'}`}>
@@ -906,7 +902,7 @@ export default function DAppPortal() {
               </div>
             )}
 
-            {/* PENDING MARKETS */}
+            {}
             {activeTab === 'Pending Markets' && (
               <div className="grid grid-cols-1 gap-4 w-full">
                 {pendingProposals.length === 0 ? (
@@ -925,7 +921,7 @@ export default function DAppPortal() {
               </div>
             )}
 
-            {/* MARKET PROPOSALS (DEC members) */}
+            {}
             {activeTab === 'Market Proposals' && (
               <div className="grid grid-cols-1 gap-4 w-full">
                 {pendingProposals.length === 0 ? (
@@ -1003,7 +999,7 @@ export default function DAppPortal() {
               </div>
             )}
 
-            {/* MAKE MARKET */}
+            {}
             {activeTab === 'Make Market' && (
               <div className="space-y-4 w-full max-w-xl">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1067,7 +1063,7 @@ export default function DAppPortal() {
               </div>
             )}
 
-            {/* JOIN DEC */}
+            {}
             {activeTab === 'Join DEC' && (
               <div className="p-6 bg-gradient-to-br from-purple-950/20 to-indigo-950/20 border border-purple-900/30 rounded-xl text-center w-full max-w-xl">
                 <Shield className="size-10 mx-auto text-primary mb-3" />
@@ -1078,7 +1074,7 @@ export default function DAppPortal() {
               </div>
             )}
 
-            {/* MY VOTES */}
+            {}
             {activeTab === 'My Votes' && (
               <div className="space-y-8 w-full">
                 {myPositions.length === 0 ? (
@@ -1299,17 +1295,42 @@ export default function DAppPortal() {
                 <div>
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Awaiting Admin Verification</h3>
                   <div className="space-y-4">
-                    {adminVerificationMarkets.length === 0 ? <div className="p-6 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No markets awaiting admin verification.</div> : adminVerificationMarkets.map((market) => (
-                      <div key={market.id} className="bg-secondary/30 border border-blue-500/20 rounded-xl p-4 sm:p-5 max-w-xl">
-                        <p className="text-sm font-semibold mb-2 text-slate-200">{market.question}</p>
-                        <p className="text-[11px] text-slate-400 mb-3">DEC selected: <strong className="text-blue-300">{market.outcomeLabels?.[market.decSelectedOutcome] || `Outcome ${market.decSelectedOutcome}`}</strong></p>
-                        <div className={`grid gap-2 ${market.outcomeLabels?.length === 2 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
-                          {market.outcomeLabels?.map((label, oi) => (
-                            <button key={oi} onClick={() => handleResolveMarket(market.id, oi)} className="py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg uppercase">Confirm {label}</button>
-                          ))}
+                    {adminVerificationMarkets.length === 0 ? <div className="p-6 border border-dashed border-purple-900/30 rounded-xl text-center text-slate-500 font-mono text-xs">No markets awaiting admin verification.</div> : adminVerificationMarkets.map((market) => {
+                      const tied = Boolean(market.resolutionTied)
+                      const quorumReached = market.resolutionQuorumReached
+                      const outcomeAvailable = Boolean(market.resolutionOutcomeAvailable)
+                      const suggested = market.resolutionSuggestedOutcome
+                      let decResultLabel = 'DEC RESULT: Unknown'
+                      let decResultDetail = 'Admin verification required.'
+                      if (tied) {
+                        decResultLabel = 'DEC RESULT: TIED'
+                        decResultDetail = 'No unique DEC recommendation. Admin verification required.'
+                      } else if (quorumReached === false) {
+                        decResultLabel = 'DEC RESULT: QUORUM NOT REACHED'
+                        decResultDetail = `${market.totalResolutionVotes} / ${market.resolutionQuorum} required votes. Admin verification required.`
+                      } else if (outcomeAvailable && suggested !== null && suggested !== undefined) {
+                        decResultLabel = 'DEC RESULT: UNIQUE RECOMMENDATION'
+                        decResultDetail = `Suggested: ${market.outcomeLabels?.[suggested] || `Outcome ${suggested}`}`
+                      }
+                      return (
+                        <div key={market.id} className="bg-secondary/30 border border-blue-500/20 rounded-xl p-4 sm:p-5 max-w-xl">
+                          <p className="text-sm font-semibold mb-2 text-slate-200">{market.question}</p>
+                          {market.resolutionCriteria && (
+                            <p className="text-[11px] text-slate-400 mb-2">Criteria: {market.resolutionCriteria}</p>
+                          )}
+                          <div className={`mb-3 rounded-lg border p-3 text-[11px] font-mono ${tied ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : quorumReached === false ? 'border-rose-500/30 bg-rose-500/10 text-rose-200' : 'border-blue-500/30 bg-blue-500/10 text-blue-200'}`}>
+                            <p className="font-bold uppercase tracking-wider">{decResultLabel}</p>
+                            <p className="mt-1 text-slate-300">{decResultDetail}</p>
+                            <p className="mt-1 text-slate-500">Votes {market.totalResolutionVotes} / Quorum {market.resolutionQuorum}</p>
+                          </div>
+                          <div className={`grid gap-2 ${market.outcomeLabels?.length === 2 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
+                            {market.outcomeLabels?.map((label, oi) => (
+                              <button key={oi} onClick={() => handleResolveMarket(market.id, oi)} className="py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg uppercase">Confirm {label}</button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
 

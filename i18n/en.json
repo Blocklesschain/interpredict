@@ -1,0 +1,116 @@
+{
+  "app": {
+    "title": "InterPredict",
+    "tagline": "Community Prediction Marketplace on Interlink"
+  },
+  "nav": {
+    "home": "Home",
+    "marketplace": "Marketplace",
+    "proposals": "Market Proposals",
+    "activity": "My Activity",
+    "create": "Create",
+    "dec": "DEC",
+    "dapp": "Full dApp",
+    "history": "History",
+    "help": "Help"
+  },
+  "market": {
+    "state": {
+      "proposed": "Pending",
+      "decReview": "Under Review",
+      "rejected": "Rejected",
+      "cancelled": "Cancelled",
+      "approved": "Approved",
+      "active": "Active",
+      "closed": "Closed",
+      "unresolved": "Unresolved",
+      "resolutionRequested": "Under Resolution",
+      "decResolutionVoting": "Under Resolution",
+      "adminVerification": "Under Resolution",
+      "confirmed": "Resolved",
+      "finalized": "Resolved",
+      "resolved": "Resolved"
+    },
+    "question": "Question",
+    "description": "Description",
+    "category": "Category",
+    "outcomes": "Outcomes",
+    "creator": "Creator",
+    "endTime": "End Time",
+    "resolutionCriteria": "Resolution Criteria",
+    "totalVolume": "Total Volume",
+    "participants": "Participants"
+  },
+  "actions": {
+    "participate": "Participate",
+    "requestResolution": "Request Resolution",
+    "voteOnProposal": "Vote on Proposal",
+    "voteOnResolution": "Vote on Resolution",
+    "claimWinnings": "Claim Winnings",
+    "claimCreatorFee": "Claim Creator Fee",
+    "claimDecRewards": "Claim DEC Rewards",
+    "cancelMarket": "Cancel Market",
+    "finalizeMarket": "Finalize Market",
+    "confirmOutcome": "Confirm Outcome"
+  },
+  "errors": {
+    "userCancelled": "Transaction was cancelled in your wallet.",
+    "rpcRateLimited": "The network is busy. Please try again shortly.",
+    "networkUnavailable": "The network is unavailable. Please check your connection.",
+    "invalidState": "This action is not available for the current market state.",
+    "actionAlreadyCompleted": "This action has already been completed.",
+    "transactionReverted": "The transaction was reverted on-chain.",
+    "indexingDelay": "The latest on-chain data is still being synchronized.",
+    "walletDisconnected": "Please connect your wallet to continue.",
+    "unknown": "Something went wrong. Please try again."
+  },
+  "empty": {
+    "noRecords": "No records found",
+    "noRecordsDesc": "There is nothing to display here yet.",
+    "failedToLoad": "Failed to load data",
+    "failedToLoadDesc": "Something went wrong while loading. Please try again.",
+    "indexerBehind": "Indexer is catching up",
+    "indexerBehindDesc": "The latest on-chain data is still being synchronized.",
+    "noActivity": "No activity yet",
+    "noActivityDesc": "This wallet has not participated in any markets."
+  },
+  "wallet": {
+    "connect": "Connect Wallet",
+    "disconnect": "Disconnect",
+    "connected": "Connected",
+    "notConnected": "Not connected"
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "resolution": {
+    "status": {
+      "title": "Resolution Status",
+      "uniqueDecWinner": "DEC Consensus",
+      "tie": "DEC Vote Tied",
+      "quorumNotReached": "Quorum Not Reached",
+      "adminVerified": "Admin Verified",
+      "finalized": "Finalized",
+      "unknown": "Unknown"
+    },
+    "explanation": {
+      "uniqueDecWinner": "The DEC produced a unique outcome recommendation. The market has moved to Admin Verification.",
+      "tie": "DEC voting ended in a tie. No unique outcome recommendation was produced. The market has moved to Admin Verification.",
+      "quorumNotReached": "The DEC did not reach quorum. No outcome recommendation was produced. The market has moved to Admin Verification.",
+      "adminVerified": "An administrator has verified and confirmed the final outcome.",
+      "finalized": "The market has been finalized and claims are available.",
+      "unknown": "Resolution status is not yet available."
+    },
+    "decSuggestedOutcome": "DEC Suggested Outcome"
+  },
+  "common": {
+    "loading": "Loading...",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "submit": "Submit",
+    "back": "Back"
+  }
+}

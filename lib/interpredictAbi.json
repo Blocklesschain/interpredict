@@ -3,12 +3,12 @@
     "inputs": [
       {
         "internalType": "address payable",
-        "name": "_t",
+        "name": "_treasury",
         "type": "address"
       },
       {
         "internalType": "address",
-        "name": "_a",
+        "name": "_admin",
         "type": "address"
       }
     ],
@@ -38,6 +38,21 @@
   },
   {
     "inputs": [],
+    "name": "AlreadyParticipated",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "AlreadyVoted",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "DuplicateOutcome",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "EnforcedPause",
     "type": "error"
   },
@@ -48,173 +63,246 @@
   },
   {
     "inputs": [],
+    "name": "InsufficientFee",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidEndTime",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidMarketState",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidOutcome",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidOutcomes",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidQuestion",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "MarketClosed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "MarketDoesNotExist",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "MarketNotEnded",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NoSharesToExit",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotActiveDEC",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotCreator",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotFinalized",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NothingToClaim",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "ReentrancyGuardReentrantCall",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ResolutionAlreadyRequested",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "SlippageExceeded",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Unauthorized",
     "type": "error"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "uint256",
         "name": "id",
         "type": "uint256"
       },
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
-        "name": "r",
+        "name": "creator",
         "type": "address"
       },
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "a",
+        "name": "amount",
         "type": "uint256"
       }
     ],
-    "name": "AR",
+    "name": "CreatorFeeClaimed",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "uint256",
         "name": "id",
         "type": "uint256"
       },
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
-        "name": "cr",
+        "name": "creator",
         "type": "address"
       },
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "a",
+        "name": "amount",
         "type": "uint256"
       }
     ],
-    "name": "CFC",
+    "name": "CreatorSeedClaimed",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
-        "name": "cr",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "a",
-        "type": "uint256"
-      }
-    ],
-    "name": "CSC",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "address",
-        "name": "m",
+        "name": "member",
         "type": "address"
       }
     ],
-    "name": "DMA",
+    "name": "DECMemberActivated",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
-        "name": "m",
+        "name": "member",
         "type": "address"
       }
     ],
-    "name": "DMACT",
+    "name": "DECMemberJoined",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
-        "name": "m",
+        "name": "member",
         "type": "address"
       }
     ],
-    "name": "DMR",
+    "name": "DECMemberRemoved",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
-        "name": "m",
+        "name": "member",
         "type": "address"
       }
     ],
-    "name": "DMSUS",
+    "name": "DECMemberSuspended",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
-        "name": "m",
+        "name": "member",
         "type": "address"
       },
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "a",
+        "name": "amount",
         "type": "uint256"
       }
     ],
-    "name": "DRC",
+    "name": "DECRewardClaimed",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "uint256",
         "name": "id",
         "type": "uint256"
       }
     ],
-    "name": "MA",
+    "name": "MarketActivated",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "MarketApproved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "uint256",
         "name": "id",
         "type": "uint256"
@@ -222,50 +310,18 @@
       {
         "indexed": false,
         "internalType": "string",
-        "name": "r",
+        "name": "reason",
         "type": "string"
       }
     ],
-    "name": "MCAN",
+    "name": "MarketCancelled",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "dl",
-        "type": "uint256"
-      }
-    ],
-    "name": "MEV",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      }
-    ],
-    "name": "MFNL",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
+        "indexed": true,
         "internalType": "uint256",
         "name": "id",
         "type": "uint256"
@@ -273,49 +329,93 @@
       {
         "indexed": false,
         "internalType": "string",
-        "name": "q",
+        "name": "question",
         "type": "string"
       },
       {
-        "indexed": false,
-        "internalType": "enum InterPredict.Category",
-        "name": "cat",
-        "type": "uint8"
-      },
-      {
-        "indexed": false,
-        "internalType": "enum InterPredict.Origin",
-        "name": "o",
-        "type": "uint8"
-      },
-      {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
-        "name": "cr",
+        "name": "creator",
         "type": "address"
       }
     ],
-    "name": "MP",
+    "name": "MarketDeployed",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "uint256",
         "name": "id",
         "type": "uint256"
       }
     ],
-    "name": "NQ",
+    "name": "MarketFinalized",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
         "indexed": false,
+        "internalType": "string",
+        "name": "question",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum InterPredictV2.Category",
+        "name": "category",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum InterPredictV2.Origin",
+        "name": "origin",
+        "type": "uint8"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "creator",
+        "type": "address"
+      }
+    ],
+    "name": "MarketProposed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
+      }
+    ],
+    "name": "MarketRejected",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "uint256",
         "name": "id",
         "type": "uint256"
@@ -323,112 +423,60 @@
       {
         "indexed": false,
         "internalType": "uint8",
-        "name": "oi",
+        "name": "outcomeIndex",
         "type": "uint8"
       }
     ],
-    "name": "OC",
+    "name": "OutcomeConfirmed",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      }
-    ],
-    "name": "PA",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
+        "indexed": true,
         "internalType": "uint256",
         "name": "id",
         "type": "uint256"
       },
       {
-        "indexed": false,
-        "internalType": "string",
-        "name": "r",
-        "type": "string"
-      }
-    ],
-    "name": "PC",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "enum InterPredict.PVote",
-        "name": "d",
-        "type": "uint8"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "ts",
-        "type": "uint256"
-      }
-    ],
-    "name": "PF",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "string",
-        "name": "r",
-        "type": "string"
-      }
-    ],
-    "name": "PR",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
-        "name": "v",
+        "name": "participant",
         "type": "address"
       },
       {
         "indexed": false,
-        "internalType": "enum InterPredict.PVote",
-        "name": "vote",
+        "internalType": "uint8",
+        "name": "outcomeIndex",
         "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "gross",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "net",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "sharesOut",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "fee",
+        "type": "uint256"
       }
     ],
-    "name": "PVC",
+    "name": "ParticipationRecorded",
     "type": "event"
   },
   {
@@ -448,76 +496,113 @@
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "uint256",
         "name": "id",
         "type": "uint256"
       },
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
-        "name": "r",
+        "name": "participant",
         "type": "address"
       },
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "dl",
+        "name": "grossPayout",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "fee",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "netPayout",
         "type": "uint256"
       }
     ],
-    "name": "RR",
+    "name": "PositionExited",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
-        "internalType": "address",
-        "name": "m",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "rep",
-        "type": "uint256"
-      }
-    ],
-    "name": "RU",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
+        "indexed": true,
         "internalType": "uint256",
         "name": "id",
         "type": "uint256"
       },
       {
         "indexed": false,
+        "internalType": "enum InterPredictV2.ProposalVote",
+        "name": "decision",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "ProposalFinalized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
         "internalType": "address",
-        "name": "v",
+        "name": "voter",
         "type": "address"
       },
       {
         "indexed": false,
-        "internalType": "uint8",
-        "name": "oi",
+        "internalType": "enum InterPredictV2.ProposalVote",
+        "name": "vote",
         "type": "uint8"
       }
     ],
-    "name": "RVC",
+    "name": "ProposalVoteCast",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
+        "indexed": true,
+        "internalType": "address",
+        "name": "member",
+        "type": "address"
+      },
+      {
         "indexed": false,
+        "internalType": "uint256",
+        "name": "reputation",
+        "type": "uint256"
+      }
+    ],
+    "name": "ReputationUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "uint256",
         "name": "id",
         "type": "uint256"
@@ -525,17 +610,79 @@
       {
         "indexed": false,
         "internalType": "bool",
-        "name": "q",
+        "name": "quorumReached",
+        "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "tied",
+        "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "outcomeAvailable",
         "type": "bool"
       },
       {
         "indexed": false,
         "internalType": "uint8",
-        "name": "w",
+        "name": "suggestedOutcome",
         "type": "uint8"
       }
     ],
-    "name": "RVF",
+    "name": "ResolutionFinalized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "requester",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "deadline",
+        "type": "uint256"
+      }
+    ],
+    "name": "ResolutionRequested",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "voter",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "outcomeIndex",
+        "type": "uint8"
+      }
+    ],
+    "name": "ResolutionVoteCast",
     "type": "event"
   },
   {
@@ -617,119 +764,19 @@
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
-        "name": "b",
+        "name": "oldTreasury",
         "type": "address"
       },
       {
-        "indexed": false,
-        "internalType": "uint8",
-        "name": "oi",
-        "type": "uint8"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "g",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "n",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "s",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "f",
-        "type": "uint256"
-      }
-    ],
-    "name": "SP",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      }
-    ],
-    "name": "TMA",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "string",
-        "name": "q",
-        "type": "string"
-      },
-      {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
-        "name": "cr",
+        "name": "newTreasury",
         "type": "address"
       }
     ],
-    "name": "TMC",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      }
-    ],
-    "name": "TR",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "address",
-        "name": "old",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "address",
-        "name": "nw",
-        "type": "address"
-      }
-    ],
-    "name": "TU",
+    "name": "TreasuryUpdated",
     "type": "event"
   },
   {
@@ -749,26 +796,91 @@
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "uint256",
         "name": "id",
         "type": "uint256"
       },
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
-        "name": "c",
+        "name": "claimant",
         "type": "address"
       },
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "a",
+        "name": "amount",
         "type": "uint256"
       }
     ],
-    "name": "WC",
+    "name": "WinningsClaimed",
     "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "ADMIN_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "BPS_DENOMINATOR",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "COMMUNITY_DEC_BPS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "COMMUNITY_TREASURY_BPS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "DEC_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   },
   {
     "inputs": [],
@@ -784,96 +896,352 @@
     "type": "function"
   },
   {
-    "inputs": [
+    "inputs": [],
+    "name": "EXIT_FEE_BPS",
+    "outputs": [
       {
         "internalType": "uint256",
-        "name": "id",
+        "name": "",
         "type": "uint256"
       }
     ],
-    "name": "aDR",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_m",
-        "type": "address"
-      }
-    ],
-    "name": "actD",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_m",
-        "type": "address"
-      }
-    ],
-    "name": "addD",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint8",
-        "name": "oi",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint256",
-        "name": "minSh",
-        "type": "uint256"
-      }
-    ],
-    "name": "bO",
-    "outputs": [],
-    "stateMutability": "payable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      }
-    ],
-    "name": "cCF",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      }
-    ],
-    "name": "cCS",
-    "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [],
-    "name": "cDR",
+    "name": "FEE_BPS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_CUSTOM_CATEGORY_LEN",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_OUTCOMES",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_OUTCOME_LEN",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_QUESTION_LEN",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_REPUTATION",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_THUMBNAIL_LEN",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MIN_OUTCOMES",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MIN_STAKE",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PAUSE_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PROPOSAL_FEE",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PROPOSAL_VOTING_WINDOW",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "REPUTATION_DECREASE",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "REPUTATION_INCREASE",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "RESOLUTION_QUORUM_BPS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "RESOLUTION_VOTING_WINDOW",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "SEED_AMOUNT",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "SETTLE_BPS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "SETTLE_DEC_BPS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "SETTLE_TEAM_TREASURY_BPS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "SETTLE_TREASURY_BPS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "TEAM_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "TEAM_TREASURY_BPS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_member",
+        "type": "address"
+      }
+    ],
+    "name": "activateDecMember",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_member",
+        "type": "address"
+      }
+    ],
+    "name": "addDecMember",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "allocateDecRewards",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -896,7 +1264,53 @@
         "type": "string"
       }
     ],
-    "name": "cM",
+    "name": "cancelMarket",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "claimCreatorFee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "claimCreatorSeed",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "claimDecRewards",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "claimWinnings",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -910,7 +1324,7 @@
       },
       {
         "internalType": "uint8",
-        "name": "oi",
+        "name": "outcomeIndex",
         "type": "uint8"
       },
       {
@@ -919,9 +1333,166 @@
         "type": "string"
       }
     ],
-    "name": "cO",
+    "name": "confirmOutcome",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "creatorSeedPools",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "decMember",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "active",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "proposalVotes",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "resolutionVotes",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "totalParticipation",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "honestVotes",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "incorrectVotes",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "reputation",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "totalRewardsEarned",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "totalRewardsClaimed",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "unclaimedRewards",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "decMemberList",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "decRewardDistributed",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "decRewardPool",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "decRewardThreshold",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -930,61 +1501,51 @@
         "components": [
           {
             "internalType": "string",
-            "name": "q",
+            "name": "question",
             "type": "string"
           },
           {
             "internalType": "string",
-            "name": "d",
+            "name": "description",
             "type": "string"
           },
           {
-            "internalType": "enum InterPredict.Category",
-            "name": "cat",
+            "internalType": "enum InterPredictV2.Category",
+            "name": "category",
             "type": "uint8"
           },
           {
             "internalType": "string",
-            "name": "cc",
+            "name": "customCategory",
             "type": "string"
           },
           {
             "internalType": "string",
-            "name": "tu",
+            "name": "thumbnailUri",
             "type": "string"
           },
           {
             "internalType": "string[]",
-            "name": "ol",
+            "name": "outcomes",
             "type": "string[]"
           },
           {
             "internalType": "uint256",
-            "name": "et",
+            "name": "endTime",
             "type": "uint256"
           },
           {
             "internalType": "string",
-            "name": "rc",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "ev",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "pe",
+            "name": "resolutionCriteria",
             "type": "string"
           }
         ],
-        "internalType": "struct InterPredict.MCParams",
-        "name": "p",
+        "internalType": "struct InterPredictV2.MarketParams",
+        "name": "params",
         "type": "tuple"
       }
     ],
-    "name": "cTM",
+    "name": "deployTeamMarket",
     "outputs": [
       {
         "internalType": "uint256",
@@ -1003,7 +1564,7 @@
         "type": "uint256"
       }
     ],
-    "name": "cW",
+    "name": "enterProposalReview",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1012,112 +1573,67 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "",
+        "name": "id",
         "type": "uint256"
       },
       {
+        "internalType": "uint8",
+        "name": "outcomeIndex",
+        "type": "uint8"
+      },
+      {
         "internalType": "uint256",
-        "name": "",
+        "name": "minPayout",
         "type": "uint256"
       }
     ],
-    "name": "csp",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "dm",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "act",
-        "type": "bool"
-      },
-      {
-        "internalType": "uint256",
-        "name": "pv",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "rv",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "tp",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "hv",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "iv",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "rep",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "tre",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "trc",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "ur",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
+    "name": "exitPosition",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "",
+        "name": "id",
         "type": "uint256"
       }
     ],
-    "name": "dml",
-    "outputs": [
+    "name": "finalizeMarket",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
       {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
       }
     ],
-    "stateMutability": "view",
+    "name": "finalizeProposalVoting",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "finalizeResolutionVoting",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
     "inputs": [],
-    "name": "drp",
+    "name": "getActiveDecMemberCount",
     "outputs": [
       {
         "internalType": "uint256",
@@ -1130,96 +1646,7 @@
   },
   {
     "inputs": [],
-    "name": "drt",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "dvp",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      }
-    ],
-    "name": "ePV",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      }
-    ],
-    "name": "fM",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      }
-    ],
-    "name": "fPV",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      }
-    ],
-    "name": "fRV",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "gAD",
+    "name": "getAllDecMembers",
     "outputs": [
       {
         "internalType": "address[]",
@@ -1231,82 +1658,69 @@
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "gADC",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
         "internalType": "address",
-        "name": "m",
+        "name": "member",
         "type": "address"
       }
     ],
-    "name": "gDMI",
+    "name": "getDecMemberInfo",
     "outputs": [
       {
         "components": [
           {
             "internalType": "bool",
-            "name": "act",
+            "name": "active",
             "type": "bool"
           },
           {
             "internalType": "uint256",
-            "name": "pv",
+            "name": "proposalVotes",
             "type": "uint256"
           },
           {
             "internalType": "uint256",
-            "name": "rv",
+            "name": "resolutionVotes",
             "type": "uint256"
           },
           {
             "internalType": "uint256",
-            "name": "tp",
+            "name": "totalParticipation",
             "type": "uint256"
           },
           {
             "internalType": "uint256",
-            "name": "hv",
+            "name": "honestVotes",
             "type": "uint256"
           },
           {
             "internalType": "uint256",
-            "name": "iv",
+            "name": "incorrectVotes",
             "type": "uint256"
           },
           {
             "internalType": "uint256",
-            "name": "rep",
+            "name": "reputation",
             "type": "uint256"
           },
           {
             "internalType": "uint256",
-            "name": "tre",
+            "name": "totalRewardsEarned",
             "type": "uint256"
           },
           {
             "internalType": "uint256",
-            "name": "trc",
+            "name": "totalRewardsClaimed",
             "type": "uint256"
           },
           {
             "internalType": "uint256",
-            "name": "ur",
+            "name": "unclaimedRewards",
             "type": "uint256"
           }
         ],
-        "internalType": "struct InterPredict.DM",
+        "internalType": "struct InterPredictV2.DecMember",
         "name": "",
         "type": "tuple"
       }
@@ -1322,7 +1736,7 @@
         "type": "uint256"
       }
     ],
-    "name": "gL",
+    "name": "getOutcomeLabels",
     "outputs": [
       {
         "internalType": "string[]",
@@ -1341,7 +1755,7 @@
         "type": "uint256"
       }
     ],
-    "name": "gP",
+    "name": "getOutcomePools",
     "outputs": [
       {
         "internalType": "uint256[]",
@@ -1361,11 +1775,11 @@
       },
       {
         "internalType": "uint8",
-        "name": "oi",
+        "name": "outcomeIndex",
         "type": "uint8"
       }
     ],
-    "name": "gPr",
+    "name": "getOutcomePrice",
     "outputs": [
       {
         "internalType": "uint256",
@@ -1384,89 +1798,12 @@
         "type": "uint256"
       }
     ],
-    "name": "gPr2",
+    "name": "getOutcomePrices",
     "outputs": [
       {
         "internalType": "uint256[]",
         "name": "",
         "type": "uint256[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint8",
-        "name": "oi",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint256",
-        "name": "net",
-        "type": "uint256"
-      }
-    ],
-    "name": "gSO",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      }
-    ],
-    "name": "gTP",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint8",
-        "name": "oi",
-        "type": "uint8"
-      },
-      {
-        "internalType": "address",
-        "name": "u",
-        "type": "address"
-      }
-    ],
-    "name": "gUS",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -1494,6 +1831,83 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "outcomeIndex",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "net",
+        "type": "uint256"
+      }
+    ],
+    "name": "getSharesOut",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "getTotalPool",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "outcomeIndex",
+        "type": "uint8"
+      },
+      {
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      }
+    ],
+    "name": "getUserShares",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "bytes32",
         "name": "role",
         "type": "bytes32"
@@ -1507,6 +1921,78 @@
     "name": "grantRole",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "hasClaimedWinnings",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "hasExited",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "hasParticipated",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -1546,7 +2032,7 @@
         "type": "address"
       }
     ],
-    "name": "hcw",
+    "name": "hasVotedOnProposal",
     "outputs": [
       {
         "internalType": "bool",
@@ -1570,55 +2056,7 @@
         "type": "address"
       }
     ],
-    "name": "ht",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "hvp",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "hvr",
+    "name": "hasVotedOnResolution",
     "outputs": [
       {
         "internalType": "bool",
@@ -1633,11 +2071,11 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "_m",
+        "name": "_member",
         "type": "address"
       }
     ],
-    "name": "iad",
+    "name": "isActiveDecMember",
     "outputs": [
       {
         "internalType": "bool",
@@ -1656,61 +2094,51 @@
         "type": "uint256"
       }
     ],
-    "name": "mb",
+    "name": "marketContext",
     "outputs": [
       {
         "internalType": "string",
-        "name": "q",
+        "name": "question",
         "type": "string"
       },
       {
         "internalType": "string",
-        "name": "d",
+        "name": "description",
         "type": "string"
       },
       {
-        "internalType": "enum InterPredict.Category",
-        "name": "cat",
+        "internalType": "enum InterPredictV2.Category",
+        "name": "category",
         "type": "uint8"
       },
       {
         "internalType": "string",
-        "name": "cc",
+        "name": "customCategory",
         "type": "string"
       },
       {
         "internalType": "string",
-        "name": "tu",
+        "name": "thumbnailUri",
         "type": "string"
       },
       {
-        "internalType": "enum InterPredict.Origin",
-        "name": "o",
+        "internalType": "enum InterPredictV2.Origin",
+        "name": "origin",
         "type": "uint8"
       },
       {
         "internalType": "address",
-        "name": "cr",
+        "name": "creator",
         "type": "address"
       },
       {
         "internalType": "uint256",
-        "name": "et",
+        "name": "endTime",
         "type": "uint256"
       },
       {
         "internalType": "string",
-        "name": "rc",
-        "type": "string"
-      },
-      {
-        "internalType": "string",
-        "name": "pe",
-        "type": "string"
-      },
-      {
-        "internalType": "string",
-        "name": "be",
+        "name": "resolutionCriteria",
         "type": "string"
       }
     ],
@@ -1725,46 +2153,46 @@
         "type": "uint256"
       }
     ],
-    "name": "mf",
+    "name": "marketFinance",
     "outputs": [
       {
         "internalType": "uint256",
-        "name": "tv",
+        "name": "totalVolume",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "pc",
+        "name": "participantCount",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "cfe",
+        "name": "creatorFeesEarned",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "cfc",
+        "name": "creatorFeesClaimed",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "csc",
+        "name": "creatorSeedClaimed",
         "type": "uint256"
       },
       {
         "internalType": "bool",
-        "name": "can",
+        "name": "cancelled",
         "type": "bool"
       },
       {
         "internalType": "string",
-        "name": "cr",
+        "name": "cancelReason",
         "type": "string"
       },
       {
         "internalType": "uint256",
-        "name": "ct",
+        "name": "cancelledAt",
         "type": "uint256"
       }
     ],
@@ -1779,11 +2207,11 @@
         "type": "uint256"
       }
     ],
-    "name": "mr",
+    "name": "marketResolution",
     "outputs": [
       {
         "internalType": "uint256",
-        "name": "snap",
+        "name": "activeDecSnapshot",
         "type": "uint256"
       },
       {
@@ -1793,23 +2221,43 @@
       },
       {
         "internalType": "uint256",
-        "name": "trv",
+        "name": "totalResolutionVotes",
         "type": "uint256"
       },
       {
         "internalType": "uint8",
-        "name": "co",
+        "name": "confirmedOutcome",
         "type": "uint8"
       },
       {
         "internalType": "bool",
-        "name": "oc",
+        "name": "outcomeConfirmed",
         "type": "bool"
       },
       {
         "internalType": "bool",
-        "name": "fin",
+        "name": "finalized",
         "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "quorumReached",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "tied",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "decOutcomeAvailable",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint8",
+        "name": "decSuggestedOutcome",
+        "type": "uint8"
       }
     ],
     "stateMutability": "view",
@@ -1823,10 +2271,10 @@
         "type": "uint256"
       }
     ],
-    "name": "ms",
+    "name": "marketState",
     "outputs": [
       {
-        "internalType": "enum InterPredict.State",
+        "internalType": "enum InterPredictV2.State",
         "name": "",
         "type": "uint8"
       }
@@ -1842,56 +2290,56 @@
         "type": "uint256"
       }
     ],
-    "name": "mv",
+    "name": "marketVoting",
     "outputs": [
       {
         "internalType": "uint256",
-        "name": "pvs",
+        "name": "proposalVotingStart",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "pvd",
+        "name": "proposalVotingDeadline",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "apv",
+        "name": "approvalVotes",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "rjv",
+        "name": "rejectionVotes",
         "type": "uint256"
       },
       {
         "internalType": "bool",
-        "name": "pf",
+        "name": "proposalFinalized",
         "type": "bool"
       },
       {
-        "internalType": "enum InterPredict.PVote",
-        "name": "pd",
+        "internalType": "enum InterPredictV2.ProposalVote",
+        "name": "proposalDecision",
         "type": "uint8"
       },
       {
         "internalType": "uint256",
-        "name": "pft",
+        "name": "proposalFinalizedAt",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "ra",
+        "name": "refundAmount",
         "type": "uint256"
       },
       {
         "internalType": "address",
-        "name": "rr",
+        "name": "refundRecipient",
         "type": "address"
       },
       {
         "internalType": "bool",
-        "name": "rc",
+        "name": "refunded",
         "type": "bool"
       }
     ],
@@ -1911,7 +2359,7 @@
         "type": "uint256"
       }
     ],
-    "name": "ol",
+    "name": "outcomeLabels",
     "outputs": [
       {
         "internalType": "string",
@@ -1935,7 +2383,7 @@
         "type": "uint256"
       }
     ],
-    "name": "op",
+    "name": "outcomePools",
     "outputs": [
       {
         "internalType": "uint256",
@@ -1949,71 +2397,23 @@
   {
     "inputs": [
       {
-        "components": [
-          {
-            "internalType": "string",
-            "name": "q",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "d",
-            "type": "string"
-          },
-          {
-            "internalType": "enum InterPredict.Category",
-            "name": "cat",
-            "type": "uint8"
-          },
-          {
-            "internalType": "string",
-            "name": "cc",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "tu",
-            "type": "string"
-          },
-          {
-            "internalType": "string[]",
-            "name": "ol",
-            "type": "string[]"
-          },
-          {
-            "internalType": "uint256",
-            "name": "et",
-            "type": "uint256"
-          },
-          {
-            "internalType": "string",
-            "name": "rc",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "ev",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "pe",
-            "type": "string"
-          }
-        ],
-        "internalType": "struct InterPredict.MCParams",
-        "name": "p",
-        "type": "tuple"
-      }
-    ],
-    "name": "pM",
-    "outputs": [
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "outcomeIndex",
+        "type": "uint8"
+      },
       {
         "internalType": "uint256",
-        "name": "",
+        "name": "minShares",
         "type": "uint256"
       }
     ],
+    "name": "participate",
+    "outputs": [],
     "stateMutability": "payable",
     "type": "function"
   },
@@ -2050,10 +2450,10 @@
         "type": "address"
       }
     ],
-    "name": "pv",
+    "name": "proposalVote",
     "outputs": [
       {
-        "internalType": "enum InterPredict.PVote",
+        "internalType": "enum InterPredictV2.ProposalVote",
         "name": "",
         "type": "uint8"
       }
@@ -2064,25 +2464,73 @@
   {
     "inputs": [
       {
+        "components": [
+          {
+            "internalType": "string",
+            "name": "question",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "description",
+            "type": "string"
+          },
+          {
+            "internalType": "enum InterPredictV2.Category",
+            "name": "category",
+            "type": "uint8"
+          },
+          {
+            "internalType": "string",
+            "name": "customCategory",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "thumbnailUri",
+            "type": "string"
+          },
+          {
+            "internalType": "string[]",
+            "name": "outcomes",
+            "type": "string[]"
+          },
+          {
+            "internalType": "uint256",
+            "name": "endTime",
+            "type": "uint256"
+          },
+          {
+            "internalType": "string",
+            "name": "resolutionCriteria",
+            "type": "string"
+          }
+        ],
+        "internalType": "struct InterPredictV2.MarketParams",
+        "name": "params",
+        "type": "tuple"
+      }
+    ],
+    "name": "proposeMarket",
+    "outputs": [
+      {
         "internalType": "uint256",
-        "name": "id",
+        "name": "",
         "type": "uint256"
       }
     ],
-    "name": "rR",
-    "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
     "type": "function"
   },
   {
     "inputs": [
       {
         "internalType": "address",
-        "name": "_m",
+        "name": "_member",
         "type": "address"
       }
     ],
-    "name": "remD",
+    "name": "removeDecMember",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -2103,6 +2551,67 @@
     "name": "renounceRole",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "id",
+        "type": "uint256"
+      }
+    ],
+    "name": "requestResolution",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "resolutionVote",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "resolutionVoteCounts",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -2131,54 +2640,6 @@
         "type": "uint256"
       },
       {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "rv",
-    "outputs": [
-      {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "name": "rvc",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
         "internalType": "uint8",
         "name": "",
         "type": "uint8"
@@ -2189,7 +2650,7 @@
         "type": "address"
       }
     ],
-    "name": "sh",
+    "name": "shares",
     "outputs": [
       {
         "internalType": "uint256",
@@ -2223,18 +2684,18 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "_m",
+        "name": "_member",
         "type": "address"
       }
     ],
-    "name": "susD",
+    "name": "suspendDecMember",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
   },
   {
     "inputs": [],
-    "name": "tdm",
+    "name": "totalDecMembers",
     "outputs": [
       {
         "internalType": "uint256",
@@ -2247,7 +2708,7 @@
   },
   {
     "inputs": [],
-    "name": "tm",
+    "name": "totalMarkets",
     "outputs": [
       {
         "internalType": "uint256",
@@ -2272,19 +2733,6 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_n",
-        "type": "uint256"
-      }
-    ],
-    "name": "udrt",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
     "inputs": [],
     "name": "unpause",
     "outputs": [],
@@ -2294,12 +2742,25 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "_newThreshold",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateDecRewardThreshold",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address payable",
-        "name": "_n",
+        "name": "_newTreasury",
         "type": "address"
       }
     ],
-    "name": "ut",
+    "name": "updateTreasury",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -2312,12 +2773,12 @@
         "type": "uint256"
       },
       {
-        "internalType": "enum InterPredict.PVote",
+        "internalType": "enum InterPredictV2.ProposalVote",
         "name": "vote",
         "type": "uint8"
       }
     ],
-    "name": "vOP",
+    "name": "voteOnProposal",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -2331,11 +2792,11 @@
       },
       {
         "internalType": "uint8",
-        "name": "oi",
+        "name": "outcomeIndex",
         "type": "uint8"
       }
     ],
-    "name": "vOR",
+    "name": "voteOnResolution",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

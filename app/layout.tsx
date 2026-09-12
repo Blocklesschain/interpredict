@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from 'next'
 import { Space_Grotesk, Inter, Geist_Mono } from 'next/font/google'
-import Script from 'next/script'
 import { Web3Provider } from './context/Web3Context'
 import ScrollToTop from '../components/ScrollToTop'
 import './globals.css'
@@ -46,20 +45,6 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${spaceGrotesk.variable} ${inter.variable} ${geistMono.variable} bg-background`}
     >
-      <head>
-        {/* Natively forces dark mode class directly into the HTML root channel instantly on boot */}
-        <Script id="theme-init" strategy="beforeInteractive">{`
-          try {
-            var t = localStorage.getItem('theme') || localStorage.getItem('interpredict-theme');
-            if (t === 'dark' || !t) {
-              document.documentElement.classList.add('dark');
-              localStorage.setItem('theme', 'dark');
-            } else if (t === 'light') {
-              document.documentElement.classList.remove('dark');
-            }
-          } catch(e) {}
-        `}</Script>
-      </head>
       <body className="font-sans antialiased">
         <Web3Provider>
           {children}

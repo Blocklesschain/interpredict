@@ -44,8 +44,10 @@ export async function loadServerState(
   for (const row of socialRows) {
     const provider = row.provider as SocialProvider
     if (provider === 'x' || provider === 'telegram') {
-      accounts[provider] = row.handle
       verifiedSocial[provider] = Boolean(row.verified)
+      // Only expose a handle once it is VERIFIED, so the client can never
+      // unlock the spinner off an unverified link.
+      if (row.verified) accounts[provider] = row.handle
     }
   }
 

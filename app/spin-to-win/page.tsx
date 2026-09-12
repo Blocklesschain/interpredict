@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Check, ChevronDown, Coins, ExternalLink, Link2, Plus, Send, ShieldCheck, TimerReset, Volume2, VolumeX, WalletCards, X, Zap } from 'lucide-react'
 import { Navbar } from '@/components/navbar'
 import { useWeb3 } from '@/app/context/Web3Context'
+import { SocialConnect } from './SocialConnect'
 import {
   isBackendAvailable,
   authenticate,
@@ -13,7 +14,6 @@ import {
   getTasks as fetchServerTasks,
   recordResult as recordServerResult,
   submitVerification,
-  linkSocial,
   getAdminLedger,
 } from '@/lib/spin-to-win/client'
 
@@ -154,7 +154,9 @@ export default function SpinToWinPage() {
         if (state.sessionStart === sessionStart) {
           if (state.bonusSpins > 0) setBonusSpins(state.bonusSpins)
           if (state.verifiedTaskIds.length) setVerifiedTaskIds(state.verifiedTaskIds)
-          if (state.accounts.x || state.accounts.telegram) setAccounts(state.accounts)
+          // Server is authoritative: `state.accounts` only contains VERIFIED
+          // handles, so it both unlocks and revokes connected status.
+          setAccounts(state.accounts)
         }
         const serverTasks = await fetchServerTasks()
         if (serverTasks.tasks.length) setTasks(serverTasks.tasks as Task[])
@@ -191,7 +193,10 @@ export default function SpinToWinPage() {
         setBonusSpins(saved.bonusSpins || 0)
         setVerifiedTaskIds(saved.verifiedTaskIds || [])
       }
-      if (saved?.accounts) setAccounts(saved.accounts)
+      // NOTE: `accounts` is intentionally NOT restored from localStorage — social
+      // handles must be re-verified against the backend, so we never unlock the
+      // spinner off stale/unverified data. The server sync populates accounts with
+      // verified handles; SocialConnect drives the verification itself.
       if (saved?.wonItp) setWonItp(saved.wonItp)
       setLoadedWalletState(walletStateKey)
       const publishedTasks = savedTasks ?? legacyState?.tasks ?? defaultTasks(sessionStart)
@@ -337,25 +342,7 @@ export default function SpinToWinPage() {
     }, 4800)
   }
 
-  const connectAccount = async (provider: 'x' | 'telegram') => {
-    if (!isWalletConnected) return
-    const label = provider === 'x' ? 'X username' : 'Telegram username'
-    const handle = window.prompt(`Enter your ${label} to connect it:`)?.trim().replace(/^@/, '')
-    if (!handle) return
-    if (serverToken && serverSyncedWallet === walletAddress?.toLowerCase()) {
-      try {
-        await linkSocial(serverToken, provider, handle)
-        setAccounts(value => ({ ...value, [provider]: handle }))
-      } catch (error) {
-        const message = error instanceof Error ? error.message : ''
-        if (message.includes('ACCOUNT_ALREADY_LINKED')) {
-          window.alert('This social account or handle is already linked to another wallet.')
-        } else {
-          window.alert(`Could not link your ${label}: ${message}`)
-        }
-      }
-      return
-    }
+  const handleSocialVerified = (provider: 'x' | 'telegram', handle: string) => {
     setAccounts(value => ({ ...value, [provider]: handle }))
   }
 
@@ -433,7 +420,7 @@ export default function SpinToWinPage() {
               <section className="glass rounded-3xl border border-primary/20 p-5 sm:p-6"><div className="flex items-start justify-between gap-3"><div><h2 className="font-heading text-xl font-bold">Wallet access</h2><p className="mt-1 text-xs text-muted-foreground">Required for spins and reward eligibility</p></div><WalletCards className="size-5 text-primary" /></div>{walletAddress ? <div className="mt-4 flex items-center gap-2"><p className="min-w-0 flex-1 truncate rounded-xl bg-secondary/60 px-3 py-2 text-xs font-mono text-muted-foreground">{walletAddress}</p><button type="button" onClick={disconnectWallet} className="shrink-0 rounded-xl border border-border px-3 py-2 text-xs font-bold text-muted-foreground transition-colors hover:border-rose-400/50 hover:text-rose-400">Disconnect</button></div> : <button type="button" onClick={() => void connectWallet()} className="mt-4 w-full rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground hover:bg-[#4f00c5]">Connect wallet to spin</button>}{walletAddress && <p className="mt-3 rounded-xl bg-accent/10 px-3 py-2 text-sm font-bold text-accent">Won balance: {wonItp.toLocaleString()} ITP</p>}{txStatus && <p className="mt-3 text-xs leading-relaxed text-accent">{txStatus}</p>}{walletAddress && isAdmin && <p className="mt-3 text-xs font-semibold text-emerald-400">Admin wallet recognized. Task studio unlocked.</p>}</section>
               <section className="glass rounded-3xl p-5 sm:p-6"><div className="flex items-center justify-between"><div><h2 className="font-heading text-xl font-bold">Boost your odds</h2><p className="mt-1 text-xs text-muted-foreground">Choose a multiplier before spinning</p></div><Zap className="size-5 text-accent" /></div><div className="relative mt-4"><button type="button" onClick={() => setShowMultiplierMenu(value => !value)} className="flex w-full items-center justify-between rounded-xl border border-border bg-background/60 px-4 py-3 text-left"><span><span className="block text-sm font-bold">X{selectedMultiplier} multiplier</span><span className="block text-xs text-muted-foreground">{multipliers.find(item => item.value === selectedMultiplier)?.cost}</span></span><ChevronDown className="size-4 text-muted-foreground" /></button>{showMultiplierMenu && <div className="absolute inset-x-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-xl">{multipliers.map(item => <button type="button" key={item.value} onClick={() => { setSelectedMultiplier(item.value); setShowMultiplierMenu(false) }} className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm hover:bg-secondary"><span><span className="block font-bold">X{item.value} multiplier</span><span className="text-xs text-muted-foreground">{item.label}</span></span><span className="text-xs font-bold text-accent">{item.cost}</span></button>)}</div>}</div><p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">Multiplier purchases are prepared for tITL checkout. A wallet transaction endpoint is required before these charges can be settled on-chain.</p></section>
 
-              <section className="glass rounded-3xl p-5 sm:p-6"><div className="flex items-start justify-between gap-3"><div><h2 className="font-heading text-xl font-bold">Connect accounts</h2><p className="mt-1 text-xs text-muted-foreground">Required before spins and task verification</p></div><Link2 className="size-5 text-primary" /></div><div className="mt-4 space-y-2"><button type="button" onClick={() => connectAccount('x')} className="flex w-full items-center justify-between rounded-xl border border-border bg-background/50 px-4 py-3 text-left text-sm font-semibold hover:border-primary/40"><span className="flex items-center gap-2"><X className="size-4" /> {accounts.x ? `@${accounts.x}` : 'Connect X account'}</span>{accounts.x ? <Check className="size-4 text-emerald-400" /> : <span className="text-xs text-primary">Connect</span>}</button><button type="button" onClick={() => connectAccount('telegram')} className="flex w-full items-center justify-between rounded-xl border border-border bg-background/50 px-4 py-3 text-left text-sm font-semibold hover:border-primary/40"><span className="flex items-center gap-2"><Send className="size-4" /> {accounts.telegram ? `@${accounts.telegram}` : 'Connect Telegram'}</span>{accounts.telegram ? <Check className="size-4 text-emerald-400" /> : <span className="text-xs text-primary">Connect</span>}</button></div></section>
+              <section className="glass rounded-3xl p-5 sm:p-6"><div className="flex items-start justify-between gap-3"><div><h2 className="font-heading text-xl font-bold">Connect accounts</h2><p className="mt-1 text-xs text-muted-foreground">Required before spins and task verification</p></div><Link2 className="size-5 text-primary" /></div><div className="mt-4 space-y-2"><SocialConnect provider="x" token={serverToken} backendReady={backendReady} currentHandle={accounts.x} onVerified={handleSocialVerified} /><SocialConnect provider="telegram" token={serverToken} backendReady={backendReady} currentHandle={accounts.telegram} onVerified={handleSocialVerified} /></div></section>
             </aside>
           </div>
 

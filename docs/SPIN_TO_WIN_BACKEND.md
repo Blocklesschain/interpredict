@@ -124,11 +124,13 @@ env vars, because they require live third-party apps:
   run the indexer/keeper.
 
 ### Telegram verification (implemented)
-- Code: `app/api/spin-to-win/telegram/route.ts` (webhook) + `POST /social`
-  `pending` action + `social_pending_links` table.
-- Flow: user taps "Connect Telegram" → app issues an 8-char code → user DMs the
-  bot with that code → the bot webhook confirms the **stable numeric Telegram id**
-  (`from.id`) and stores it as the verified `provider_account_id`.
+- Code: `app/spin-to-win/telegram/route.ts` (webhook) + `POST /social` `pending`
+  action + `social_pending_links` table + UI in `app/spin-to-win/SocialConnect.tsx`.
+- Flow: user taps **Connect Telegram** → the UI guides them (join the channel) →
+  issues an 8-char code → user DMs the bot with that code → the bot webhook
+  confirms the **stable numeric Telegram id** (`from.id`) and stores the verified
+  `provider_account_id`. The page polls until the server marks it verified, then
+  unlocks the account. **The spinner only activates once the account is verified.**
 - **You must:**
   1. Create a bot via [@BotFather](https://t.me/BotFather), get the token.
   2. Set env: `SPIN_TELEGRAM_BOT_TOKEN`, `SPIN_TELEGRAM_BOT_HANDLE`,
@@ -138,16 +140,24 @@ env vars, because they require live third-party apps:
   4. (Re-run `supabase/schema.sql` for the new `social_pending_links` table.)
 
 ### X verification (implemented)
-- Code: `lib/spin-to-win/server/xVerify.ts` + `POST /social` `verify-x` action.
-- Flow: user taps "Connect X" → app issues a code → user posts a tweet containing
-  it → pastes the tweet URL → server verifies via the X API v2 that the tweet
-  author's username matches the claimed handle and the text contains the code,
-  then stores the author X user id as verified.
+- Code: `lib/spin-to-win/server/xVerify.ts` + `POST /social` `verify-x` action +
+  UI in `app/spin-to-win/SocialConnect.tsx`.
+- Flow: user taps **Connect X** → the UI guides them (follow @InterPredict) →
+  issues a code → user posts a tweet containing it → pastes the tweet URL → server
+  verifies via the X API v2 that the tweet author's username matches the claimed
+  handle and the text contains the code, then stores the author X user id as
+  verified. **The spinner only activates once the account is verified.**
 - **You must:**
   1. Create an X developer app (developer portal), get Consumer Key/Secret.
   2. Set env: `SPIN_X_API_KEY` + `SPIN_X_API_SECRET` (or a ready-made
      `SPIN_X_BEARER_TOKEN`). App-only OAuth 2.0 is enough — no per-user OAuth needed.
   3. (Re-run `supabase/schema.sql` for `social_pending_links`.)
+
+### Verification gating
+The wheel only unlocks when **both** X and Telegram are verified. The client no
+longer trusts typed/local handles: `loadServerState` only returns verified handles,
+localStorage account-restore was removed, and the server is the authoritative
+source of connected status.
 
 ### Optional hardening
 - Add rate limiting in front of the challenge/verify/record/verify-x routes.

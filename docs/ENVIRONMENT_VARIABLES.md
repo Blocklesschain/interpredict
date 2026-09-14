@@ -46,9 +46,12 @@
 | `SPIN_TELEGRAM_BOT_TOKEN` | server secret, runtime | Telegram bot token for social verification |
 | `SPIN_TELEGRAM_BOT_HANDLE` | server secret, runtime | Telegram bot handle (defaults to `InterPredictVerifyBot`) |
 | `SPIN_TELEGRAM_WEBHOOK_SECRET` | server secret, runtime | Secret token used to authenticate Telegram webhook calls |
-| `SPIN_X_API_KEY` | server secret, runtime | X API key (OAuth 2.0 app-only) for tweet verification |
+| `SPIN_TELEGRAM_CHANNEL` | server secret, runtime | Telegram channel handle to check membership against (defaults to `InterPredict`) |
+| `SPIN_X_API_KEY` | server secret, runtime | X API key (OAuth 2.0 app-only) for follow verification |
 | `SPIN_X_API_SECRET` | server secret, runtime | X API secret (OAuth 2.0 app-only) |
 | `SPIN_X_BEARER_TOKEN` | server secret, runtime | Alternative ready-made X app-only bearer token |
+| `SPIN_X_TARGET_USERNAME` | server secret, runtime | X account the user must follow (defaults to `InterPredict`) |
+| `SPIN_X_FOLLOWER_PAGES` | server secret, runtime | How many follower pages (×1000) to scan when checking (defaults to `3`) |
 
 ---
 

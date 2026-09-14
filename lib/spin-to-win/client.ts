@@ -236,31 +236,15 @@ export async function linkSocial(
   })
 }
 
-export async function requestPendingLink(
+export async function followCheck(
   token: string | null,
   provider: SocialProvider,
-): Promise<{
-  code: string
-  expiresInSec: number
-  instructions: string
-}> {
-  return apiFetch('/api/spin-to-win/social', {
+  username: string,
+): Promise<{ verified: boolean; handle?: string }> {
+  return apiFetch('/api/spin-to-win/follow-check', {
     method: 'POST',
     token,
-    body: { action: 'pending', provider },
-  })
-}
-
-export async function verifyXAccountByTweet(
-  token: string | null,
-  handle: string,
-  tweetUrl: string,
-  code: string,
-): Promise<{ verified: boolean; username?: string; tweetId?: string }> {
-  return apiFetch('/api/spin-to-win/social', {
-    method: 'POST',
-    token,
-    body: { action: 'verify-x', provider: 'x', handle, tweetUrl, code },
+    body: { provider, username },
   })
 }
 

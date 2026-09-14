@@ -202,3 +202,15 @@ create table if not exists public.social_pending_links (
 );
 create index if not exists social_pending_links_wallet_idx on public.social_pending_links (wallet);
 alter table public.social_pending_links enable row level security;
+
+-- Identity map written by the Telegram bot when a user messages it (binds their
+-- numeric Telegram id to their public username, no codes). Consumed by the
+-- follow-check flow to verify channel membership.
+create table if not exists public.telegram_identities (
+  username text primary key,             -- lowercased public handle
+  user_id text not null,                 -- stable numeric Telegram id
+  handle text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.telegram_identities enable row level security;

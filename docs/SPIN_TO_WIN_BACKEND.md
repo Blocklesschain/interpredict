@@ -123,35 +123,38 @@ env vars, because they require live third-party apps:
   provider can obtain an RPC bearer token. No new account needed if you already
   run the indexer/keeper.
 
-### Telegram verification (implemented)
-- Code: `app/spin-to-win/telegram/route.ts` (webhook) + `POST /social` `pending`
-  action + `social_pending_links` table + UI in `app/spin-to-win/SocialConnect.tsx`.
-- Flow: user taps **Connect Telegram** → the UI guides them (join the channel) →
-  issues an 8-char code → user DMs the bot with that code → the bot webhook
-  confirms the **stable numeric Telegram id** (`from.id`) and stores the verified
-  `provider_account_id`. The page polls until the server marks it verified, then
-  unlocks the account. **The spinner only activates once the account is verified.**
+### Telegram verification (Option A — no codes)
+- Code: `lib/spin-to-win/server/followCheck.ts`, `app/api/spin-to-win/telegram/route.ts`
+  (webhook records identity), `app/api/spin-to-win/follow-check/route.ts`, and UI in
+  `app/spin-to-win/SocialConnect.tsx`.
+- Flow: the user **joins the channel** and **sends any message to the bot once**
+  (this binds their stable numeric Telegram id to their username — no codes).
+  Then they type their Telegram username on the site and tap **Verify & connect**;
+  the server calls Bot API `getChatMember` on the channel and approves only if the
+  user is a member. **The spinner only activates once membership is verified.** If
+  they are not a member yet, they're told to join and retry.
 - **You must:**
   1. Create a bot via [@BotFather](https://t.me/BotFather), get the token.
-  2. Set env: `SPIN_TELEGRAM_BOT_TOKEN`, `SPIN_TELEGRAM_BOT_HANDLE`,
-     `SPIN_TELEGRAM_WEBHOOK_SECRET`.
-  3. Point the bot's webhook at your deployed URL:
+  2. Add the bot to the channel (ideally as **admin**) so it can read membership.
+  3. Set env: `SPIN_TELEGRAM_BOT_TOKEN`, `SPIN_TELEGRAM_BOT_HANDLE`,
+     `SPIN_TELEGRAM_WEBHOOK_SECRET`, `SPIN_TELEGRAM_CHANNEL`.
+  4. Point the bot's webhook at your deployed URL:
      `https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<your-domain>/api/spin-to-win/telegram&secret_token=<SECRET>`
-  4. (Re-run `supabase/schema.sql` for the new `social_pending_links` table.)
+  5. (Re-run `supabase/schema.sql` for the `telegram_identities` table.)
 
-### X verification (implemented)
-- Code: `lib/spin-to-win/server/xVerify.ts` + `POST /social` `verify-x` action +
+### X verification (Option A — no codes)
+- Code: `lib/spin-to-win/server/followCheck.ts`, `app/api/spin-to-win/follow-check/route.ts`,
   UI in `app/spin-to-win/SocialConnect.tsx`.
-- Flow: user taps **Connect X** → the UI guides them (follow @InterPredict) →
-  issues a code → user posts a tweet containing it → pastes the tweet URL → server
-  verifies via the X API v2 that the tweet author's username matches the claimed
-  handle and the text contains the code, then stores the author X user id as
-  verified. **The spinner only activates once the account is verified.**
+- Flow: the user **follows @InterPredict on X**, then types their X username and
+  taps **Verify & connect**. The server resolves the username to a user id, then
+  checks X's **followers list** of our account to confirm the user follows us.
+  **The spinner only activates once the follow is verified.**
 - **You must:**
   1. Create an X developer app (developer portal), get Consumer Key/Secret.
   2. Set env: `SPIN_X_API_KEY` + `SPIN_X_API_SECRET` (or a ready-made
      `SPIN_X_BEARER_TOKEN`). App-only OAuth 2.0 is enough — no per-user OAuth needed.
-  3. (Re-run `supabase/schema.sql` for `social_pending_links`.)
+  3. Optional: `SPIN_X_TARGET_USERNAME` (defaults to `InterPredict`), and
+     `SPIN_X_FOLLOWER_PAGES` (defaults to `3`, i.e. ~3000 followers scanned).
 
 ### Verification gating
 The wheel only unlocks when **both** X and Telegram are verified. The client no

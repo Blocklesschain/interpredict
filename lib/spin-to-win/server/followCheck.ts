@@ -161,7 +161,7 @@ export async function checkTelegramMembership(
     if (!identity) {
       return {
         ok: false,
-        reason: `No Telegram identity found for @${username}. Open the bot (@${process.env.SPIN_TELEGRAM_BOT_HANDLE || 'InterPredictVerifyBot'}) and tap Start / send any message first.`,
+        reason: `No Telegram identity found for @${username}. Open the bot (@${(process.env.SPIN_TELEGRAM_BOT_HANDLE || 'InterPredict_bot').trim().replace(/^t\.me\//, '').replace(/^@/, '')}) and tap Start / send any message first.`,
       }
     }
     const channelChatId = `@${TELEGRAM_CHANNEL}`

@@ -20,7 +20,7 @@ const CHANNEL_URLS: Record<SocialProvider, string> = {
   telegram: 'https://t.me/InterPredict',
 }
 
-const BOT_HANDLE = 'InterPredictVerifyBot'
+const BOT_HANDLE = 'InterPredict_bot'
 
 export function SocialConnect({
   provider,

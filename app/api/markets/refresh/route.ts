@@ -1,3 +1,5 @@
+// Obsolete Blob full-scan refresh endpoint retained for emergency tooling.
+
 import { NextRequest, NextResponse } from 'next/server'
 import {
   getCachedMarkets,
@@ -10,26 +12,6 @@ import type { Market } from '@/lib/marketsCache'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
-
-// ---------------------------------------------------------------------------
-// POST /api/markets/refresh
-//
-// Supports two modes:
-//
-// 1. Full refresh (no query params):
-//    Scans ALL markets.  Only works if total markets fit in 10s (~5-6 markets).
-//    For larger sets, use incremental mode.
-//
-// 2. Incremental refresh (?startId=0&count=5):
-//    Scans a subset of markets and merges them into the existing cache.
-//    Call repeatedly with different startId values to cover all markets.
-//    The GitHub Actions workflow uses this mode.
-//
-// Protected by CRON_SECRET.  Uses a Blobs-backed refresh lock to prevent
-// duplicate simultaneous scans.
-//
-// Response: { ok: true, count, updatedAt, lastIndexedBlock, totalCount, startId, endId }
-// ---------------------------------------------------------------------------
 
 function isAuthorised(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET?.trim()
@@ -54,7 +36,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Parse incremental params
+
     const url = new URL(request.url)
     const startIdParam = url.searchParams.get('startId')
     const countParam = url.searchParams.get('count')
@@ -71,16 +53,15 @@ export async function POST(request: NextRequest) {
       await scanAllMarketsFromChain(startId, isIncremental ? count : 999)
 
     if (isIncremental) {
-      // Merge fresh markets into existing cache
+
       const existing = await getCachedMarkets()
       const existingMarkets = existing?.markets || []
 
-      // Build a map for O(1) lookup
       const marketMap = new Map<number, Market>()
       for (const m of existingMarkets) {
         marketMap.set(m.id, m)
       }
-      // Overwrite with fresh data
+
       for (const m of freshMarkets) {
         marketMap.set(m.id, m)
       }
@@ -105,7 +86,6 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Full refresh — overwrite entire cache
     await setCachedMarkets(freshMarkets, lastIndexedBlock)
 
     console.info(`[Markets Refresh] Full refresh complete: ${freshMarkets.length} markets`)

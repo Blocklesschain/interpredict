@@ -47,7 +47,7 @@ async function main() {
   const wallet = new ethers.Wallet(privateKey, provider);
   console.log(`🔒 Authenticated Signer Address: ${wallet.address}`);
 
-  const artifactPath = "../artifacts/contracts/InterPredict.sol/InterPredict.json";
+  const artifactPath = "../artifacts/contracts/InterPredictV2.sol/InterPredictV2.json";
   const { default: contractArtifact } = await import(artifactPath, { with: { type: "json" } });
 
   console.log("🚀 Submitting deployment transaction...");

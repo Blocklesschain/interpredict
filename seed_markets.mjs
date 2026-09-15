@@ -5,7 +5,11 @@
 // populates the Netlify Blobs cache with complete market data.
 
 const BASE_URL = 'https://interpredict.netlify.app'
-const CRON_SECRET = 'e4g56y76f56edde9504cfe69744bo98g0b6800eead817f191d1cbd05d000qwe3'
+const CRON_SECRET = process.env.CRON_SECRET
+if (!CRON_SECRET) {
+  console.error('CRON_SECRET environment variable is required')
+  process.exit(1)
+}
 const BATCH_SIZE = 1 // 1 market per call (13 contract calls, safe under 10s)
 
 async function main() {

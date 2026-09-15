@@ -116,7 +116,19 @@ import 'server-only'
 import { getSupabase } from '@/lib/supabase'
 
 const TELEGRAM_API = 'https://api.telegram.org'
-export const TELEGRAM_CHANNEL = process.env.SPIN_TELEGRAM_CHANNEL || 'InterPredict'
+
+// Normalize a handle that may come in as "interpredict", "@InterPredict",
+// "t.me/InterPredict" or "https://t.me/InterPredict" into "interpredict".
+function normalizeHandle(raw?: string): string {
+  return (raw || '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^t\.me\//i, '')
+    .replace(/^@/, '')
+    .toLowerCase()
+}
+
+export const TELEGRAM_CHANNEL = normalizeHandle(process.env.SPIN_TELEGRAM_CHANNEL) || 'interpredict'
 
 async function resolveTelegramUser(username: string): Promise<{ userId: string; handle: string } | null> {
   const supabase = getSupabase()

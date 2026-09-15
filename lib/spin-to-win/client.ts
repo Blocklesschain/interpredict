@@ -23,17 +23,23 @@ export class BackendUnavailableError extends Error {
   }
 }
 
-export function getStoredToken(): { token: string; wallet: string } | null {
+export function getStoredToken(): { token: string; wallet: string; expiresAt: number } | null {
   try {
     const raw = localStorage.getItem(TOKEN_KEY)
-    return raw ? (JSON.parse(raw) as { token: string; wallet: string }) : null
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { token: string; wallet: string; expiresAt?: number }
+    if (!parsed.token || !parsed.wallet) return null
+    return { token: parsed.token, wallet: parsed.wallet, expiresAt: parsed.expiresAt || 0 }
   } catch {
     return null
   }
 }
 
 export function storeToken(session: AuthSession, wallet: string) {
-  localStorage.setItem(TOKEN_KEY, JSON.stringify({ token: session.accessToken, wallet }))
+  localStorage.setItem(
+    TOKEN_KEY,
+    JSON.stringify({ token: session.accessToken, wallet, expiresAt: session.expiresAt || 0 }),
+  )
 }
 
 export function clearToken() {
@@ -107,6 +113,12 @@ async function apiFetch<T>(
   if (!res.ok || envelope.error) {
     const code = envelope?.error?.code || 'UNKNOWN'
     const message = envelope?.error?.message || `Request failed (${res.status})`
+    // A 401 (or an expired/invalid token message) means the stored signed-wallet
+    // session is no longer valid — drop it so the next flow asks for a fresh
+    // signature instead of failing with "Token expired".
+    if (res.status === 401 || /expired/i.test(message) || /invalid token/i.test(message)) {
+      clearToken()
+    }
     throw new Error(`${code}: ${message}`)
   }
   return envelope.data as T

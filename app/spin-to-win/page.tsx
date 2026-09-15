@@ -135,7 +135,11 @@ export default function SpinToWinPage() {
         return
       }
       const stored = getStoredToken()
-      let token = stored?.wallet === walletAddress.toLowerCase() ? stored.token : null
+      // Only trust the stored signed-wallet token if it belongs to this wallet
+      // AND hasn't expired — otherwise request a fresh signature.
+      const stillValid =
+        stored && stored.wallet === walletAddress.toLowerCase() && stored.expiresAt > Date.now()
+      let token = stillValid ? stored.token : null
       if (!token) {
         try {
           const session = await authenticate(walletAddress)

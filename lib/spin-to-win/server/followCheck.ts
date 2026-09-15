@@ -165,10 +165,24 @@ export async function checkTelegramMembership(
       }
     }
     const channelChatId = `@${TELEGRAM_CHANNEL}`
-    const result = await tgApiPost('getChatMember', {
-      chat_id: channelChatId,
-      user_id: identity.userId,
-    })
+    let result: any
+    try {
+      result = await tgApiPost('getChatMember', {
+        chat_id: channelChatId,
+        user_id: identity.userId,
+      })
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : ''
+      if (/chat not found|user not found|not enough rights/i.test(msg)) {
+        return {
+          ok: false,
+          userId: identity.userId,
+          handle: identity.handle,
+          reason: `@${identity.handle} is not yet a member of our Telegram channel (@${TELEGRAM_CHANNEL}). Open @${TELEGRAM_CHANNEL}, tap Join, then try again.`,
+        }
+      }
+      return { ok: false, userId: identity.userId, handle: identity.handle, reason: msg }
+    }
     const status = String(result?.status || '')
     if (status === 'member' || status === 'administrator' || status === 'creator') {
       return { ok: true, userId: identity.userId, handle: identity.handle, status }
